@@ -1,5 +1,7 @@
-import mysql from 'mysql2/promise'; // Import mysql2/promise for promise-based MySQL queries
-// import dotenv from 'dotenv'; // Import dotenv to load environment variables
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv'; 
+
+dotenv.config();
 
 const pool = mysql.createPool({
   host: process.env.MARIADB_HOST,
@@ -9,4 +11,4 @@ const pool = mysql.createPool({
   port: process.env.MARIADB_PORT || 3306,
 });
 
-export default pool; // Export the connection pool for use in other modules
+export default pool;
