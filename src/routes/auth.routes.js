@@ -61,7 +61,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-app.get('/api/users', async (req, res) => {
+router.get('/api/users', async (req, res) => {
   try {
     const [rows] = await pool.execute('SELECT * FROM users');
     res.json(rows);
