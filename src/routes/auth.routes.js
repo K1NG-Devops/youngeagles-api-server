@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import db from '../db.js';
+import pool from '../db.js';
 
 const router = Router();
 
@@ -13,14 +13,14 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    const [existing] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+    const [existing] = await pool.execute('SELECT id FROM users WHERE email = ?', [email]);
 
     if (existing.length > 0) {
       return res.status(400).json({ message: 'Email already exists.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await db.execute(
+    await pool.execute(
       'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
       [name, email, hashedPassword]
     );
@@ -41,7 +41,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
 
     if (rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });

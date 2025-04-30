@@ -2,7 +2,7 @@
   "name": "api-server",
   "version": "1.0.0",
   "type": "module",
-  "description": "",  
+  "description": "",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -15,7 +15,8 @@
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "mysql2": "^3.14.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
