@@ -61,4 +61,15 @@ router.post('/login', async (req, res) => {
   }
 });
 
+app.get('/api/users', async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM users');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching users.' });
+  }
+});
+
+
 export default router;
