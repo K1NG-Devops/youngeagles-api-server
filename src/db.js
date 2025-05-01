@@ -4,12 +4,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const pool = mysql.createPool({
-  host: process.env.MYSQLHOST, //|| process.env.MARIADB_HOST,
-  user: process.env.MYSQLUSER, //|| process.env.MARIADB_USERNAME,
-  password: process.env.MYSQLPASSWORD, //|| process.env.MARIADB_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQLPORT, //|| process.env.MARIADB_PORT,
-  // port: parseInt(process.env.MARIADB_PORT, 10) || 3306,
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE, // use MYSQLDATABASE, not MYSQL_DATABASE
+  port: parseInt(process.env.MYSQLPORT, 10) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
