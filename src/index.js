@@ -10,15 +10,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-// Middleware to parse incoming requests with JSON payloads
-// and URL-encoded payloads
-// This is important for handling form submissions and JSON data
-// in the request body
-// It allows us to access the data in req.body
-// without having to parse it manually
-// The extended option allows for rich objects and arrays to be encoded into the URL-encoded format
-// The default value is false, which means that the library will use the querystring library
-// to parse the URL-encoded data
 app.use(express.urlencoded({ extended: true })); 
 app.use(express.json());
 
@@ -32,3 +23,13 @@ app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
 }
 );
+
+// Middleware to parse incoming requests with JSON payloads
+// and URL-encoded payloads
+// This is important for handling form submissions and JSON data
+// in the request body
+// It allows us to access the data in req.body
+// without having to parse it manually
+// The extended option allows for rich objects and arrays to be encoded into the URL-encoded format
+// The default value is false, which means that the library will use the querystring library
+// to parse the URL-encoded data
