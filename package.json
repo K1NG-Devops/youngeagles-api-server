@@ -1,25 +1,25 @@
 {
-  "name": "api-server",
+  "name": "youngeagles-api-server",
   "version": "1.0.0",
-  "type": "module",
   "description": "",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/K1NG-Devops/youngeagles-api-server.git"
+  },
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.8.1",
+  "bugs": {
+    "url": "https://github.com/K1NG-Devops/youngeagles-api-server/issues"
+  },
+  "homepage": "https://github.com/K1NG-Devops/youngeagles-api-server#readme",
   "dependencies": {
-    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
-    "express": "^4.21.2",
+    "express": "^5.1.0",
     "mysql2": "^3.14.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.10"
   }
 }
