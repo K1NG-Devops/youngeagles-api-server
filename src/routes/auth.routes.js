@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js'; // using your db utility functions
-import { User } from '../models/user.js'; // assuming you have a User model defined
 
 const router = Router();
 
@@ -126,21 +125,19 @@ router.put('/users/:id', async (req, res) => {
 
 // ✅ GET /auth/users/:id (for admin/testing)
 router.get('/users/:id', async (req, res) => {
+  const { id } = req.params;
   try {
-    const id = req.params.id;
-    // findByPk looks up by primary key (usually "id")
-    const user = await User.findByPk(id, {
-      attributes: { exclude: ['password'] } // don’t send hashed password back
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    const rows = await query(
+      'SELECT id, name, email FROM users WHERE id = ?',
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
     }
-
-    res.json(user);
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error.' });
   }
 });
 
