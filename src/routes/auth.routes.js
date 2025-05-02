@@ -75,4 +75,71 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// ✅ DELETE /auth/users/:id (for admin/testing)
+router.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: 'User ID is required.' });
+  }
+
+  try {
+    const result = await execute('DELETE FROM users WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.json({ message: 'User deleted successfully!' });
+  } catch (err) {
+    console.error('Error deleting user:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+// ✅ PUT /auth/users/:id (for admin/testing)
+router.put('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password } = req.body;
+
+  if (!id || !name || !email || !password) {
+    return res.status(400).json({ message: 'All fields are required.' });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await execute(
+      'UPDATE users SET name = ?, email = ?, password = ? WHERE id = ?',
+      [name, email, hashedPassword, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.json({ message: 'User updated successfully!' });
+  } catch (err) {
+    console.error('Error updating user:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+router.get('/users/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    // findByPk looks up by primary key (usually "id")
+    const user = await User.findByPk(id, {
+      attributes: { exclude: ['password'] } // don’t send hashed password back
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router;
