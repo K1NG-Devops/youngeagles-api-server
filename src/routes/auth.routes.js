@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js'; // using your db utility functions
+import { User } from '../models/user.js'; // assuming you have a User model defined
 
 const router = Router();
 
@@ -123,6 +124,7 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
+// ✅ GET /auth/users/:id (for admin/testing)
 router.get('/users/:id', async (req, res) => {
   try {
     const id = req.params.id;
