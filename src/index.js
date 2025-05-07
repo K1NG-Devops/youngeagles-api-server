@@ -12,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: 'https://youngeagles.org.za',
+  origin: 'https://youngeagles-api-server-production-4b2e.up.railway.app',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
