@@ -9,10 +9,11 @@ import { fileURLToPath } from 'url';
 connect();
 
 const app = express();
+const cors = require('cors');
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: '*',
+  origin: 'https://youngeagles.org.za',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
