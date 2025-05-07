@@ -19,6 +19,17 @@ app.get('/api', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 
+app.get("/test-db", async (req, res) => {
+  try {
+    connection.query("SELECT DATABASE()", (err, results) => {
+      if (err) throw err;
+      res.send(`Connected to database: ${results[0]['DATABASE()']}`);
+    });
+  } catch (err) {
+    res.status(500).send("Database connection failed: " + err.message);
+  }
+});
+
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
 }
