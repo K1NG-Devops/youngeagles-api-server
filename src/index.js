@@ -19,7 +19,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
 
-app.options('*', cors());
+app.options('/api/public/pop-submission', cors());
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
