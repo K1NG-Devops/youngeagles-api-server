@@ -76,7 +76,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.post('/api/public/pop-submission', upload.single('file'), async (req, res) => {
+app.post('/api/public/pop-submission',  async (req, res) => {
   const {
     fullname,
     email,
@@ -92,9 +92,6 @@ app.post('/api/public/pop-submission', upload.single('file'), async (req, res) =
 
   if (!fullname || !email || !phone || !studentName || !amount || !paymentDate || !paymentMethod || !bankName) {
     return res.status(400).json({ message: 'All fields are required.' });
-  }
-  if (!popFilePath) {
-    return res.status(400).json({ message: 'File upload is required.' });
   }
 
   try {
