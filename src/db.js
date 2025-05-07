@@ -20,7 +20,8 @@ export default pool;
 export const connect = async () => {
   try {
     const connection = await pool.getConnection();
-    console.log('✅ Connected to the database');
+    const [rows] = await connection.query('SELECT DATABASE() AS db');
+    console.log(`✅ Connected to database: ${rows[0].db}`);
     connection.release();
   } catch (error) {
     console.error('❌ Error connecting to the database:', error);
