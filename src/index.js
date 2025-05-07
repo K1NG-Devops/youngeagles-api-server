@@ -14,8 +14,8 @@ const port = process.env.PORT || 3000;
 app.use(cors({
   origin: 'https://youngeagles.org.za',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  // preflightContinue: false,
-  // optionsSuccessStatus: 204,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
 
