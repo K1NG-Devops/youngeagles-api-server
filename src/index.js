@@ -19,12 +19,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
 
-app.options('/api/public/pop-submission', cors());
-
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Serve static files
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -47,7 +44,7 @@ app.get('/api/test-db', async (req, res) => {
       serverTime: new Date().toLocaleString(),
     });
   } catch (error) {
-    console.error(error); // ✅ fixed
+    console.error(error);
     res.status(500).json({ message: 'Database connection failed', error: error.message });
   }
 });
@@ -66,16 +63,7 @@ app.get('/api/POPs', async (req, res) => {
   }
 });
 
-// File upload config
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, 'uploads/POPS'),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage });
-
+// ✅ POP metadata submission route
 app.post('/api/public/pop-submission', async (req, res) => {
   const {
     fullname,
@@ -86,28 +74,27 @@ app.post('/api/public/pop-submission', async (req, res) => {
     paymentDate,
     paymentMethod,
     bankName,
-    firebaseFileURL, // Add this field from frontend
+    popFilePath,
   } = req.body;
 
-  if (!fullname || !email || !phone || !studentName || !amount || !paymentDate || !paymentMethod || !bankName || !firebaseFileURL) {
-    return res.status(400).json({ message: 'All fields including Firebase file URL are required.' });
+  if (!fullname || !email || !phone || !amount || !paymentDate || !paymentMethod || !popFilePath) {
+    return res.status(400).json({ message: 'Missing required fields. Please include all required fields and the file URL.' });
   }
 
   try {
     const sql = `
-      INSERT INTO pop_submission (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath)
+      INSERT INTO pop_submission 
+      (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, firebaseFileURL];
+    const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath];
     await query(sql, values);
 
-    res.status(201).json({ message: 'POP submission successful!', firebaseFileURL });
+    res.status(201).json({ message: 'POP submission successful!' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error submitting POP', error: error.message });
   }
 });
-
-
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
