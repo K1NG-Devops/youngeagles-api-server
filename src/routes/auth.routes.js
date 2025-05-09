@@ -3,7 +3,6 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { verifyToken } from '../utils/jwt.js';
 
 const router = Router();
 
