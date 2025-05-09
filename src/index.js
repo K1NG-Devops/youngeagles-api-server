@@ -73,7 +73,6 @@ app.get('/api/pops', async (req, res) => {
   }
 });
 
-console.log("Incoming request to /api/public/pop-submission", req.body);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, 'uploads/pops');
