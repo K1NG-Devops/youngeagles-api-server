@@ -5,8 +5,18 @@ import { query, connect } from './db.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import rateLimit from 'express-rate-limit';
 
 connect();
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    message: 'Too many requests from this IP, please try again later.',
+  },
+});
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -30,7 +40,7 @@ app.get('/api', (req, res) => {
   res.json({ message: 'API is running' });
 });
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes, limiter);
 
 app.get('/api/test-db', async (req, res) => {
   try {
@@ -49,7 +59,7 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-app.get('/api/POPs', async (req, res) => {
+app.get('/api/pops', async (req, res) => {
   try {
     const rows = await query('SELECT * FROM pop_submission');
     res.json({

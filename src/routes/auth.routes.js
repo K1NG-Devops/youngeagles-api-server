@@ -1,14 +1,26 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { query, execute } from '../db.js'; // using your db utility functions
+import { query, execute } from '../db.js';
+import { body, validationResult } from 'express-validator';
+import { generateToken, verifyToken } from '../utils/jwt.js';
+import { verifyToken } from '../utils/jwt.js';
 
 const router = Router();
 
 // ✅ POST /auth/register
-router.post('/register', async (req, res) => {
-  const { name, email, password } = req.body;
+router.post('/register',[
+  body('name').notEmpty().withMessage('Name is required'),
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+  body('phone').notEmpty().withMessage('Phone number is required'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  const { name, email, password, phone } = req.body;
 
-  if (!name || !email || !password) {
+  if (!name || !email || !password || !phone) {
     return res.status(400).json({ message: 'All fields are required.' });
   }
 
@@ -54,10 +66,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    // Send user info without password
-    const { password: _, ...userWithoutPassword } = user;
-
-    res.json({ message: 'User logged in successfully!', user: userWithoutPassword });
+    // Generate JWT token
+    const token = generateToken(user);
+    res.json({
+      message: 'User logged in successfully!',
+      user: userWithoutPassword,
+      token,
+    });
   } catch (err) {
     console.error('Error during login:', err);
     res.status(500).json({ message: 'Server error.' });
@@ -65,7 +80,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ✅ GET /auth/users (for admin/testing)
-router.get('/users', async (req, res) => {
+router.get('/users', verifyToken, async (req, res) => {
   try {
     const users = await query('SELECT id, name, email FROM users');
     res.json(users);
