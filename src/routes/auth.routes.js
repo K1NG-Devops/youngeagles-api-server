@@ -32,7 +32,7 @@ router.post('/register',[
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await execute(
-      'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+      'INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)',
       [name, email, hashedPassword]
     );
 
