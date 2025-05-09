@@ -7,7 +7,7 @@ import { generateToken, verifyToken } from '../utils/jwt.js';
 const router = Router();
 
 // ✅ POST /auth/register
-router.post('/register',[
+router.post('/register', [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Invalid email format'),
   body('phone').notEmpty().withMessage('Phone number is required'),
@@ -17,26 +17,23 @@ router.post('/register',[
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { name, email, phone, password } = req.body;
 
-  if (!name || !email || !phone || !password) {
-    return res.status(400).json({ message: 'All fields are required.' });
-  }
+  const { name, email, phone, password } = req.body;
+  const role = 'parent'; // ✅ force role
 
   try {
     const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
-
     if (existing.length > 0) {
       return res.status(400).json({ message: 'Email already exists.' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await execute(
-      'INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPassword]
+      'INSERT INTO users (name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)',
+      [name, email, phone, hashedPassword, role]
     );
 
-    res.status(201).json({ message: 'User registered successfully!' });
+    res.status(201).json({ message: 'Parent registered successfully!' });
   } catch (err) {
     console.error('Error during registration:', err);
     res.status(500).json({ message: 'Server error.' });
