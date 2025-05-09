@@ -10,16 +10,16 @@ const router = Router();
 router.post('/register',[
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Invalid email format'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
   body('phone').notEmpty().withMessage('Phone number is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { name, email, password, phone } = req.body;
+  const { name, email, phone, password } = req.body;
 
-  if (!name || !email || !password || !phone) {
+  if (!name || !email || !phone || !password) {
     return res.status(400).json({ message: 'All fields are required.' });
   }
 

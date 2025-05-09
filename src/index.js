@@ -73,6 +73,18 @@ app.get('/api/pops', async (req, res) => {
   }
 });
 
+console.log("Incoming request to /api/public/pop-submission", req.body);
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads/pops');
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
 // ✅ POP metadata submission route
 app.post('/api/public/pop-submission', async (req, res) => {
   const {
