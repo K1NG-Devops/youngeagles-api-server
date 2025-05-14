@@ -80,6 +80,47 @@ router.post('/login', async (req, res) => {
   }
 });
 
+router.get('/dashboard', verifyToken, (req, res) => {
+  res.json({ name: req.user.name });
+});
+
+// ✅ GET /auth/profile
+router.get('/profile', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const rows = await query('SELECT id, name, email, phone FROM users WHERE id = ?', [userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error fetching profile:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+// ✅ PUT /auth/profile
+router.put('/profile', verifyToken, async (req, res) => {
+  const { name, email, phone } = req.body;
+  const userId = req.user.id;
+
+  if (!name || !email || !phone) {
+    return res.status(400).json({ message: 'All fields are required.' });
+  }
+
+  try {
+    await execute(
+      'UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?',
+      [name, email, phone, userId]
+    );
+    res.json({ message: 'Profile updated successfully!' });
+  } catch (err) {
+    console.error('Error updating profile:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+// ✅ POST /auth/forgot-password
+// ✅ POST /auth/reset-password
+
 // ✅ GET /auth/users (for admin/testing)
 router.get('/users', verifyToken, async (req, res) => {
   try {
@@ -156,5 +197,12 @@ router.get('/users/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 });
+
+// ✅ logout route
+router.post('/logout', verifyToken, (req, res) => {
+  // Invalidate the token on the client side
+  res.json({ message: 'Logged out successfully!' });
+});
+// ✅ refresh token route
 
 export default router;

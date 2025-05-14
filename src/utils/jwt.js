@@ -6,12 +6,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'defaultsecret';
 
 export const generateToken = (user) => {
     return jwt.sign(
-        { id: user.id, email: user.email },
+        { id: user.id, email: user.email, name: user.name, role: user.role },
         JWT_SECRET,
         { expiresIn: '1h' }
     );
 };
-
 // Middleware to verify JWT
 export const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
