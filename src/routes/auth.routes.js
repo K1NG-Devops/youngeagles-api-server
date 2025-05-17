@@ -3,88 +3,42 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
+import { registerUser, loginUser } from '../controllers/authController.js';
+import { isAdmin } from '../middleware/roleMiddleware.js';
+
 
 const router = Router();
 
 // ✅ POST /auth/register
-router.post('/register', [
-  body('name').notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Invalid email format'),
-  body('phone').notEmpty().withMessage('Phone number is required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
-  body('address').notEmpty().withMessage('Address is required'),
-  body('workAddress').optional(),
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name, email, phone, password, address, workAddress } = req.body;
-  const role = 'parent';
-
-  try {
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(400).json({ message: 'Email already exists.' });
+router.post('/register',
+  [
+    body('email').isEmail().withMessage('Invalid email format.'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long.'),
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await execute(
-      'INSERT INTO users (name, email, phone, address, work_address, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, phone, address, workAddress, hashedPassword, role]
-    );
-
-    res.status(201).json({ message: 'Parent registered successfully!' });
-  } catch (err) {
-    console.error('Error during registration:', err);
-    res.status(500).json({ message: 'Server error.' });
-  }
-});
-
+    next();
+  },
+  registerUser
+);
 // ✅ POST /auth/login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required.' });
-  }
-
-  try {
-    const users = await query('SELECT * FROM users WHERE email = ?', [email]);
-
-    if (users.length === 0) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+router.post('/login',
+  [
+    body('email').isEmail().withMessage('Email is required.'),
+    body('password').notEmpty().withMessage('Password is required.'),
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    
-    const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
-    }
-
-    // Generate JWT token
-    const token = generateToken(user);
-    res.json({
-      message: 'Login successful!',
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
-    });
-  } catch (err) {
-    console.error('Error during login:', err);
-    res.status(500).json({ message: 'Server error.' });
-  }
-});
-
-router.get('/dashboard', verifyToken, (req, res) => {
-  res.json({ name: req.user.name });
-});
+    next();
+  },
+  loginUser
+);
 
 // ✅ GET /auth/profile
 router.get('/profile', verifyToken, async (req, res) => {
