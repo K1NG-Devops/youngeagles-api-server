@@ -4,7 +4,7 @@ import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
 import { registerUser, loginUser } from '../controllers/authController.js';
-import { isAdmin } from '../middleware/roleMiddleware.js';
+// import { isAdmin } from '../middleware/roleMiddleware.js';
 
 
 const router = Router();
