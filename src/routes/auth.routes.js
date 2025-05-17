@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { registerUser, loginUser } from '../controllers/authController.js';
+import { registerChild, registerUser, loginUser } from '../controllers/authController.js';
 // import { isAdmin } from '../middleware/roleMiddleware.js';
 
 
@@ -24,6 +24,29 @@ router.post('/register',
   },
   registerUser
 );
+
+// ✅ POST /auth/register-child
+router.post('/register-child',
+  [
+    body('name').notEmpty().withMessage('Child name is required.'),
+    body('parent_id').isInt().withMessage('Valid parent ID is required.'),
+    body('gender').notEmpty().withMessage('Gender is required.'),
+    body('dob').notEmpty().withMessage('Date of birth is required.'),
+    body('age').optional().isInt({ min: 1 }).withMessage('Age must be a number.'),
+    body('grade').optional().isString(),
+    body('className').optional().isString(),
+    body('birthcertificate').optional().isString(),
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  },
+  registerChild
+);
+
 // ✅ POST /auth/login
 router.post('/login',
   [

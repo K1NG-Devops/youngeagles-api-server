@@ -31,6 +31,29 @@ export const registerUser = async (req, res) => {
   }
 };
 
+export const registerChild = async (req, res) => {
+    const { name, parent_id, gender, dob, age, grade, className, birthcertificate } = req.body;
+  
+    try {
+      // Check if parent exists
+      const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent']);
+      if (parent.length === 0) {
+        return res.status(400).json({ message: 'Parent not found or invalid role.' });
+      }
+  
+      // Insert child
+      await execute(
+        'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, birthcertificate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, parent_id, gender, dob, age, grade, className, birthcertificate]
+      );
+  
+      res.status(201).json({ message: 'Child registered successfully!' });
+    } catch (err) {
+      console.error('Error registering child:', err);
+      res.status(500).json({ message: 'Server error.' });
+    }
+  };
+  
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
