@@ -35,11 +35,7 @@ export const registerUser = async (req, res) => {
 // Register Child
 export const registerChild = async (req, res) => {
   const { name, parent_id, gender, dob, age, grade, className } = req.body;
-  const birthCert = req.file?.filename;
-
-  if (!birthCert) {
-    return res.status(400).json({ message: 'Birth certificate is required.' });
-  }
+  
 
   try {
     // Check if parent exists
