@@ -3,9 +3,16 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { registerUser, loginUser } from '../controllers/authController.js';
+import { registerChild, registerUser, loginUser } from '../controllers/authController.js';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 // import { isAdmin } from '../middleware/roleMiddleware.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const upload = multer({ dest: 'uploads/' });
 
 const router = Router();
 
@@ -26,12 +33,15 @@ router.post('/register',
 );
 
 // ✅ POST /auth/register-child
-router.post('/register-child',
+router.post('/register-child', upload.single('birthcertificate'),
   [
     body('name').notEmpty().withMessage('Child name is required.'),
     body('parent_id').isInt().withMessage('Valid parent ID is required.'),
     body('gender').notEmpty().withMessage('Gender is required.'),
-    body('dob').notEmpty().withMessage('Date of birth is required.')
+    body('dob').notEmpty().withMessage('Date of birth is required.'),
+    body('age').optional().isInt({ min: 1 }).withMessage('Age must be a number.'),
+    body('grade').optional().isString(),
+    body('className').optional().isString(),
   ],
   (req, res, next) => {
     const errors = validationResult(req);
