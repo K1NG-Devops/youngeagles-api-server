@@ -33,7 +33,7 @@ router.post('/register',
 );
 
 // ✅ POST /auth/register-child
-router.post('/register-child', upload.single('birthcertificate'),
+router.post('/register-child', upload.single('birthCert'),
   [
     body('name').notEmpty().withMessage('Child name is required.'),
     body('parent_id').isInt().withMessage('Valid parent ID is required.'),

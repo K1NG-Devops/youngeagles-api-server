@@ -35,9 +35,9 @@ export const registerUser = async (req, res) => {
 // Register Child
 export const registerChild = async (req, res) => {
   const { name, parent_id, gender, dob, age, grade, className } = req.body;
-  const birthcertificate = req.file?.filename;
+  const birthCert = req.file?.filename;
 
-  if (!birthcertificate) {
+  if (!birthCert) {
     return res.status(400).json({ message: 'Birth certificate is required.' });
   }
 
@@ -51,7 +51,7 @@ export const registerChild = async (req, res) => {
     // Insert child
     await execute(
       'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, birthcertificate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, parent_id, gender, dob, age, grade, className, birthcertificate]
+      [name, parent_id, gender, dob, age, grade, className, birthCert]
     );
 
     res.status(201).json({ message: 'Child registered successfully!' });
