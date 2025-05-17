@@ -22,7 +22,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: 'https://react-app-iota-nine.vercel.app',
+  origin: 'https://react-app-iota-nine.vercel.app' || 'https://www.youngeagles.org.za',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
