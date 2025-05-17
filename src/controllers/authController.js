@@ -3,7 +3,6 @@ import { query, execute } from '../db.js';
 import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
 
-// Register Parent
 export const registerUser = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -32,36 +31,35 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// Register Child
 export const registerChild = async (req, res) => {
-  const { name, parent_id, gender, dob, age, grade, className } = req.body;
-  const birthCertificate = req.file?.filename;
+    const { name, parent_id, gender, dob, age, grade, className } = req.body;
+    const birthcertificate = req.file;
 
-  if (!birthCertificate) {
-    return res.status(400).json({ message: 'Birth certificate is required.' });
-  }
-
-  try {
-    // Check if parent exists
-    const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent']);
-    if (parent.length === 0) {
-      return res.status(400).json({ message: 'Parent not found or invalid role.' });
+    if (!birthcertificate) {
+      return res.status(400).json({ message: 'Birth certificate is required.' });
     }
-
-    // Insert child
-    await execute(
-      'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, birthcertificate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, parent_id, gender, dob, age, grade, className, birthcertificate]
-    );
-
     res.status(201).json({ message: 'Child registered successfully!' });
-  } catch (error) {
-    console.error('Error registering child:', error);
-    res.status(500).json({ message: 'Server error.' });
-  }
-};
-
-// Login
+  
+    try {
+      // Check if parent exists
+      const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent']);
+      if (parent.length === 0) {
+        return res.status(400).json({ message: 'Parent not found or invalid role.' });
+      }
+  
+      // Insert child
+      await execute(
+        'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, birthcertificate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, parent_id, gender, dob, age, grade, className, birthcertificate]
+      );
+  
+      res.status(201).json({ message: 'Child registered successfully!' });
+    } catch (err) {
+      console.error('Error registering child:', err);
+      res.status(500).json({ message: 'Server error.' });
+    }
+  };
+  
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
