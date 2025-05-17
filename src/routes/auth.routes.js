@@ -12,14 +12,16 @@ router.post('/register', [
   body('email').isEmail().withMessage('Invalid email format'),
   body('phone').notEmpty().withMessage('Phone number is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+  body('address').notEmpty().withMessage('Address is required'),
+  body('workAddress').optional(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { name, email, phone, password } = req.body;
-  const role = 'parent'; // ✅ force role
+  const { name, email, phone, password, address, workAddress } = req.body;
+  const role = 'parent';
 
   try {
     const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
@@ -29,8 +31,8 @@ router.post('/register', [
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await execute(
-      'INSERT INTO users (name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)',
-      [name, email, phone, hashedPassword, role]
+      'INSERT INTO users (name, email, phone, address, work_address, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, email, phone, address, workAddress, hashedPassword, role]
     );
 
     res.status(201).json({ message: 'Parent registered successfully!' });
