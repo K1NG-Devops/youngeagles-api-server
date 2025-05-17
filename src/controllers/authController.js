@@ -2,6 +2,17 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
+import { useState } from 'react';
+
+const [formData, setFormData] = useState({
+  name: '',
+  dob: '',
+  age: '',
+  gender: '',
+  grade: '',
+  className: '',
+  parent_id: '',
+});
 
 // Register Parent
 export const registerUser = async (req, res) => {
@@ -35,7 +46,6 @@ export const registerUser = async (req, res) => {
 // Register Child
 export const registerChild = async (req, res) => {
   const { name, parent_id, gender, dob, age, grade, className } = req.body;
-  
 
   try {
     // Check if parent exists
@@ -46,8 +56,8 @@ export const registerChild = async (req, res) => {
 
     // Insert child
     await execute(
-      'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, birthcertificate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, parent_id, gender, dob, age, grade, className, birthCert]
+      'INSERT INTO children (name, parent_id, gender, dob, age, grade, className) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, parent_id, gender, dob, age, grade, className]
     );
 
     res.status(201).json({ message: 'Child registered successfully!' });
