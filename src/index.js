@@ -10,6 +10,7 @@ import rateLimit from 'express-rate-limit';
 connect();
 
 const app = express();
+app.use(express.json());
 app.set('trust proxy', 1);
 
 const limiter = rateLimit({
@@ -25,7 +26,7 @@ app.use(limiter);
 
 
 
-app.use(express.json());
+
 app.use(express.static('public'));
 app.use(express.static('uploads'));
 
@@ -43,7 +44,6 @@ app.use(cors({
 }));
 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
