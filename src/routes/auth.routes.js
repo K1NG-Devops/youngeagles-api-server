@@ -16,7 +16,7 @@ const upload = multer({ dest: 'uploads/' });
 
 const router = Router();
 
-// ✅ POST /auth/register
+// /auth/register
 router.post('/register',
   [
     body('email').isEmail().withMessage('Invalid email format.'),
@@ -32,7 +32,7 @@ router.post('/register',
   registerUser
 );
 
-// ✅ POST /auth/register-child
+// /auth/register-child
 router.post('/register-child',
   [
     body('name').notEmpty().withMessage('Child name is required.'),
@@ -69,7 +69,7 @@ router.post('/login',
   loginUser
 );
 
-// ✅ GET /auth/profile
+// /auth/profile
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -83,7 +83,7 @@ router.get('/profile', verifyToken, async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 });
-// ✅ PUT /auth/profile
+// /auth/profile
 router.put('/profile', verifyToken, async (req, res) => {
   const { name, email, phone } = req.body;
   const userId = req.user.id;
