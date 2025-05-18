@@ -19,11 +19,11 @@ const limiter = rateLimit({
   },
 });
 
-app.use(limiter);
 
 
 const app = express();
 const port = process.env.PORT || 3000;
+app.use(limiter);
 
 app.use(cors({
   origin: 'https://react-app-iota-nine.vercel.app' || 'https://www.youngeagles.org.za',
