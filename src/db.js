@@ -7,11 +7,15 @@ const pool = mysql.createPool({
   host: process.env.MYSQLHOST,
   user: process.env.MYSQLUSER,
   password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE, 
+  database: process.env.MYSQL_SKYDEK, 
   port: Number(process.env.MYSQLPORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  ssl:{
+    rejectUnauthorized: false,
+  },
+  connectTimeout: 10000,
 });
 
 export default pool;
