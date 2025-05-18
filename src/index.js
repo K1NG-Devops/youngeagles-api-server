@@ -9,6 +9,9 @@ import rateLimit from 'express-rate-limit';
 
 connect();
 
+const app = express();
+app.set('trust proxy', 1);
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -18,20 +21,14 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again later.',
   },
 });
-
-
-
-const app = express();
-app.set('trust proxy', 1);
 app.use(limiter);
+
+
+
 app.use(express.json());
 app.use(express.static('public'));
 app.use(express.static('uploads'));
-app.use(express.static('uploads/pops'));
-app.use(express.static('uploads/children'));
-app.use(express.static('uploads/parents'));
-app.use(express.static('uploads/parents/avatars'));
-app.use(express.static('uploads/children/avatars'));
+
 const port = process.env.PORT || 3000;
 
 app.use(cors({
@@ -61,7 +58,7 @@ app.use('/api/auth', authRoutes, limiter);
 app.get('/api/test-db', async (req, res) => {
   try {
     const rows = await query('SELECT DATABASE() AS db, USER() AS user, VERSION() AS version');
-    res.json({
+    res.json({ 
       message: 'Database connection successful',
       db: rows[0].db,
       user: rows[0].user,
@@ -99,18 +96,9 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + '-' + file.originalname);
   }
 });
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error('Only JPG, PNG, and PDF files are allowed'), false);
-    }
-    cb(null, true);
-  }
-});
+const upload = multer({ storage: storage });
 // POP submission route
-app.post('/api/public/pop-submission', upload.single('pop'), async (req, res) => {
+app.post('/api/public/pop-submission', async (req, res) => {
   const {
     fullname,
     email,
@@ -128,9 +116,6 @@ app.post('/api/public/pop-submission', upload.single('pop'), async (req, res) =>
   }
 
   try {
-    const popFilePath = `uploads/pops/${req.file.filename}`;
-    // const { originalname, mimetype, size } = req.file;
-
     const sql = `
       INSERT INTO pop_submission 
       (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath)
@@ -138,7 +123,7 @@ app.post('/api/public/pop-submission', upload.single('pop'), async (req, res) =>
     const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath];
     await query(sql, values);
 
-    res.status(201).json({ message: 'POP submission successful!', popFilePath });
+    res.status(201).json({ message: 'POP submission successful!' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error submitting POP', error: error.message });
