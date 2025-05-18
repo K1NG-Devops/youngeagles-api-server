@@ -22,6 +22,7 @@ const limiter = rateLimit({
 
 
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (if behind a reverse proxy)
 const port = process.env.PORT || 3000;
 app.use(limiter);
 
