@@ -53,7 +53,7 @@ app.get('/api', (req, res) => {
   res.json({ message: 'API is running' });
 });
 
-app.use('/api/auth', authRoutes, limiter);
+app.use('/api/auth', authRoutes);
 
 app.get('/api/test-db', async (req, res) => {
   try {
