@@ -44,6 +44,7 @@ router.post('/register-child',
     body('className').optional().isString(),
   ],
   (req, res, next) => {
+    console.log('Request body:', req.body);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
