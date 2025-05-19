@@ -20,6 +20,21 @@ const pool = mysql.createPool({
 
 export default pool;
 
+export const db = mysql.createPool({
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  port: Number(process.env.MYSQLPORT) || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  connectTimeout: 10000,
+});
+
 // Test DB connection
 export const connect = async () => {
   try {
