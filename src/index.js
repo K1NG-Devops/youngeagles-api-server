@@ -1,13 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
-import { query, connect } from './db.js';
+import { query, connect, connectRailway } from './db.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
 connect();
+connectRailway();
 
 const app = express();
 app.use(express.json());

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { registerChild, registerUser, loginUser } from '../controllers/authController.js';
+import { registerChild, registerUser, loginUser, teacherLogin } from '../controllers/authController.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -69,6 +69,10 @@ router.post('/login',
   },
   loginUser
 );
+
+// ✅ POST /auth/teacher-login
+router.post('/teacher-login', teacherLogin);
+
 
 // /auth/profile
 router.get('/profile', verifyToken, async (req, res) => {

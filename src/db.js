@@ -18,14 +18,12 @@ const pool = mysql.createPool({
   connectTimeout: 10000,
 });
 
-export default pool;
-
-export const db = mysql.createPool({
-  host: process.env.MYSQLHOST,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: Number(process.env.MYSQLPORT) || 3306,
+const pool2 = mysql.createPool({
+  host: process.env.RAILWAY_HOST,
+  user: process.env.RAILWAY_USER,
+  password: process.env.RAILWAY_PASSWORD,
+  database: process.env.RAILWAY_DATABASE,
+  port: Number(process.env.RAILWAY_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -35,10 +33,23 @@ export const db = mysql.createPool({
   connectTimeout: 10000,
 });
 
+export {pool, pool2};
+
 // Test DB connection
 export const connect = async () => {
   try {
     const connection = await pool.getConnection();
+    const [rows] = await connection.query('SELECT DATABASE() AS db');
+    console.log(`✅ Connected to database: ${rows[0].db}`);
+    connection.release();
+  } catch (error) {
+    console.error('❌ Error connecting to the database:', error);
+  }
+};
+// Test DB connection for Railway
+export const connectRailway = async () => {
+  try {
+    const connection = await pool2.getConnection();
     const [rows] = await connection.query('SELECT DATABASE() AS db');
     console.log(`✅ Connected to database: ${rows[0].db}`);
     connection.release();

@@ -1,7 +1,8 @@
+import { query, execute, pool, pool2 } from '../db.js';
 import bcrypt from 'bcryptjs';
-import { query, execute } from '../db.js';
 import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
+import jwt from 'jsonwebtoken';
 
 // Register Parent
 export const registerUser = async (req, res) => {
@@ -91,6 +92,39 @@ export const loginUser = async (req, res) => {
     });
   } catch (err) {
     console.error('Error during login:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// Teacher login
+export const teacherLogin = async (req, res) => {
+  const { email, password } = req.body;
+  
+  try {
+    const users = await pool2.query('SELECT * FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(400).json({ message: 'Invalid email or password.' });
+    }
+
+    const user = users[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid email or passwerd.' });
+    }
+
+    const token = generateToken({ id: teacherLogin.id, role: 'teacher' });
+    res.status(200).json({
+      message: 'Login successful!',
+      token,
+      user: {
+        id: teacherLogin.id,
+        name: teacherLogin.name,
+        email: teacher.email,
+      },
+      token,
+    });
+  } catch (error) {
+    console.error('Error during teacher login:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

@@ -25,3 +25,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+src/seedTeachers.js
+src/seeAdminStuff.js
+seedTeachers.js
+seeAdminStuff.js
