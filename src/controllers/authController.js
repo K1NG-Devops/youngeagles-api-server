@@ -61,7 +61,7 @@ export const registerChild = async (req, res) => {
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (!email || !password){
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
@@ -99,29 +99,36 @@ export const loginUser = async (req, res) => {
 // Teacher login
 export const teacherLogin = async (req, res) => {
   const { email, password } = req.body;
-  
+
   try {
-    const users = await pool2.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (users.length === 0) {
+    const [rows] = await pool2.query('SELECT * FROM users WHERE email = ?', [email]);
+
+    if (rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or passwerd.' });
+    const user = rows[0];
+
+    if (!user.password) {
+      return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const token = generateToken({ id: teacherLogin.id, role: 'teacher' });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid email or password.' });
+    }
+
+    const token = generateToken({ id: user.id, role: 'teacher' });
+
     res.status(200).json({
       message: 'Login successful!',
       token,
       user: {
-        id: teacherLogin.id,
-        name: teacherLogin.name,
-        email: teacher.email,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       },
-      token,
     });
   } catch (error) {
     console.error('Error during teacher login:', error);

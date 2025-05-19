@@ -71,7 +71,20 @@ router.post('/login',
 );
 
 // ✅ POST /auth/teacher-login
-router.post('/teacher-login', teacherLogin);
+router.post('/teacher-login',
+  [
+    body('email').isEmail().withMessage('Email is required.'),
+    body('password').notEmpty().withMessage('Password is required.'),
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  },
+  teacherLogin
+);
 
 
 // /auth/profile
