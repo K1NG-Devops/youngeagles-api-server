@@ -1,8 +1,21 @@
-import { query, execute, pool, pool2 } from '../db.js';
+import { query, execute } from '../db.js';
 import bcrypt from 'bcryptjs';
 import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
-import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import winston from 'winston';
+
+dotenv.config();
+
+// Logger setup
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+  ],
+});
 
 // Register Parent
 export const registerUser = async (req, res) => {
@@ -15,12 +28,12 @@ export const registerUser = async (req, res) => {
   const role = 'parent';
 
   try {
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
+    const existing = await query('SELECT id FROM users WHERE email = ?', [email], 'skydek_DB');
     if (existing.length > 0) {
       return res.status(400).json({ message: 'Email already exists.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12); // Increased salt rounds
     await execute(
       'INSERT INTO users (name, email, phone, address, workaddress, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [name, email, phone, address, workAddress, hashedPassword, role]
@@ -28,7 +41,7 @@ export const registerUser = async (req, res) => {
 
     res.status(201).json({ message: 'Parent registered successfully!' });
   } catch (err) {
-    console.error('Error during registration:', err);
+    logger.error('Error during registration:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };
@@ -38,21 +51,19 @@ export const registerChild = async (req, res) => {
   const { name, parent_id, gender, dob, age, grade, className } = req.body;
 
   try {
-    // Check if parent exists
-    const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent']);
+    const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent'], 'skydek_DB');
     if (parent.length === 0) {
       return res.status(400).json({ message: 'Parent not found or invalid role.' });
     }
 
-    // Insert child
     await execute(
       'INSERT INTO children (name, parent_id, gender, dob, age, grade, className) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, parent_id, gender, dob, age, grade, className ]
+      [name, parent_id, gender, dob, age, grade, className]
     );
 
     res.status(201).json({ message: 'Child registered successfully!' });
   } catch (error) {
-    console.error('Error registering child:', error);
+    logger.error('Error registering child:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };
@@ -61,12 +72,12 @@ export const registerChild = async (req, res) => {
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password){
+  if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
   try {
-    const users = await query('SELECT * FROM users WHERE email = ?', [email]);
+    const users = await query('SELECT * FROM users WHERE email = ?', [email], 'skydek_DB');
 
     if (users.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
@@ -78,7 +89,7 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(user);
+    const token = generateToken(user, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token with expiry
     res.json({
       message: 'Login successful!',
       token,
@@ -91,7 +102,7 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Error during login:', err);
+    logger.error('Error during login:', err);
     res.status(500).json({ message: 'Server error.' });
   }
 };
@@ -101,7 +112,7 @@ export const teacherLogin = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [rows] = await pool2.query('SELECT * FROM users WHERE email = ?', [email]);
+    const [rows] = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
 
     if (rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
@@ -118,7 +129,7 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken({ id: user.id, role: 'teacher' });
+    const token = generateToken({ id: user.id, role: 'teacher' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.status(200).json({
       message: 'Login successful!',
@@ -131,7 +142,7 @@ export const teacherLogin = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error during teacher login:', error);
+    logger.error('Error during teacher login:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

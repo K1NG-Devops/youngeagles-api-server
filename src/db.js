@@ -3,64 +3,65 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const pool = mysql.createPool({
-  host: process.env.MYSQLHOST,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE, 
-  port: Number(process.env.MYSQLPORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  ssl:{
-    rejectUnauthorized: false,
-  },
-  connectTimeout: 10000,
-});
-
-const pool2 = mysql.createPool({
-  host: process.env.RAILWAY_HOST,
-  user: process.env.RAILWAY_USER,
-  password: process.env.RAILWAY_PASSWORD,
-  database: process.env.RAILWAY_DATABASE,
-  port: Number(process.env.RAILWAY_PORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-  connectTimeout: 10000,
-});
-
-export {pool, pool2};
-
-// Test DB connection
-export const connect = async () => {
-  try {
-    const connection = await pool.getConnection();
-    const [rows] = await connection.query('SELECT DATABASE() AS db');
-    console.log(`✅ Connected to database: ${rows[0].db}`);
-    connection.release();
-  } catch (error) {
-    console.error('❌ Error connecting to the database:', error);
-  }
+// Create a function to create a pool dynamically base on the environment
+const getPool = (db = 'skydek_DB') => {
+  const config = {
+    skydek_DB: {
+      host: process.env.MYSQLHOST,
+      user: process.env.MYSQLUSER,
+      password: process.env.MYSQLPASSWORD,
+      database: process.env.MYSQLDATABASE,
+      port: Number(process.env.MYSQLPORT) || 3306,
+    },
+    railway: {
+      host: process.env.RAILWAY_HOST,
+      user: process.env.RAILWAY_USER,
+      password: process.env.RAILWAY_PASSWORD,
+      database: process.env.RAILWAY_DATABASE,
+      port: Number(process.env.RAILWAY_PORT) || 3306,
+    },
+    local: {
+      host: process.env.MYSQL_DEVELOPMENT_HOST,
+      user: process.env.MYSQL_DEVELOPMENT_USER,
+      password: process.env.MYSQL_DEVELOPMENT_PASSWORD,
+      database: process.env.MYSQL_DEVELOPMENT_DATABASE,
+      port: Number(process.env.MYSQL_DEVELOPMENT_PORT) || 3306,
+    },
+  };
+  const selectedConfig = config[db] || config.skydek_DB;
+  return mysql.createPool({
+    ...selectedConfig,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+    connectTimeout: 10000,
+  });
 };
-// Test DB connection for Railway
-export const connectRailway = async () => {
-  try {
-    const connection = await pool2.getConnection();
-    const [rows] = await connection.query('SELECT DATABASE() AS db');
-    console.log(`✅ Connected to database: ${rows[0].db}`);
-    connection.release();
-  } catch (error) {
-    console.error('❌ Error connecting to the database:', error);
+
+// Test DB connection for all environments
+export const testAllConnections = async () => {
+  const dbs = ['skydek_DB', 'railway', 'local'];
+  for (const db of dbs) {
+    try {
+      const pool = getPool(db);
+      const connection = await pool.getConnection();
+      const [rows] = await connection.query('SELECT DATABASE() AS db');
+      console.log(`✅ Connected to ${db} database: ${rows[0].db}`);
+      connection.release();
+      await pool.end();
+    } catch (error) {
+      console.error(`❌ Error connecting to the ${db} database:`, error);
+    }
   }
 };
 
 // Gracefully close the pool (if needed in shutdown scripts)
 export const close = async () => {
   try {
+    const pool = getPool(); // Ensure the pool is created before attempting to close it
     await pool.end();
     console.log('✅ Database connection pool closed');
   } catch (error) {
@@ -69,30 +70,34 @@ export const close = async () => {
 };
 
 // General SELECT or query
-export const query = async (sql, params) => {
+// General SELECT or query
+export const query = async (sql, params = [], db = 'skydek_DB') => {
+  const pool = getPool(db);
   try {
     const [rows] = await pool.query(sql, params);
     return rows;
   } catch (error) {
-    console.error('❌ Error executing query:', error);
+    console.error(`❌ Error executing query on ${db} database:`, error);
     throw error;
   }
 };
 
 // INSERT, UPDATE, DELETE with better metadata
-export const execute = async (sql, params) => {
+export const execute = async (sql, params, db = 'skydek_DB') => {
+  const pool = getPool(db);
   try {
     const [result] = await pool.execute(sql, params);
     return result;
   } catch (error) {
-    console.error('❌ Error executing statement:', error);
+    console.error(`❌ Error executing statement on ${db} database:`, error);
     throw error;
   }
 };
 
 
 // Full transaction with internal connection
-export const transaction = async (queries) => {
+export const transaction = async (queries, db = 'skydek_DB') => {
+  const pool = getPool(db);
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -102,104 +107,9 @@ export const transaction = async (queries) => {
     await connection.commit();
   } catch (error) {
     await connection.rollback();
-    console.error('❌ Error executing transaction:', error);
+    console.error(`❌ Error executing transaction on ${db} database:`, error);
     throw error;
   } finally {
     connection.release();
   }
 };
-
-// export const connect = async () => {
-//   try {
-//     const connection = await pool.getConnection();
-//     console.log('Connected to the database');
-//     connection.release();
-//   } catch (error) {
-//     console.error('Error connecting to the database:', error);
-//   }
-// };
-// export const close = async () => {
-//   try {
-//     await pool.end();
-//     console.log('Database connection closed');
-//   } catch (error) {
-//     console.error('Error closing the database connection:', error);
-//   }
-// };
-// export const query = async (sql, params) => {
-//   try {
-//     const [rows] = await pool.query(sql, params);
-//     return rows;
-//   } catch (error) {
-//     console.error('Error executing query:', error);
-//     throw error;
-//   }
-// };
-// export const execute = async (sql, params) => {
-//   try {
-//     const [result] = await pool.execute(sql, params);
-//     return result;
-//   } catch (error) {
-//     console.error('Error executing query:', error);
-//     throw error;
-//   }
-// };
-// export const transaction = async (queries) => {
-//   const connection = await pool.getConnection();
-//   try {
-//     await connection.beginTransaction();
-//     for (const query of queries) {
-//       await connection.query(query.sql, query.params);
-//     }
-//     await connection.commit();
-//   } catch (error) {
-//     await connection.rollback();
-//     console.error('Error executing transaction:', error);
-//     throw error;
-//   } finally {
-//     connection.release();
-//   }
-// };
-// export const transactionWithConnection = async (queries, connection) => {
-//   try {
-//     await connection.beginTransaction();
-//     for (const query of queries) {
-//       await connection.query(query.sql, query.params);
-//     }
-//     await connection.commit();
-//   } catch (error) {
-//     await connection.rollback();
-//     console.error('Error executing transaction:', error);
-//     throw error;
-//   }
-// };
-// export const transactionWithConnectionAndRelease = async (queries, connection) => {
-//   try {
-//     await connection.beginTransaction();
-//     for (const query of queries) {
-//       await connection.query(query.sql, query.params);
-//     }
-//     await connection.commit();
-//   } catch (error) {
-//     await connection.rollback();
-//     console.error('Error executing transaction:', error);
-//     throw error;
-//   } finally {
-//     connection.release();
-//   }
-// };
-// export const transactionWithConnectionAndReleaseAndError = async (queries, connection) => {
-//   try {
-//     await connection.beginTransaction();
-//     for (const query of queries) {
-//       await connection.query(query.sql, query.params);
-//     }
-//     await connection.commit();
-//   } catch (error) {
-//     await connection.rollback();
-//     console.error('Error executing transaction:', error);
-//     throw error;
-//   } finally {
-//     connection.release();
-//   }
-// };
