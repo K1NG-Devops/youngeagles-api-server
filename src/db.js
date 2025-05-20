@@ -43,7 +43,7 @@ const getPool = (db = 'skydek_DB') => {
 
 // Test DB connection for all environments
 export const testAllConnections = async () => {
-  const dbs = ['skydek_DB', 'railway', 'local'];
+  const dbs = ['skydek_DB', 'railway'];
   for (const db of dbs) {
     try {
       const pool = getPool(db);

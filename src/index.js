@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.routes.js';
 import { query, testAllConnections } from './db.js';
-import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
@@ -86,49 +85,6 @@ app.get('/api/pops', async (req, res) => {
   }
 });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, 'uploads/pops');
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-const upload = multer({ storage: storage });
-// POP submission route
-app.post('/api/public/pop-submission', async (req, res) => {
-  const {
-    fullname,
-    email,
-    phone,
-    studentName,
-    amount,
-    paymentDate,
-    paymentMethod,
-    bankName,
-    popFilePath,
-  } = req.body;
-
-  if (!fullname || !email || !phone || !amount || !paymentDate || !paymentMethod || !popFilePath) {
-    return res.status(400).json({ message: 'Missing required fields. Please include all required fields and the file URL.' });
-  }
-
-  try {
-    const sql = `
-      INSERT INTO pop_submission 
-      (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath];
-    await query(sql, values);
-
-    res.status(201).json({ message: 'POP submission successful!' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error submitting POP', error: error.message });
-  }
-});
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);

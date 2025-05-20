@@ -89,7 +89,7 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(user, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token with expiry
+    const token = generateToken(user, process.env.JWT_SECRET, { expiresIn: '1h' }); 
     res.json({
       message: 'Login successful!',
       token,
@@ -112,7 +112,7 @@ export const teacherLogin = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [rows] = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
+    const rows = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
 
     if (rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
