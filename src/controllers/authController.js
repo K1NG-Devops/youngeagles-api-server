@@ -129,7 +129,17 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken({ id: user.id, role: 'teacher' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // ✅ Include grade and className in the token and response
+    const token = generateToken(
+      {
+        id: user.id,
+        role: 'teacher',
+        grade: user.grade,
+        className: user.className,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
     res.status(200).json({
       message: 'Login successful!',
@@ -139,6 +149,8 @@ export const teacherLogin = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        grade: user.grade,
+        className: user.className,
       },
     });
   } catch (error) {

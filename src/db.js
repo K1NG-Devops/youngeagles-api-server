@@ -21,11 +21,10 @@ const getPool = (db = 'skydek_DB') => {
       port: Number(process.env.RAILWAY_PORT) || 3306,
     },
     local: {
-      host: process.env.MYSQL_DEVELOPMENT_HOST,
-      user: process.env.MYSQL_DEVELOPMENT_USER,
-      password: process.env.MYSQL_DEVELOPMENT_PASSWORD,
-      database: process.env.MYSQL_DEVELOPMENT_DATABASE,
-      port: Number(process.env.MYSQL_DEVELOPMENT_PORT) || 3306,
+      host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     },
   };
   const selectedConfig = config[db] || config.skydek_DB;
