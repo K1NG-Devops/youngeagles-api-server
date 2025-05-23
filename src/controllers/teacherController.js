@@ -1,6 +1,7 @@
 import { query } from '../db.js';
 import winston from 'winston';
 
+
 // Logger (optional, reuse if needed)
 const logger = winston.createLogger({
   level: 'info',
@@ -15,13 +16,13 @@ const logger = winston.createLogger({
 export const getChildrenByTeacher = async (req, res) => {
   try {
     const teacherId = req.user.id; // assumes JWT middleware sets req.user
-    const [teacher] = await query('SELECT grade, className FROM users WHERE id = ? AND role = ?', [teacherId, 'teacher']);
+    const [rows] = await query('SELECT grade, className FROM users WHERE id = ? AND role = ?', [teacherId, 'teacher']);
 
-    if (!teacher) {
+    if (rows.length === 0) {
       return res.status(404).json({ message: 'Teacher not found or not authorized.' });
     }
 
-    const { grade, className } = teacher;
+    const { grade, className } = rows[0];
 
     const children = await query(
       'SELECT * FROM children WHERE grade = ? AND className = ?',
