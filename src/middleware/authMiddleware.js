@@ -1,4 +1,5 @@
-import { verifyToken } from '../utils/jwt.js'; // Adjust this path if needed
+import { verifyToken } from '../utils/jwt.js';
+
 
 export const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
