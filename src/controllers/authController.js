@@ -112,9 +112,9 @@ export const teacherLogin = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [rows] = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
+    const rows = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
 
-    if (rows.length === 0) {
+    if (!rows || rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
@@ -129,7 +129,6 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    // ✅ Include grade and className in the token and response
     const token = generateToken(
       {
         id: user.id,
