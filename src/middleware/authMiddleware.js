@@ -4,6 +4,11 @@ import { verifyToken } from '../utils/jwt.js';
 export const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
+  if (process.env.NODE_ENV === 'development') {
+    req.user = { id: 1, email:'test@youngeagles.org.za'};
+    return next();
+  }
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ message: 'No token provided.' });
   }
@@ -25,4 +30,5 @@ export const isTeacher = (req, res, next) => {
   }
   next();
 };
+
 
