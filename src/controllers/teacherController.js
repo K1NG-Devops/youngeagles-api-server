@@ -1,7 +1,6 @@
 import { query } from '../db.js';
 import winston from 'winston';
 
-// Logger
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
@@ -16,10 +15,10 @@ export const getChildrenByTeacher = async (req, res) => {
     const teacherId = req.user.id;
 
     // Step 1: Get teacher's class info
-    const [teacherRows] = await query(
+    const teacherRows = await query(
       "SELECT className FROM users WHERE id = ?",
       [teacherId],
-      'railway' // ✅ Optional: specify DB if needed
+      'railway' // specify which db
     );
 
     if (teacherRows.length === 0) {
@@ -28,14 +27,14 @@ export const getChildrenByTeacher = async (req, res) => {
 
     const className = teacherRows[0].className;
 
-    // Step 2: Get children in that class
-    const [childrenRows] = await query(
+    // Step 2: Fetch all children in that class
+    const children = await query(
       "SELECT * FROM children WHERE className = ?",
       [className],
-      'skydek_DB' // ✅ Optional: switch DB if children are in a different DB
+      'skydek_DB' // fetching from other DB
     );
 
-    res.status(200).json({ children: childrenRows });
+    res.status(200).json({ children });
   } catch (error) {
     logger.error('Error fetching children:', error);
     res.status(500).json({ message: "Server error", error: error.message });
