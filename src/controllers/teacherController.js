@@ -16,9 +16,9 @@ export const getChildrenByTeacher = async (req, res) => {
 
     // Step 1: Get teacher's class info
     const teacherRows = await query(
-      "SELECT className FROM users WHERE id = ?",
-      [teacherId],
-      'railway' // specify which db
+      "SELECT className FROM users WHERE className = ?",
+      [className],
+      'railway' 
     );
 
     if (teacherRows.length === 0) {
@@ -31,7 +31,7 @@ export const getChildrenByTeacher = async (req, res) => {
     const children = await query(
       "SELECT * FROM children WHERE className = ?",
       [className],
-      'skydek_DB' // fetching from other DB
+      'skydek_DB'
     );
 
     res.status(200).json({ children });
