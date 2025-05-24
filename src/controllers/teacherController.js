@@ -16,9 +16,9 @@ export const getChildrenByTeacher = async (req, res) => {
 
     // Step 1: Get teacher's class info
     const teacherRows = await query(
-      "SELECT className FROM users WHERE className = ?",
-      [className],
-      'railway' 
+      "SELECT className FROM users WHERE id = ?",
+      [teacherId],
+      'railway' // specify which db
     );
 
     if (teacherRows.length === 0) {
