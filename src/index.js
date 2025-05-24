@@ -6,6 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
+import attendanceRoutes from './routes/attendance.routes.js';
 
 testAllConnections();
 
@@ -135,6 +136,8 @@ app.post('/api/public/pop-submission', async (req, res) => {
     res.status(500).json({ message: 'Error submitting POP', error: error.message });
   }
 });
+
+app.use('api/attendance', attendanceRoutes);
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
