@@ -4,7 +4,7 @@ import { markAttendance, getAttendanceByTeacher } from '../controllers/attendanc
 const router = express.Router();
 
 router.post('/mark-attendance', markAttendance);
-router.get('/attendance/:teacherId', getAttendanceByTeacher);
+router.get('/attendance/teacher/:teacherId', getAttendanceByTeacher);
 
 
 export default router;

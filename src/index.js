@@ -34,7 +34,6 @@ const port = process.env.PORT || 3000;
 const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
-  'http://localhost:5173',
 ];
 
 if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
@@ -93,7 +92,7 @@ app.get('/api/pops', async (req, res) => {
 });
 
 
-app.use('/api/attendance', attendanceRoutes);
+app.use('/api', attendanceRoutes);
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);

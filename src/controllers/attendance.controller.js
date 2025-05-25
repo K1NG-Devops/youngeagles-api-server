@@ -1,6 +1,11 @@
 import { Parser } from 'json2csv';
 import { query } from "../db.js";
 
+// Helper to get teacher ID from params, query, or body
+const getTeacherId = (req) => {
+  return req.params.teacher_id || req.query.teacherId || req.body.teacherId;
+};
+
 // Mark or update attendance in bulk
 export const markAttendance = async (req, res) => {
   console.log("Incoming attendance records:", req.body);
@@ -12,9 +17,10 @@ export const markAttendance = async (req, res) => {
 
   try {
     for (const record of records) {
-      const { teacherId, childId, date, status, late } = record;
+      const teacher_id = record.teacherId || record.teacher_id;
+      const { childId, date, status, late } = record;
 
-      if (!teacherId || !childId || !date || !status) {
+      if (!teacher_id || !childId || !date || !status) {
         return res.status(400).json({ message: 'Missing required fields in one or more records' });
       }
 
@@ -22,20 +28,25 @@ export const markAttendance = async (req, res) => {
         `INSERT INTO attendance (teacher_id, child_id, date, status, late)
          VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE status = VALUES(status), late = VALUES(late)`,
-        [teacherId, childId, date, status, late || false],
+        [teacher_id, childId, date, status, late || false],
         'railway'
       );
     }
 
-    res.status(201).json({ message: 'Attendance marked or updated for all records' });
+    return res.status(201).json({ message: 'Attendance marked or updated for all records' });
   } catch (error) {
     console.error('Error saving batch attendance:', error);
-    res.status(500).json({ message: 'Database error' });
+    return res.status(500).json({ message: 'Database error' });
   }
 };
 
 export const getAttendanceByTeacher = async (req, res) => {
-  const { teacherId } = req.params;
+  const teacher_id = getTeacherId(req);
+
+  if (!teacher_id) {
+    return res.status(400).json({ message: 'Missing teacherId parameter' });
+  }
+
   const {
     search,
     start,
@@ -43,14 +54,10 @@ export const getAttendanceByTeacher = async (req, res) => {
     page = 1,
     limit = 20,
     includeMissing = false,
-    status, // present, absent, etc.
-    format, // json or csv
-    groupBy // child or date
+    status,  // e.g. present, absent
+    format,  // json or csv
+    groupBy  // 'child' or 'date'
   } = req.query;
-
-  if (!teacherId) {
-    return res.status(400).json({ message: 'Missing teacherId parameter' });
-  }
 
   const offset = (parseInt(page) - 1) * parseInt(limit);
   let queryStr = `
@@ -65,7 +72,7 @@ export const getAttendanceByTeacher = async (req, res) => {
     JOIN children c ON a.child_id = c.id
     WHERE a.teacher_id = ?
   `;
-  const queryParams = [teacherId];
+  const queryParams = [teacher_id];
 
   if (start && end) {
     queryStr += ` AND a.date BETWEEN ? AND ?`;
@@ -102,7 +109,7 @@ export const getAttendanceByTeacher = async (req, res) => {
             WHERE teacher_id = ? AND date BETWEEN ? AND ?
           )
       `,
-        [teacherId, teacherId, start, end],
+        [teacher_id, teacher_id, start, end],
         'railway'
       );
 
@@ -117,7 +124,7 @@ export const getAttendanceByTeacher = async (req, res) => {
 
     let data = [...records, ...missingRecords];
 
-    // Grouping
+    // Group by child
     if (groupBy === 'child') {
       data = Object.values(data.reduce((acc, item) => {
         if (!acc[item.child_id]) acc[item.child_id] = { ...item, records: [] };
@@ -130,6 +137,7 @@ export const getAttendanceByTeacher = async (req, res) => {
       }, {}));
     }
 
+    // Group by date
     if (groupBy === 'date') {
       data = Object.values(data.reduce((acc, item) => {
         if (!acc[item.date]) acc[item.date] = { date: item.date, records: [] };
@@ -155,12 +163,12 @@ export const getAttendanceByTeacher = async (req, res) => {
         })) : d
       ));
       res.header('Content-Type', 'text/csv');
-      res.attachment(`attendance_teacher_${teacherId}.csv`);
+      res.attachment(`attendance_teacher_${teacher_id}.csv`);
       return res.send(csv);
     }
 
-    // Return JSON by default
-    res.status(200).json({
+    // Return JSON response
+    return res.status(200).json({
       data,
       pagination: {
         page: parseInt(page),
@@ -171,6 +179,6 @@ export const getAttendanceByTeacher = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching attendance:', error);
-    res.status(500).json({ message: 'Database error' });
+    return res.status(500).json({ message: 'Database error' });
   }
 };
