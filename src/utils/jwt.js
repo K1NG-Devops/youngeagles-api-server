@@ -13,7 +13,8 @@ export const generateToken = (user) => {
       name: user.name,
       role: user.role,
       grade: user.grade,       // Optional
-      className: user.className // Optional
+      className: user.className,
+      teacherId: user.teacherId || user.id,  // Ensure teacherId exists
     },
     JWT_SECRET,
     { expiresIn: '1h' }

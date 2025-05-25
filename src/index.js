@@ -137,7 +137,7 @@ app.post('/api/public/pop-submission', async (req, res) => {
   }
 });
 
-app.use('api/attendance', attendanceRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
