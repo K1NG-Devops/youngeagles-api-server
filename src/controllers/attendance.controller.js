@@ -34,10 +34,10 @@ export const markAttendance = async (req, res) => {
   }
 };
 
-
 export const getAttendanceByTeacher = async (req, res) => {
   const { teacherId } = req.params;
   const {
+    search,
     start,
     end,
     page = 1,
@@ -77,6 +77,11 @@ export const getAttendanceByTeacher = async (req, res) => {
     queryParams.push(status);
   }
 
+  if (search) {
+    queryStr += ` AND c.full_name LIKE ?`;
+    queryParams.push(`%${search}%`);
+  }
+
   queryStr += ` ORDER BY a.date DESC LIMIT ? OFFSET ?`;
   queryParams.push(parseInt(limit), offset);
 
@@ -96,7 +101,7 @@ export const getAttendanceByTeacher = async (req, res) => {
             SELECT child_id FROM attendance
             WHERE teacher_id = ? AND date BETWEEN ? AND ?
           )
-        `,
+      `,
         [teacherId, teacherId, start, end],
         'railway'
       );
@@ -141,12 +146,14 @@ export const getAttendanceByTeacher = async (req, res) => {
     // Export to CSV
     if (format === 'csv') {
       const parser = new Parser();
-      const csv = parser.parse(data.flatMap(d => d.records ? d.records.map(r => ({
-        ...r,
-        child_id: d.child_id,
-        child_name: d.child_name,
-        date: r.date || d.date
-      })) : d));
+      const csv = parser.parse(data.flatMap(d =>
+        d.records ? d.records.map(r => ({
+          ...r,
+          child_id: d.child_id,
+          child_name: d.child_name,
+          date: r.date || d.date
+        })) : d
+      ));
       res.header('Content-Type', 'text/csv');
       res.attachment(`attendance_teacher_${teacherId}.csv`);
       return res.send(csv);
