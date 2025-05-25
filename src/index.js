@@ -5,6 +5,7 @@ import { query, testAllConnections } from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
+import attendanceRoutes from './routes/attendance.routes.js';
 
 testAllConnections();
 
@@ -30,16 +31,22 @@ app.use(express.static('public'));
 app.use(express.static('uploads'));
 
 const port = process.env.PORT || 3000;
+const allowedOrigins = [
+  'https://react-app-iota-nine.vercel.app',
+  'https://www.youngeagles.org.za',
+  'http://localhost:5173',
+];
+
+if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
+  allowedOrigins.push(process.env.CORS_ORIGIN);
+}
 
 app.use(cors({
-  origin: [
-    'https://react-app-iota-nine.vercel.app',
-    'https://www.youngeagles.org.za'
-  ],
+  origin: allowedOrigins,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  optionsSuccessStatus: 204,
 }));
 
 app.use(express.urlencoded({ extended: true }));
@@ -85,6 +92,8 @@ app.get('/api/pops', async (req, res) => {
   }
 });
 
+
+app.use('/api/attendance', attendanceRoutes);
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);

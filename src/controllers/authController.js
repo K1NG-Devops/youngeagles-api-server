@@ -114,7 +114,7 @@ export const teacherLogin = async (req, res) => {
   try {
     const rows = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
 
-    if (rows.length === 0) {
+    if (!rows || rows.length === 0) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
@@ -129,7 +129,16 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken({ id: user.id, role: 'teacher' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = generateToken(
+      {
+        id: user.id,
+        role: 'teacher',
+        grade: user.grade,
+        className: user.className,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
     res.status(200).json({
       message: 'Login successful!',
@@ -139,6 +148,8 @@ export const teacherLogin = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        grade: user.grade,
+        className: user.className,
       },
     });
   } catch (error) {

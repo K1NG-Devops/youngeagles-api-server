@@ -4,6 +4,8 @@ import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
 import { registerChild, registerUser, loginUser, teacherLogin } from '../controllers/authController.js';
+import { getChildrenByTeacher } from '../controllers/teacherController.js';
+import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -85,6 +87,8 @@ router.post('/teacher-login',
   },
   teacherLogin
 );
+
+router.get('/children', authMiddleware, isTeacher, getChildrenByTeacher)
 
 
 // /auth/profile
