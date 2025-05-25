@@ -29,11 +29,22 @@ export const getChildrenByTeacher = async (req, res) => {
 
     // Step 2: Fetch all children in that class
     const children = await query(
-      "SELECT * FROM children WHERE className = ?",
+      `SELECT 
+        c.id AS childId,
+        c.name,
+        c.dob,
+        c.gender,
+        c.grade,
+        c.className,
+        a.status AS attendanceStatus,
+        a.date AS attendanceDate
+      FROM children c
+      LEFT JOIN attendance a ON c.id = a.child_id AND a.date = CURDATE()
+      WHERE c.className = ?`,
       [className],
       'skydek_DB'
     );
-
+    
     res.status(200).json({ children });
   } catch (error) {
     logger.error('Error fetching children:', error);
