@@ -140,6 +140,7 @@ app.post('/api/public/pop-submission', async (req, res) => {
 });
 
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 
 app.listen(port, () => {
