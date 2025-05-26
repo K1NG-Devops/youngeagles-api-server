@@ -46,9 +46,10 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'cache-control'],
   optionsSuccessStatus: 204,
 }));
+
 
 app.use(express.urlencoded({ extended: true }));
 
