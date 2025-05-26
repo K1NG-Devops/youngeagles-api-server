@@ -7,6 +7,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import attendanceRoutes from './routes/attendance.routes.js';
+import { authMiddleware, isTeacher } from './middleware/authMiddleware.js';
+import { getChildrenByTeacher } from './controllers/teacherController.js';
 
 testAllConnections();
 
@@ -35,7 +37,6 @@ const port = process.env.PORT || 3000;
 const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
-  'http://localhost:5173',
 ];
 
 if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
@@ -139,6 +140,7 @@ app.post('/api/public/pop-submission', async (req, res) => {
 });
 
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
