@@ -1,7 +1,6 @@
 {
   "name": "youngeagles-api-server",
   "version": "1.0.0",
-  "description": "",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -36,5 +35,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
-  }
+  },
+  "keywords": [],
+  "description": ""
 }
