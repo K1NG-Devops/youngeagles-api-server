@@ -1,6 +1,39 @@
 import { Parser } from 'json2csv';
 import { query } from "../db.js";
 
+// Mark or update attendance in bulk
+export const markAttendance = async (req, res) => {
+  console.log("Incoming attendance records:", req.body);
+  const records = req.body;
+
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ message: 'Attendance data must be a non-empty array' });
+  }
+
+  try {
+    for (const record of records) {
+      const { teacherId, childId, date, status, late } = record;
+
+      if (!teacherId || !childId || !date || !status) {
+        return res.status(400).json({ message: 'Missing required fields in one or more records' });
+      }
+
+      await query(
+        `INSERT INTO attendance (teacher_id, child_id, date, status, late)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE status = VALUES(status), late = VALUES(late)`,
+        [teacherId, childId, date, status, late || false],
+        'railway'
+      );
+    }
+
+    res.status(201).json({ message: 'Attendance marked or updated for all records' });
+  } catch (error) {
+    console.error('Error saving batch attendance:', error);
+    res.status(500).json({ message: 'Database error' });
+  }
+};
+
 export const getAttendanceByTeacher = async (req, res) => {
   const { teacherId } = req.params;
   const {
