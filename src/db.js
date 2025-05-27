@@ -74,7 +74,7 @@ export const query = async (sql, params = [], db = 'skydek_DB') => {
   const pool = getPool(db);
   try {
     const [rows] = await pool.query(sql, params);
-    return rows;
+    return result;
   } catch (error) {
     console.error(`❌ Error executing query on ${db} database:`, error);
     throw error;

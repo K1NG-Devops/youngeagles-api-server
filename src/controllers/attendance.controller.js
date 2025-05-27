@@ -76,7 +76,7 @@ export const getAttendanceByTeacher = async (req, res) => {
     attendanceQuery += ` ORDER BY date DESC LIMIT ? OFFSET ?`;
     attendanceParams.push(parseInt(limit), offset);
 
-    const [attendanceRecords] = await query(attendanceQuery, attendanceParams, 'railway');
+    const attendanceRecords = await query(attendanceQuery, attendanceParams, 'railway');
 
     // Extract unique child IDs from attendance records for fetching children info
     const childIds = [...new Set(attendanceRecords.map(r => r.child_id))];
@@ -93,7 +93,7 @@ export const getAttendanceByTeacher = async (req, res) => {
         childrenParams.push(`%${search}%`);
       }
 
-      const [children] = await query(childrenQuery, childrenParams, 'skydek_DB');
+      const children = await query(childrenQuery, childrenParams, 'skydek_DB');
 
       // Map children by id for easy lookup
       childrenMap = children.reduce((acc, child) => {
