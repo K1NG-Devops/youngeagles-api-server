@@ -85,11 +85,11 @@ export const getAttendanceByTeacher = async (req, res) => {
     let childrenMap = {};
     if (childIds.length > 0) {
       // Optional: Add search filter to children query if search param is provided
-      let childrenQuery = `SELECT id, full_name, className FROM children WHERE id IN (?)`;
+      let childrenQuery = `SELECT id, name, className FROM children WHERE id IN (?)`;
       const childrenParams = [childIds];
 
       if (search) {
-        childrenQuery += ` AND full_name LIKE ?`;
+        childrenQuery += ` AND name LIKE ?`;
         childrenParams.push(`%${search}%`);
       }
 
@@ -105,7 +105,7 @@ export const getAttendanceByTeacher = async (req, res) => {
     // Step 3: Merge attendance records with children info
     let data = attendanceRecords.map(record => ({
       ...record,
-      child_name: childrenMap[record.child_id]?.full_name || 'Unknown',
+      child_name: childrenMap[record.child_id]?.name || 'Unknown',
       className: childrenMap[record.child_id]?.className || 'Unknown',
     }));
 
@@ -122,7 +122,7 @@ export const getAttendanceByTeacher = async (req, res) => {
       // Example: getAssignedChildren(teacherId) returns array of children IDs assigned to teacher
       // Let's assume assignedChildren is fetched from skydek_DB
 
-      const assignedChildrenQuery = `SELECT id, full_name FROM children WHERE className IN (
+      const assignedChildrenQuery = `SELECT id, name FROM children WHERE className IN (
         SELECT className FROM teachers WHERE id = ?
       )`;
       const [assignedChildren] = await query(assignedChildrenQuery, [teacherId], 'skydek_DB');
@@ -138,7 +138,7 @@ export const getAttendanceByTeacher = async (req, res) => {
         .filter(child => !attendanceChildSet.has(child.id))
         .map(child => ({
           child_id: child.id,
-          child_name: child.full_name,
+          child_name: child.name,
           date: null,
           status: "Not marked",
           late: null,
