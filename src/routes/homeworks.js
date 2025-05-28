@@ -24,6 +24,7 @@ router.post('/upload', async (req, res) => {
 });
 
 router.get('/list', async (req, res) => {
+    console.log('Query params:', req.query);
   const { className, grade } = req.query;
 
   if (!className || !grade) {
