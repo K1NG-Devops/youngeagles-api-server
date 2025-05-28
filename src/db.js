@@ -3,44 +3,40 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Create a function to create a pool dynamically base on the environment
-const getPool = (db = 'skydek_DB') => {
-  const config = {
-    skydek_DB: {
-      host: process.env.MYSQLHOST,
-      user: process.env.MYSQLUSER,
-      password: process.env.MYSQLPASSWORD,
-      database: process.env.MYSQLDATABASE,
-      port: Number(process.env.MYSQLPORT) || 3306,
-    },
-    railway: {
-      host: process.env.RAILWAY_HOST,
-      user: process.env.RAILWAY_USER,
-      password: process.env.RAILWAY_PASSWORD,
-      database: process.env.RAILWAY_DATABASE,
-      port: Number(process.env.RAILWAY_PORT) || 3306,
-    },
-    // local: {
-    //   host: process.env.DB_HOST,
-    // user: process.env.DB_USER,
-    // password: process.env.DB_PASSWORD,
-    // database: process.env.DB_NAME,
-    // },
-  };
-  const selectedConfig = config[db] || config.skydek_DB;
-  return mysql.createPool({
-    ...selectedConfig,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-    connectTimeout: 10000,
-  });
+const poolCache = {}; // 🟢 Cache pools by db name
+
+const dbConfigs = {
+  skydek_DB: {
+    host: process.env.MYSQLHOST,
+    user: process.env.MYSQLUSER,
+    password: process.env.MYSQLPASSWORD,
+    database: process.env.MYSQLDATABASE,
+    port: Number(process.env.MYSQLPORT) || 3306,
+  },
+  railway: {
+    host: process.env.RAILWAY_HOST,
+    user: process.env.RAILWAY_USER,
+    password: process.env.RAILWAY_PASSWORD,
+    database: process.env.RAILWAY_DATABASE,
+    port: Number(process.env.RAILWAY_PORT) || 3306,
+  }
 };
 
-// Test DB connection for all environments
+const getPool = (db = 'skydek_DB') => {
+  if (!poolCache[db]) {
+    const selectedConfig = dbConfigs[db] || dbConfigs.skydek_DB;
+    poolCache[db] = mysql.createPool({
+      ...selectedConfig,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      ssl: { rejectUnauthorized: false },
+      connectTimeout: 10000,
+    });
+  }
+  return poolCache[db];
+};
+
 export const testAllConnections = async () => {
   const dbs = ['skydek_DB', 'railway'];
   for (const db of dbs) {
@@ -50,26 +46,24 @@ export const testAllConnections = async () => {
       const [rows] = await connection.query('SELECT DATABASE() AS db');
       console.log(`✅ Connected to ${db} database: ${rows[0].db}`);
       connection.release();
-      await pool.end();
     } catch (error) {
       console.error(`❌ Error connecting to the ${db} database:`, error);
     }
   }
 };
 
-// Gracefully close the pool (if needed in shutdown scripts)
+// Close all cached pools
 export const close = async () => {
-  try {
-    const pool = getPool(); // Ensure the pool is created before attempting to close it
-    await pool.end();
-    console.log('✅ Database connection pool closed');
-  } catch (error) {
-    console.error('❌ Error closing database pool:', error);
+  for (const db in poolCache) {
+    try {
+      await poolCache[db].end();
+      console.log(`✅ Closed pool for ${db}`);
+    } catch (error) {
+      console.error(`❌ Error closing pool for ${db}:`, error);
+    }
   }
 };
 
-// General SELECT or query
-// General SELECT or query
 export const query = async (sql, params = [], db = 'skydek_DB') => {
   const pool = getPool(db);
   try {
@@ -81,7 +75,6 @@ export const query = async (sql, params = [], db = 'skydek_DB') => {
   }
 };
 
-// INSERT, UPDATE, DELETE with better metadata
 export const execute = async (sql, params, db = 'skydek_DB') => {
   const pool = getPool(db);
   try {
@@ -93,8 +86,6 @@ export const execute = async (sql, params, db = 'skydek_DB') => {
   }
 };
 
-
-// Full transaction with internal connection
 export const transaction = async (queries, db = 'skydek_DB') => {
   const pool = getPool(db);
   const connection = await pool.getConnection();
