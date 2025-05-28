@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../db.js';
+import { execute, query } from '../db.js';
 
 const router = express.Router();
 
@@ -15,8 +15,7 @@ router.post('/upload', async (req, res) => {
       INSERT INTO homeworks (title, due_date, file_url, uploaded_by_teacher_id, class_name, grade)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
-    const [result] = await query(sql, [title, dueDate, fileURL, uploadedBy, className, grade]);
-
+    const result = await execute(sql, [title, dueDate, fileURL, uploadedBy, className, grade]);
     res.status(201).json({ message: 'Homework uploaded successfully', id: result.insertId });
   } catch (err) {
     console.error('Upload error:', err);
@@ -38,8 +37,7 @@ router.get('/list', async (req, res) => {
       WHERE class_name = ? AND grade = ?
       ORDER BY due_date ASC
     `;
-    const [rows] = await query(sql, [className, grade]);
-
+    const rows = await query(sql, [className, grade]);
     res.status(200).json(rows);
   } catch (err) {
     console.error('Fetch error:', err);
@@ -48,4 +46,3 @@ router.get('/list', async (req, res) => {
 });
 
 export default router;
-
