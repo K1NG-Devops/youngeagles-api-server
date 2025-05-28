@@ -1,9 +1,10 @@
 import express from 'express';
 import { execute, query } from '../db.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/upload', async (req, res) => {
+router.post('/upload', authMiddleware, async (req, res) => {
   const { title, dueDate, fileURL, uploadedBy, className, grade } = req.body;
 
   if (!title || !dueDate || !fileURL || !uploadedBy || !className || !grade) {
@@ -23,7 +24,7 @@ router.post('/upload', async (req, res) => {
   }
 });
 
-router.get('/list', async (req, res) => {
+router.get('/list', authMiddleware, async (req, res) => {
     console.log('Query params:', req.query);
   const { className, grade } = req.query;
 
