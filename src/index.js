@@ -123,7 +123,7 @@ const upload = multer({ storage: storage });
 
 // POP submission route
 app.post('/api/public/pop-submission', upload.single('popFile'), async (req, res) => {
-  const popFilePath = req.file ? `/uploads/pops/${req.file.filename}` : null;
+  // const popFilePath = req.file ? `/uploads/pops/${req.file.filename}` : null;
   const {
     fullname,
     email,
@@ -135,16 +135,16 @@ app.post('/api/public/pop-submission', upload.single('popFile'), async (req, res
     bankName,
   } = req.body;
 
-  if (!fullname || !email || !phone || !amount || !paymentDate || !paymentMethod || !popFilePath) {
+  if (!fullname || !email || !phone || !amount || !paymentDate || !paymentMethod) { //!popFilePath to add later
     return res.status(400).json({ message: 'Missing required fields. Please include all required fields and the file URL.' });
   }
 
   try {
     const sql = `
       INSERT INTO pop_submission 
-      (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName, popFilePath];
+      (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;//popFilePath to add later
+    const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName]; //popFilePath to add later
     await query(sql, values);
 
     res.status(201).json({ message: 'POP submission successful!' });

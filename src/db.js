@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const poolCache = {}; // 🟢 Cache pools by db name
+const poolCache = {}; // Cache pools by db name
 
 const dbConfigs = {
   skydek_DB: {
