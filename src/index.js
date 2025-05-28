@@ -143,7 +143,7 @@ app.post('/api/public/pop-submission', upload.single('popFile'), async (req, res
     const sql = `
       INSERT INTO pop_submission 
       (fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;//popFilePath to add later
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;//popFilePath to add later
     const values = [fullname, email, phone, studentName, amount, paymentDate, paymentMethod, bankName]; //popFilePath to add later
     await query(sql, values);
 
