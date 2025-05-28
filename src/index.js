@@ -11,6 +11,7 @@ import { getChildrenByTeacher } from './controllers/teacherController.js';
 import morgan from 'morgan';
 import { fileURLToPath } from 'url';
 import homeworkRoutes from './routes/homework.routes.js';
+import homeworks from './routes/homeworks.js';
 import fs from 'fs';
 
 // Setup paths and CORS
@@ -64,6 +65,7 @@ app.use('/api/homework', homeworkRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
+app.use('/api/homeworks', homeworks);
 
 // Test route
 app.get('/api', (req, res) => {
