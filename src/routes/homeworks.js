@@ -47,7 +47,7 @@ router.get('/list', authMiddleware, async (req, res) => {
     const sql = `
       SELECT id, title, due_date AS dueDate, file_url AS fileURL, status
       FROM homeworks
-      WHERE className = ? AND grade = ?
+      WHERE class_name = ? AND grade = ?
       ORDER BY due_date ASC
     `;
     const rows = await query(sql, [className, grade], 'railway');
