@@ -5,14 +5,23 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.post('/upload', authMiddleware, async (req, res) => {
-  const { title, dueDate, fileURL, className, grade } = req.body;
-  const  uploadedBy = req.user.id;
+  const { title, dueDate, fileURL, uploadedBy, className, grade } = req.body;
 
   if (!title || !dueDate || !fileURL || !uploadedBy || !className || !grade) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    // Check if the teacher is assigned to the provided class
+    const checkClass = `
+      SELECT * FROM classes WHERE teacher_id = ? AND class_name = ?
+    `;
+    const classResult = await execute(checkClass, [uploadedBy, className], 'railway');
+
+    if (classResult.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized: This class does not belong to you.' });
+    }
+
     const sql = `
       INSERT INTO homeworks (title, due_date, file_url, uploaded_by_teacher_id, class_name, grade)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -24,6 +33,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Server error during upload' });
   }
 });
+
 
 router.get('/list', authMiddleware, async (req, res) => {
     console.log('Query params:', req.query);
