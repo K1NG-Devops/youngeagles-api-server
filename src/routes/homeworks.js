@@ -5,7 +5,8 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.post('/upload', authMiddleware, async (req, res) => {
-  const { title, dueDate, fileURL, uploadedBy, className, grade } = req.body;
+  const { title, dueDate, fileURL, className, grade } = req.body;
+  const  uploadedBy = req.user.id;
 
   if (!title || !dueDate || !fileURL || !uploadedBy || !className || !grade) {
     return res.status(400).json({ error: 'Missing required fields' });
