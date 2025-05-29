@@ -34,7 +34,7 @@ export default (sequelize, DataTypes) => {
         },
     }, {
         tableName: 'homeworks',
-        timestamps: false, // if you're manually handling created_at
+        timestamps: false,
     });
 
     return Homework;

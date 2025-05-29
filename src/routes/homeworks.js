@@ -1,6 +1,6 @@
 import express from 'express';
+import { execute } from '../db.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
-import { Homework } from '../models/homeworks.js'
 
 const router = express.Router();
 
@@ -19,26 +19,25 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   }
 
   try {
-    const newHomework = await Homework.create({
-      title,
-      due_date: dueDate,
-      file_url: fileUrl,
-      status: "Pending",
-      uploaded_by_teacher_id: uploadedBy,
-      class_name: className,
-      grade,
-      created_at: new Date(),
-    });
+    const sql = `
+      INSERT INTO homeworks (title, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
+      VALUES (?, ?, ?, 'Pending', ?, ?, ?, NOW())
+    `;
+    const params = [title, dueDate, fileUrl, uploadedBy, className, grade];
 
+    const result = await execute(sql, params);
     res.status(201).json({
       message: "Homework uploaded successfully",
-      data: newHomework,
+      insertedId: result.insertId,
     });
   } catch (err) {
     console.error("Error uploading homework:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+export default router;
+
 
 
 router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
