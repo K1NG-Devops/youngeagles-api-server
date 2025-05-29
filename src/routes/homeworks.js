@@ -37,9 +37,9 @@ router.post('/upload', authMiddleware, async (req, res) => {
 
 router.get('/list', authMiddleware, async (req, res) => {
     console.log('Query params:', req.query);
-  const { className, grade } = req.query;
+  const { class_ame, grade } = req.query;
 
-  if (!className || !grade) {
+  if (!class_ame || !grade) {
     return res.status(400).json({ error: 'Missing className or grade in query' });
   }
 
@@ -50,7 +50,7 @@ router.get('/list', authMiddleware, async (req, res) => {
       WHERE class_name = ? AND grade = ?
       ORDER BY due_date ASC
     `;
-    const rows = await query(sql, [className, grade], 'railway');
+    const rows = await query(sql, [class_ame, grade], 'railway');
     res.status(200).json(rows);
   } catch (err) {
     console.error('Fetch error:', err);
