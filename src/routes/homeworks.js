@@ -5,9 +5,9 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.post('/upload', authMiddleware, async (req, res) => {
-  const { title, dueDate, fileURL, uploadedBy, className, grade } = req.body;
+  const { title, dueDate, fileUrl, uploadedBy, className, grade } = req.body;
 
-  if (!title || !dueDate || !fileURL || !uploadedBy || !className || !grade) {
+  if (!title || !dueDate || !fileUrl || !uploadedBy || !className || !grade) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -26,7 +26,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
       INSERT INTO homeworks (title, due_date, file_url, uploaded_by_teacher_id, class_name, grade)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
-    const result = await execute(sql, [title, dueDate, fileURL, uploadedBy, className, grade], 'railway');
+    const result = await execute(sql, [title, dueDate, fileUrl, uploadedBy, className, grade], 'railway');
     res.status(201).json({ message: 'Homework uploaded successfully', id: result.insertId });
   } catch (err) {
     console.error('Upload error:', err);
