@@ -14,7 +14,7 @@ router.post('/upload', authMiddleware, async (req, res) => {
   try {
     // Check if the teacher is assigned to the provided class
     const checkClass = `
-      SELECT * FROM classes WHERE teacher_id = ? AND class_name = ?
+      SELECT * FROM users WHERE teacher_id = ? AND class_name = ?
     `;
     const classResult = await execute(checkClass, [uploadedBy, className], 'railway');
 
