@@ -1,10 +1,10 @@
 import express from 'express';
 import { execute, query } from '../db.js';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/upload', authMiddleware, async (req, res) => {
+router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   const { title, dueDate, fileUrl, uploadedBy, className, grade } = req.body;
 
   if (!title || !dueDate || !fileUrl || !uploadedBy || !className || !grade) {
@@ -37,9 +37,9 @@ router.post('/upload', authMiddleware, async (req, res) => {
 
 router.get('/list', authMiddleware, async (req, res) => {
     console.log('Query params:', req.query);
-  const { class_ame, grade } = req.query;
+  const { className, grade } = req.query;
 
-  if (!class_ame || !grade) {
+  if (!className || !grade) {
     return res.status(400).json({ error: 'Missing className or grade in query' });
   }
 
@@ -47,10 +47,10 @@ router.get('/list', authMiddleware, async (req, res) => {
     const sql = `
       SELECT id, title, due_date AS dueDate, file_url AS fileURL, status
       FROM homeworks
-      WHERE class_name = ? AND grade = ?
+      WHERE className = ? AND grade = ?
       ORDER BY due_date ASC
     `;
-    const rows = await query(sql, [class_ame, grade], 'railway');
+    const rows = await query(sql, [className, grade], 'railway');
     res.status(200).json(rows);
   } catch (err) {
     console.error('Fetch error:', err);
