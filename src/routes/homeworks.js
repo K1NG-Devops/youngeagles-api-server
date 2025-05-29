@@ -46,7 +46,7 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
   try {
     // Step 1: Get class names of all children for this parent
     const [children] = await query(
-      'SELECT class_name FROM skydek_DB.children WHERE parent_id = ?',
+      'SELECT className FROM skydek_DB.children WHERE parent_id = ?',
       [parentId]
     );
 
@@ -58,7 +58,7 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
 
     // Step 2: Get homeworks for those classNames
     const [homeworks] = await query(
-      'SELECT * FROM homeworks WHERE className IN (?) ORDER BY due_date DESC',
+      'SELECT * FROM homeworks WHERE class_name IN (?) ORDER BY due_date DESC',
       [classNames]
     );
 
