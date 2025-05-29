@@ -1,5 +1,5 @@
 import express from 'express';
-import { execute } from '../db.js';
+import { query, execute } from '../db.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
