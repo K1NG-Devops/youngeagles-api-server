@@ -25,14 +25,14 @@ export const assignHomework = (req, res) => {
 };
 
 export const getHomeworkForParent = async (req, res) => {
-  const { parentId } = req.params;
+  const { parent_id } = req.params;
 
   try {
-    console.log('Fetching class names for parent:', parentId);
+    console.log('Fetching class names for parent:', parent_id);
     
     const children = await query(
       'SELECT className FROM children WHERE parent_id = ?',
-      [parentId],
+      [parent_id],
       'skydek_DB'
     );
 
