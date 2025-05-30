@@ -28,14 +28,18 @@ export const getHomeworkForParent = async (req, res) => {
   const { parentId } = req.params;
 
   try {
-    const [children] = await query(
+    console.log('Fetching class names for parent:', parentId);
+    
+    const children = await query(
       'SELECT className FROM children WHERE parent_id = ?',
       [parentId],
       'skydek_DB'
     );
 
+    console.log('Children fetched:', children);
+
     const classNames = children.map(child => child.className).filter(Boolean);
-    console.log("ClassNames for parent", parentId, ":", classNames);
+    console.log('Extracted classNames:', classNames);
 
     if (classNames.length === 0) {
       return res.status(404).json({ message: 'No children or class names found for this parent.' });
@@ -48,11 +52,14 @@ export const getHomeworkForParent = async (req, res) => {
       ORDER BY due_date DESC
     `;
 
-    const [homeworks] = await query(sql, classNames, 'skydek_DB');
+    console.log('Executing homework query with SQL:', sql);
+    const homeworks = await query(sql, classNames, 'skydek_DB');
+
+    console.log('Homeworks fetched:', homeworks);
     return res.status(200).json({ homeworks });
 
   } catch (error) {
-    console.error('Error fetching homeworks for parent:', error);
+    console.error('🔥 Controller Error:', error); // Enhanced logging
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
