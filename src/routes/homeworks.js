@@ -44,9 +44,9 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
   const { parentId } = req.params;
 
   try {
-    // Step 1: Get class names of all children for this parent
+    // Step 1: Get class names of all children for this parent (with aliasing)
     const [children] = await query(
-      'SELECT className FROM skydek_DB.children WHERE parent_id = ?',
+      'SELECT className AS class_name FROM skydek_DB.children WHERE parent_id = ?',
       [parentId]
     );
 
@@ -56,12 +56,13 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
 
     const classNames = children.map(child => child.class_name);
 
-    // Step 2: Get homeworks for those classNames
-    const [homeworks] = await query(
-      'SELECT * FROM homeworks WHERE class_name IN (?) ORDER BY due_date DESC',
-      [classNames], 'railway'
-    );
+    // Step 2: Prepare dynamic placeholders for the IN clause
+    const placeholders = classNames.map(() => '?').join(', ');
+    const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
 
+    // Step 3: Get homeworks
+    const [homeworks] = await query(sql, classNames);
+    
     res.json({ homeworks });
   } catch (err) {
     console.error("Fetch homework error:", err);
