@@ -25,7 +25,7 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     `;
     const params = [title, dueDate, fileUrl, uploadedBy, className, grade];
 
-    const result = await execute(sql, params);
+    const result = await execute(sql, params, 'railway');
     res.status(201).json({
       message: "Homework uploaded successfully",
       insertedId: result.insertId,
@@ -62,7 +62,7 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
     const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
 
     // Step 3: Get homeworks
-    const [homeworks] = await query(sql, classNames);
+    const [homeworks] = await query(sql, classNames, 'railway');
     
     res.json({ homeworks });
   } catch (err) {
@@ -86,7 +86,7 @@ router.get('/list', authMiddleware, async (req, res) => {
       WHERE class_name = ?
       ORDER BY due_date DESC
     `;
-    const [homeworks] = await query(sql, [className]);
+    const [homeworks] = await query(sql, [className], 'railway');
 
     res.json({ homeworks });
   } catch (err) {
