@@ -43,7 +43,7 @@ export const getHomeworkForParent = async (req, res) => {
     const classNames = children.map(c => c.className);
     const placeholders = classNames.map(() => '?').join(', ');
     const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
-    const [homeworks] = await query(sql, classNames, 'railway');
+    const [homeworks] = await query(sql, classNames, 'skydek_DB');
 
     res.json({ homeworks });
   } catch (err) {
