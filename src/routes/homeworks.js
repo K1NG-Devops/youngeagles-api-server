@@ -46,8 +46,8 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
   try {
     // Step 1: Get class names of all children for this parent (with aliasing)
     const [children] = await query(
-      'SELECT className AS class_name FROM skydek_DB.children WHERE parent_id = ?',
-      [parentId]
+      'SELECT className FROM children WHERE parent_id = ?',
+      [parentId], 'skydek_DB'
     );
     console.log('Fetched Children', children);
 
@@ -70,3 +70,26 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch homework." });
   }
 });
+
+router.get('/list', authMiddleware, async (req, res) => {
+  const { className, grade } = req.query;
+
+  if (!className || !grade) {
+    return res.status(400).json({ error: "className and grade are required query parameters." });
+  }
+
+  try {
+    const sql = `
+      SELECT * FROM homeworks
+      WHERE class_name = ? AND grade = ?
+      ORDER BY due_date DESC
+    `;
+    const [homeworks] = await query(sql, [className, grade]);
+
+    res.json({ homeworks });
+  } catch (err) {
+    console.error("Error fetching homeworks:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
