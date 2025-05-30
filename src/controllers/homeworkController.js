@@ -24,38 +24,42 @@ export const assignHomework = (req, res) => {
   res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
 };
 
+import { query } from '../db/index.js'; // make sure to include .js in ESM
+
 export const getHomeworkForParent = async (req, res) => {
-  const { parent_id } = req.params;
-  console.log('✅ Hitting /for-parent with ID:', parent_id);
+  const { parentId } = req.params;
 
   try {
     const [children] = await query(
       'SELECT className FROM children WHERE parent_id = ?',
-      [parent_id],
+      [parentId],
       'skydek_DB'
     );
-    console.log('🎯 Fetched Children:', children);
 
-    if (!children.length) {
-      console.log('⚠️ No children found for this parent_id.');
-      return res.json({ homeworks: [] });
+    const classNames = children.map(child => child.className).filter(Boolean);
+    console.log("ClassNames for parent", parentId, ":", classNames);
+
+    if (classNames.length === 0) {
+      return res.status(404).json({ message: 'No children or class names found for this parent.' });
     }
 
-    const classNames = children.map(c => c.className);
-    console.log("👀 Class Names to query:", classNames); // 🔍 NEW LOG
-
     const placeholders = classNames.map(() => '?').join(', ');
-    const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
+    const sql = `
+      SELECT * FROM homeworks
+      WHERE class_name IN (${placeholders})
+      ORDER BY due_date DESC
+    `;
 
     const [homeworks] = await query(sql, classNames, 'skydek_DB');
-    console.log("📘 Fetched homeworks:", homeworks); // 🔍 NEW LOG
+    return res.status(200).json({ homeworks });
 
-    res.json({ homeworks });
-  } catch (err) {
-    console.error('🔥 Error fetching homework:', err);
-    res.status(500).json({ error: 'Server error' });
+  } catch (error) {
+    console.error('Error fetching homeworks for parent:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+
 
 
 export const submitHomework = (req, res) => {
