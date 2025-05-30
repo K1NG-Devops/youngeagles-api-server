@@ -47,7 +47,7 @@ router.get('/for-parent/:parent_id', authMiddleware, async (req, res) => {
     // Step 1: Get class names of all children for this parent (with aliasing)
     const [children] = await query(
       'SELECT className FROM children WHERE parent_id = ?',
-      [parent_id], 'skydek_DB'
+      [parseInt(parent_id)], 'skydek_DB'
     );
     console.log('Fetched Children', children);
 
