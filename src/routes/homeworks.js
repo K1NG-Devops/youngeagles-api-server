@@ -72,19 +72,21 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
 });
 
 router.get('/list', authMiddleware, async (req, res) => {
-  const { className, grade } = req.query;
+  const { className } = req.query;
 
-  if (!className || !grade) {
-    return res.status(400).json({ error: "className and grade are required query parameters." });
+  // Only allow "Panda" and "Curious Cubs" classes
+  const allowedClasses = ['Panda', 'Curious Cubs'];
+  if (!className || !allowedClasses.includes(className)) {
+    return res.status(400).json({ error: "className must be either 'Panda' or 'Curious Cubs'." });
   }
 
   try {
     const sql = `
       SELECT * FROM homeworks
-      WHERE class_name = ? AND grade = ?
+      WHERE class_name = ?
       ORDER BY due_date DESC
     `;
-    const [homeworks] = await query(sql, [className, grade]);
+    const [homeworks] = await query(sql, [className]);
 
     res.json({ homeworks });
   } catch (err) {
@@ -92,4 +94,5 @@ router.get('/list', authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
