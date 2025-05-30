@@ -37,13 +37,18 @@ export const getHomeworkForParent = async (req, res) => {
     console.log('🎯 Fetched Children:', children);
 
     if (!children.length) {
+      console.log('⚠️ No children found for this parent_id.');
       return res.json({ homeworks: [] });
     }
 
     const classNames = children.map(c => c.className);
+    console.log("👀 Class Names to query:", classNames); // 🔍 NEW LOG
+
     const placeholders = classNames.map(() => '?').join(', ');
     const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
+
     const [homeworks] = await query(sql, classNames, 'skydek_DB');
+    console.log("📘 Fetched homeworks:", homeworks); // 🔍 NEW LOG
 
     res.json({ homeworks });
   } catch (err) {
@@ -51,6 +56,7 @@ export const getHomeworkForParent = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
+
 
 export const submitHomework = (req, res) => {
   const { homeworkId, childName } = req.body;
