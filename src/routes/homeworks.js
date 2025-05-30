@@ -49,6 +49,7 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
       'SELECT className AS class_name FROM skydek_DB.children WHERE parent_id = ?',
       [parentId]
     );
+    console.log('Fetched Children', children);
 
     if (!children.length) {
       return res.status(404).json({ message: "No children linked to this parent." });
