@@ -55,7 +55,7 @@ router.get('/for-parent/:parentId', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "No children linked to this parent." });
     }
 
-    const classNames = children.map(child => child.class_name);
+    const classNames = children.map(child => child.className);
 
     // Step 2: Prepare dynamic placeholders for the IN clause
     const placeholders = classNames.map(() => '?').join(', ');
