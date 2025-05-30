@@ -24,8 +24,6 @@ export const assignHomework = (req, res) => {
   res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
 };
 
-import { query } from '../db/index.js'; // make sure to include .js in ESM
-
 export const getHomeworkForParent = async (req, res) => {
   const { parentId } = req.params;
 
