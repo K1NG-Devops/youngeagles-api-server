@@ -42,34 +42,38 @@ export default router;
 
 router.get('/for-parent/:parent_id', authMiddleware, async (req, res) => {
   const { parent_id } = req.params;
+  console.log('✅ Hitting /for-parent with ID:', parent_id);
 
   try {
-    // Step 1: Get class names of all children for this parent (with aliasing)
     const [children] = await query(
       'SELECT className FROM children WHERE parent_id = ?',
-      [parseInt(parent_id)], 'skydek_DB'
+      [parent_id],
+      'skydek_DB'
     );
-    console.log('Fetched Children', children);
+    console.log('Parent ID param:', parent_id, typeof parent_id);
+    console.log('🎯 Fetched Children:', children);
 
     if (!children.length) {
-      return res.status(404).json({ message: "No children linked to this parent." });
+      console.warn('❌ No children found for parent');
+      return res.json({ homeworks: [] }); // TEMP: prevent 404 to test frontend
     }
 
-    const classNames = children.map(child => child.className);
+    const classNames = children.map(c => c.className);
+    console.log('🔍 Class Names:', classNames);
 
-    // Step 2: Prepare dynamic placeholders for the IN clause
     const placeholders = classNames.map(() => '?').join(', ');
     const sql = `SELECT * FROM homeworks WHERE class_name IN (${placeholders}) ORDER BY due_date DESC`;
 
-    // Step 3: Get homeworks
     const [homeworks] = await query(sql, classNames, 'railway');
-    
+
+    console.log('📚 Homeworks:', homeworks);
     res.json({ homeworks });
   } catch (err) {
-    console.error("Fetch homework error:", err);
-    res.status(500).json({ error: "Failed to fetch homework." });
+    console.error('🔥 Error fetching homework:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 router.get('/list', authMiddleware, async (req, res) => {
   const { className } = req.query;
