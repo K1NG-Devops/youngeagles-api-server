@@ -26,7 +26,7 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     `;
     const params = [title, dueDate, fileUrl, uploadedBy, className, grade];
 
-    const result = await execute(sql, params, 'railway');
+    const result = await execute(sql, params, 'skydek_DB');
     res.status(201).json({
       message: "Homework uploaded successfully",
       insertedId: result.insertId,
