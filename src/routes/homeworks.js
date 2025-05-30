@@ -59,7 +59,7 @@ router.get('/list', authMiddleware, async (req, res) => {
       WHERE class_name = ?
       ORDER BY due_date DESC
     `;
-    const [homeworks] = await query(sql, [className], 'railway');
+    const [homeworks] = await query(sql, [className], 'skydek_DB');
 
     res.json({ homeworks });
   } catch (err) {
