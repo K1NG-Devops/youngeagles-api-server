@@ -32,7 +32,7 @@ export const getHomeworkForParent = async (req, res) => {
     const [children] = await query(
       'SELECT className FROM children WHERE parent_id = ?',
       [parent_id],
-      'railway'
+      'skydek_DB'
     );
     console.log('🎯 Fetched Children:', children);
 
