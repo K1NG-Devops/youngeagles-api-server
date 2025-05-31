@@ -85,6 +85,8 @@ app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) 
         email: teacher.email,
         phone: teacher.phone,
         className: teacher.className,
+        grade: teacher.grade,
+        profilePicture: teacher.profilePicture ? `/uploads/profile/${teacher.profilePicture}` : null,
         createdAt: teacher.createdAt,
       },
       timestamp: new Date().toISOString(),
