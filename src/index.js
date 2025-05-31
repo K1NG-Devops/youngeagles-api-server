@@ -67,6 +67,34 @@ app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/homeworks', homeworks);
 
+// Get teacher's class information
+app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) => {
+  const { teacherId } = req.params;
+
+  try {
+    const rows = await query('SELECT * FROM user WHERE id = ?', [teacherId], 'railway_DB');
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+    const teacher = rows[0];
+    res.json({
+      message: 'Teacher information retrieved successfully',
+      teacher: {
+        id: teacher.id,
+        fullname: teacher.fullname,
+        email: teacher.email,
+        phone: teacher.phone,
+        className: teacher.className,
+        createdAt: teacher.createdAt,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error retrieving teacher information', error: error.message });
+  }
+  });
+
 // Test route
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running' });
