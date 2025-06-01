@@ -66,7 +66,6 @@ export const getHomeworkForParent = async (req, res) => {
 
 
 
-
 export const submitHomework = (req, res) => {
   const { homeworkId, childName } = req.body;
   const filePath = req.file ? `/uploads/submissions/${req.file.filename}` : null;
@@ -85,4 +84,23 @@ export const submitHomework = (req, res) => {
       submittedAt: new Date()
     }
   });
+};
+
+// Delete homework submissions
+export const deleteSubmissions = async (req, res) => {
+  const { submissionId } = req.params;
+
+  try {
+    const sql = 'DELETE FROM submissions WHERE id = ?';
+    const result = await execute(sql, [submissionId], 'skydek_DB');
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    res.status(200).json({ message: 'Submission deleted successfully' });
+  } catch (error) {
+    console.error('🔥 Error deleting submission:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
