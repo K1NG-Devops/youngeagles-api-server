@@ -14,11 +14,13 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     grade,
     uploadedBy,
   } = req.body;
-  
-  if (!title || !formattedDueDate || !fileUrl || !className || !grade || !uploadedBy) {
+
+  // ✅ First check if `dueDate` exists to safely format it
+  if (!title || !dueDate || !fileUrl || !className || !grade || !uploadedBy) {
     return res.status(400).json({ error: "All required fields must be provided." });
   }
-  
+
+  // ✅ Now that dueDate is confirmed to exist, format it
   const formattedDueDate = new Date(dueDate).toISOString().split('T')[0];
 
   try {
@@ -38,6 +40,7 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 export default router;
 
