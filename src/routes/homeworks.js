@@ -4,6 +4,7 @@ import { getHomeworkForParent } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+const due_date = new Date().toDateString().split('T')[0]; // Get today's date in YYYY-MM-DD format
 
 router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   const {
