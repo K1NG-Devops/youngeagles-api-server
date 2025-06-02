@@ -4,7 +4,6 @@ import { getHomeworkForParent } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
-const due_date = new Date().toDateString().split('T')[0]; // Get today's date in YYYY-MM-DD format
 
 router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   const {
@@ -15,17 +14,19 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     grade,
     uploadedBy,
   } = req.body;
-
-  if (!title || !dueDate || !fileUrl || !className || !grade || !uploadedBy) {
+  
+  if (!title || !formattedDueDate || !fileUrl || !className || !grade || !uploadedBy) {
     return res.status(400).json({ error: "All required fields must be provided." });
   }
+  
+  const formattedDueDate = new Date(dueDate).toISOString().split('T')[0];
 
   try {
     const sql = `
       INSERT INTO homeworks (title, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
       VALUES (?, ?, ?, 'Pending', ?, ?, ?, NOW())
     `;
-    const params = [title, dueDate, fileUrl, uploadedBy, className, grade];
+    const params = [title, formattedDueDate, fileUrl, uploadedBy, className, grade];
 
     const result = await execute(sql, params, 'skydek_DB');
     res.status(201).json({
