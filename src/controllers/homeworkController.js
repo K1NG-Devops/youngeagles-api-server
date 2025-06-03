@@ -64,26 +64,19 @@ export const getHomeworkForParent = async (req, res) => {
   }
 };
 
-
-
-export const submitHomework = (req, res) => {
-  const { homeworkId, childName } = req.body;
-  const filePath = req.file ? `/uploads/submissions/${req.file.filename}` : null;
-
-  if (!filePath) {
-    return res.status(400).json({ message: "Submission file is required" });
+export const submitHomework = async (req, res) => {
+  const { homeworkId, parentId, fileUrl, comment } = req.body;
+  if (!fileUrl) {
+    return res.status(400).json({ message: "File URL is required" });
   }
-
-  res.status(201).json({
-    message: "Homework submitted successfully",
-    submission: {
-      homeworkId,
-      parent: req.user.id,
-      childName,
-      fileUrl: filePath,
-      submittedAt: new Date()
-    }
-  });
+  try {
+    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment) VALUES (?, ?, ?, ?)`;
+    await execute(sql, [homeworkId, parentId, fileUrl, comment], 'skydek_DB');
+    res.status(201).json({ message: "Homework submitted successfully" });
+  } catch (error) {
+    console.error('🔥 Error submitting homework:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 // Delete homework submissions
@@ -101,6 +94,21 @@ export const deleteSubmissions = async (req, res) => {
     res.status(200).json({ message: 'Submission deleted successfully' });
   } catch (error) {
     console.error('🔥 Error deleting submission:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getSubmission = async (req, res) => {
+  const { homeworkId, parentId } = req.params;
+  try {
+    const sql = `SELECT * FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1`;
+    const [submission] = await query(sql, [homeworkId, parentId], 'skydek_DB');
+    if (!submission) {
+      return res.status(404).json({ message: "No submission found" });
+    }
+    res.status(200).json({ submission });
+  } catch (error) {
+    console.error('🔥 Error fetching submission:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
