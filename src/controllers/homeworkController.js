@@ -141,3 +141,33 @@ export const getHomeworksForTeacher = async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 };
+
+export const deleteHomework = async (req, res) => {
+  const { homeworkId } = req.params;
+  try {
+    const result = await execute('DELETE FROM homeworks WHERE id = ?', [homeworkId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Homework not found' });
+    }
+    res.json({ message: 'Homework deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+export const updateHomework = async (req, res) => {
+  const { homeworkId } = req.params;
+  const { title, instructions, due_date } = req.body;
+  try {
+    const result = await execute(
+      'UPDATE homeworks SET title = ?, instructions = ?, due_date = ? WHERE id = ?',
+      [title, instructions, due_date, homeworkId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Homework not found' });
+    }
+    res.json({ message: 'Homework updated successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
