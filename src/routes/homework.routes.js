@@ -6,6 +6,7 @@ import {
   submitHomework,
   deleteSubmissions,  
   getSubmission,
+  getHomeworksForTeacher,
 } from '../controllers/homeworkController.js';
 
 import {authMiddleware} from '../middleware/authMiddleware.js';
@@ -18,5 +19,6 @@ router.post('/submit', submitHomework);
 router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);  
 router.delete('/submissions/:submissionId', authMiddleware, deleteSubmissions);
 router.get('/submissions/:homeworkId/:parentId', getSubmission);
+router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
 
 export default router;
