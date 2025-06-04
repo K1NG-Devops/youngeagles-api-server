@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
+  'http://localhost:5173',
 ];
 
 // Always allow localhost:5173 in development for React dev server
