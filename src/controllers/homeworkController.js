@@ -132,7 +132,7 @@ export const getHomeworksForTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
     const homeworks = await query(
-      'SELECT * FROM homeworks WHERE uploadedBy = ?',
+      'SELECT * FROM homeworks WHERE teacher_id = ?',
       [teacherId]
     );
     res.json({ homeworks });
