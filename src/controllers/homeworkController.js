@@ -55,6 +55,17 @@ export const getHomeworkForParent = async (req, res) => {
     console.log('Executing homework query with SQL:', sql);
     const homeworks = await query(sql, classNames, 'skydek_DB');
 
+    // For each homework, check if this parent has submitted
+    for (let hw of homeworks) {
+      const [submission] = await query(
+        'SELECT file_url FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
+        [hw.id, parent_id],
+        'skydek_DB'
+      );
+      hw.submitted = !!submission;
+      hw.file_url = submission ? submission.file_url : null;
+    }
+
     console.log('Homeworks fetched:', homeworks);
     return res.status(200).json({ homeworks });
 
