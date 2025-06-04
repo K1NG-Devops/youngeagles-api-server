@@ -128,7 +128,7 @@ export const getSubmission = async (req, res) => {
   }
 };
 
-const getHomeworksForTeacher = async (req, res) => {
+export const getHomeworksForTeacher = async (req, res) => {
   const { teacherId } = req.params;
   try {
     const sql = `SELECT * FROM homeworks WHERE teacher_id = ?`;
