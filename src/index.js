@@ -72,6 +72,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/homeworks', homeworks);
+app.use('/api/homeworks', homeworkRoutes);
 
 // Get teacher's class information
 app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) => {
