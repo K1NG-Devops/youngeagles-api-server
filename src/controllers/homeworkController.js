@@ -57,13 +57,17 @@ export const getHomeworkForParent = async (req, res) => {
 
     // For each homework, check if this parent has submitted
     for (let hw of homeworks) {
+      // Save the teacher's file URL separately (handle both file_url and fileUrl)
+      hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
+      // Now check for parent's submission
       const [submission] = await query(
-        'SELECT file_url FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
+        'SELECT id, file_url FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
         [hw.id, parent_id],
         'skydek_DB'
       );
       hw.submitted = !!submission;
       hw.file_url = submission ? submission.file_url : null;
+      hw.submission_id = submission ? submission.id : null;
     }
 
     console.log('Homeworks fetched:', homeworks);
