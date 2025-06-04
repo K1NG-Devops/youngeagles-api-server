@@ -4,7 +4,7 @@ import {
   assignHomework,
   getHomeworkForParent,
   submitHomework,
-  deleteSubmissions,
+  deleteSubmissions,  
   getSubmission,
 } from '../controllers/homeworkController.js';
 

@@ -23,6 +23,11 @@ const allowedOrigins = [
   'https://www.youngeagles.org.za',
 ];
 
+// Always allow localhost:5173 in development for React dev server
+if (process.env.NODE_ENV === 'development') {
+  allowedOrigins.push('http://localhost:5173');
+}
+
 if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
   allowedOrigins.push(process.env.CORS_ORIGIN);
 }
