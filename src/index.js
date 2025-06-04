@@ -13,6 +13,9 @@ import { fileURLToPath } from 'url';
 import homeworkRoutes from './routes/homework.routes.js';
 import homeworks from './routes/homeworks.js';
 import fs from 'fs';
+import Event from './models/events.js';
+import sequelize from './db.js';
+import eventRoutes from './routes/event.routes.js';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -73,6 +76,7 @@ app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/homeworks', homeworks);
 app.use('/api/homeworks', homeworkRoutes);
+app.use('/api/events', eventRoutes);
 
 // Get teacher's class information
 app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) => {
@@ -192,6 +196,16 @@ app.post('/api/public/pop-submission', upload.single('popFile'), async (req, res
     res.status(500).json({ message: 'Error submitting POP', error: error.message });
   }
 });
+
+// Sync Sequelize models with the database
+debugger;
+sequelize.sync({ alter: true })
+  .then(() => {
+    console.log('Database & tables synced!');
+  })
+  .catch((err) => {
+    console.error('Error syncing database:', err);
+  });
 
 // Start server
 const port = process.env.PORT || 3000;
