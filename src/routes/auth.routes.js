@@ -5,6 +5,7 @@ import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
 import { registerChild, registerUser, loginUser, teacherLogin } from '../controllers/authController.js';
 import { getChildrenByTeacher } from '../controllers/teacherController.js';
+import { getChildrenForParent } from '../controllers/parentController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 import multer from 'multer';
 import path from 'path';
@@ -90,6 +91,8 @@ router.post('/teacher-login',
 
 router.get('/children', authMiddleware, isTeacher, getChildrenByTeacher)
 
+// GET /auth/parent/children (for parents to fetch their children)
+router.get('/parent/children', authMiddleware, getChildrenForParent);
 
 // /auth/profile
 router.get('/profile', verifyToken, async (req, res) => {
