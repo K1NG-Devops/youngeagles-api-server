@@ -157,3 +157,51 @@ export const teacherLogin = async (req, res) => {
     res.status(500).json({ message: 'Server error.' });
   }
 };
+
+// Admin Login
+export const adminLogin = async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const rows = await query('SELECT * FROM users WHERE email = ?', [email], 'railway');
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ message: 'Invalid email or password.' });
+    }
+
+    const user = rows[0];
+
+    if (!user.password) {
+      return res.status(400).json({ message: 'Invalid user data: password missing.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid email or password.' });
+    }
+
+    const token = generateToken(
+      {
+        id: user.id,
+        role: 'admin',
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.status(200).json({
+      message: 'Login successful!',
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error('Error during admin login:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+

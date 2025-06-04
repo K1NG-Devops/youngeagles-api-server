@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { registerChild, registerUser, loginUser, teacherLogin } from '../controllers/authController.js';
+import { registerChild, registerUser, loginUser, teacherLogin, adminLogin } from '../controllers/authController.js';
 import { getChildrenByTeacher } from '../controllers/teacherController.js';
 import { getChildrenForParent } from '../controllers/parentController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
@@ -88,6 +88,23 @@ router.post('/teacher-login',
   },
   teacherLogin
 );
+
+// ✅ POST /auth/admin-login
+router.post('/admin-login',
+  [
+    body('email').isEmail().withMessage('Email is required.'),
+    body('password').notEmpty().withMessage('Password is required.'),
+  ],
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  },
+  adminLogin
+);
+
 
 router.get('/children', authMiddleware, isTeacher, getChildrenByTeacher)
 
