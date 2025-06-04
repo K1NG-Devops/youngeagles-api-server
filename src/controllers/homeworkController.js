@@ -129,13 +129,15 @@ export const getSubmission = async (req, res) => {
 };
 
 export const getHomeworksForTeacher = async (req, res) => {
-  const { teacherId } = req.params;
   try {
-    const sql = `SELECT * FROM homeworks WHERE teacher_id = ?`;
-    const homeworks = await query(sql, [teacherId], 'skydek_DB');
-    res.status(200).json({ homeworks });
-  } catch (error) {
-    console.error('🔥 Error fetching homeworks:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const { teacherId } = req.params;
+    const homeworks = await query(
+      'SELECT * FROM homeworks WHERE uploadedBy = ?',
+      [teacherId]
+    );
+    res.json({ homeworks });
+  } catch (err) {
+    console.error('Error fetching homeworks for teacher:', err);
+    res.status(500).json({ message: 'Server error.' });
   }
 };
