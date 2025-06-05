@@ -97,4 +97,18 @@ export const deleteEvent = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Error deleting event', error: error.message });
   }
+};
+
+export const updateEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const event = await Event.findByPk(id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+    await event.update(updates);
+    res.json({ message: 'Event updated', event });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating event', error: error.message });
+  }
 }; 
+
