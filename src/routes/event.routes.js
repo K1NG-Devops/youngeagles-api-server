@@ -8,6 +8,7 @@ import {
   deleteEvent
 } from '../controllers/eventController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { isAdmin } from '../middleware/authMiddleware.js';
 
 // Admin middleware
 const isAdmin = (req, res, next) => {
@@ -20,21 +21,21 @@ const isAdmin = (req, res, next) => {
 const router = express.Router();
 
 // Teacher: Submit event
-router.post('/events', authMiddleware, createEvent);
+router.post('/', authMiddleware, createEvent);
 
 // Get all events (optionally filtered)
-router.get('/events', getEvents);
+router.get('/', getEvents);
 
 // Get single event
-router.get('/events/:id', getEventById);
+router.get('/:id', getEventById);
 
 // Admin: Approve event
-router.put('/events/:id/approve', authMiddleware, isAdmin, approveEvent);
+router.put('/:id/approve', authMiddleware, isAdmin, approveEvent);
 
 // Admin: Reject event
-router.put('/events/:id/reject', authMiddleware, isAdmin, rejectEvent);
+router.put('/:id/reject', authMiddleware, isAdmin, rejectEvent);
 
 // Admin: Delete event
-router.delete('/events/:id', authMiddleware, isAdmin, deleteEvent);
+router.delete('/:id', authMiddleware, isAdmin, deleteEvent);
 
 export default router; 
