@@ -4,6 +4,7 @@ import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 import winston from 'winston';
+import { Event } from '../models/event.js';
 
 dotenv.config();
 
@@ -202,6 +203,20 @@ export const adminLogin = async (req, res) => {
   } catch (error) {
     console.error('Error during admin login:', error);
     res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// Add this function
+export const updateEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const event = await Event.findByPk(id);
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+    await event.update(updates);
+    res.json({ message: 'Event updated', event });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating event', error: error.message });
   }
 };
 

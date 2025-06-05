@@ -5,7 +5,8 @@ import {
   rejectEvent,
   getEvents,
   getEventById,
-  deleteEvent
+  deleteEvent,
+  updateEvent
 } from '../controllers/eventController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
@@ -36,5 +37,8 @@ router.put('/:id/reject', authMiddleware, isAdmin, rejectEvent);
 
 // Admin: Delete event
 router.delete('/:id', authMiddleware, isAdmin, deleteEvent);
+
+// Admin: Update event
+router.put('/:id', authMiddleware, isAdmin, updateEvent);
 
 export default router; 
