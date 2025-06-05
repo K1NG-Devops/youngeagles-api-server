@@ -8,7 +8,6 @@ import {
   deleteEvent
 } from '../controllers/eventController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
-import { isAdmin } from '../middleware/authMiddleware.js';
 
 // Admin middleware
 const isAdmin = (req, res, next) => {
