@@ -4,7 +4,7 @@ import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 import winston from 'winston';
-import { Event } from '../models/event.js';
+import Event from '../models/events.js';
 
 dotenv.config();
 
