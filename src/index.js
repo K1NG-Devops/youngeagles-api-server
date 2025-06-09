@@ -16,6 +16,7 @@ import fs from 'fs';
 import Event from './models/events.js';
 import sequelize from './db.js';
 import eventRoutes from './routes/event.routes.js';
+import { getTeacherByClass } from './controllers/teacherByClassController.js';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +78,7 @@ app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTe
 app.use('/api/homeworks', homeworks);
 app.use('/api/homeworks', homeworkRoutes);
 app.use('/api/events', eventRoutes);
+app.get('/api/teachers/by-class', authMiddleware, isTeacher, getTeacherByClass);
 
 // Get teacher's class information
 app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) => {
