@@ -6,7 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import rateLimit from 'express-rate-limit';
 import attendanceRoutes from './routes/attendance.routes.js';
-import { authMiddleware, isTeacher } from './middleware/authMiddleware.js';
+import { authMiddleware, isTeacher, isTeacherOrAdmin } from './middleware/authMiddleware.js';
 import { getChildrenByTeacher } from './controllers/teacherController.js';
 import morgan from 'morgan';
 import { fileURLToPath } from 'url';
@@ -78,7 +78,7 @@ app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTe
 app.use('/api/homeworks', homeworks);
 app.use('/api/homeworks', homeworkRoutes);
 app.use('/api/events', eventRoutes);
-app.get('/api/teachers/by-class', authMiddleware, isTeacher, getTeacherByClass);
+app.get('/api/teachers/by-class', authMiddleware, isTeacherOrAdmin, getTeacherByClass);
 
 // Get teacher's class information
 app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) => {
@@ -213,4 +213,12 @@ sequelize.sync({ alter: true })
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
+});
+
+app.post('/api/fcm/token', authMiddleware, (req, res) => {
+  const { token } = req.body;
+  const userId = req.user.id;
+  // TODO: Save the token in the database associated with userId
+  console.log(`Received FCM token for user ${userId}:`, token);
+  res.status(200).json({ message: 'Token received' });
 });
