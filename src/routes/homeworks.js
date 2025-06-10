@@ -73,13 +73,38 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   }
 });
 
+// FCM token registration endpoint
+router.post('/fcm/token', authMiddleware, async (req, res) => {
+  const { token } = req.body;
+  const userId = req.user.id; // Assumes authMiddleware sets req.user
+
+  if (!token) {
+    return res.status(400).json({ error: 'FCM token is required' });
+  }
+
+  try {
+    // Create table if not exists (for first-time setup)
+    await execute(`CREATE TABLE IF NOT EXISTS fcm_tokens (
+      user_id INT PRIMARY KEY,
+      token VARCHAR(255) NOT NULL
+    )`, [], 'skydek_DB');
+
+    // Insert or update the token for the user
+    await execute(
+      'INSERT INTO fcm_tokens (user_id, token) VALUES (?, ?) ON DUPLICATE KEY UPDATE token = ?',
+      [userId, token, token],
+      'skydek_DB'
+    );
+    res.status(200).json({ message: 'Token saved' });
+  } catch (err) {
+    console.error('Error saving FCM token:', err);
+    res.status(500).json({ error: 'Failed to save FCM token' });
+  }
+});
 
 export default router;
 
-
-
 router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);
-
 
 router.get('/list', authMiddleware, async (req, res) => {
   const { className } = req.query;

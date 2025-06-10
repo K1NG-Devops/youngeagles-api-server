@@ -18,6 +18,7 @@ import Event from './models/events.js';
 import sequelize from './db.js';
 import eventRoutes from './routes/event.routes.js';
 import { getTeacherByClass } from './controllers/teacherByClassController.js';
+import { Sequelize, DataTypes } from 'sequelize';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -304,6 +305,48 @@ app.post('/api/public/pop-submission', upload.single('popFile'), async (req, res
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error submitting POP', error: error.message });
+  }
+});
+
+// Define the homework_submissions model if not already defined
+const HomeworkSubmission = sequelize.define('homework_submissions', {
+  studentId: { type: DataTypes.INTEGER, allowNull: false },
+  studentName: { type: DataTypes.STRING, allowNull: false },
+  className: { type: DataTypes.STRING, allowNull: false },
+  grade: { type: DataTypes.STRING, allowNull: false },
+  teacherId: { type: DataTypes.INTEGER, allowNull: false },
+  date: { type: DataTypes.DATE, allowNull: false },
+  day: { type: DataTypes.STRING, allowNull: false },
+  results: { type: DataTypes.JSON, allowNull: false },
+  type: { type: DataTypes.STRING, allowNull: false },
+  createdAt: { type: DataTypes.DATE, defaultValue: Sequelize.NOW },
+  updatedAt: { type: DataTypes.DATE, defaultValue: Sequelize.NOW },
+}, {
+  tableName: 'homework_submissions',
+  timestamps: true,
+});
+
+app.post('/api/homework-submissions', authMiddleware, async (req, res) => {
+  const { studentId, studentName, className, grade, teacherId, date, day, results, type } = req.body;
+  if (!studentId || !studentName || !className || !grade || !teacherId || !date || !day || !results || !type) {
+    return res.status(400).json({ message: 'Missing required fields.' });
+  }
+  try {
+    const submission = await HomeworkSubmission.create({
+      studentId,
+      studentName,
+      className,
+      grade,
+      teacherId,
+      date,
+      day,
+      results,
+      type,
+    });
+    res.status(201).json({ message: 'Homework submission saved!', submission });
+  } catch (error) {
+    console.error('Error saving homework submission:', error);
+    res.status(500).json({ message: 'Error saving homework submission', error: error.message });
   }
 });
 
