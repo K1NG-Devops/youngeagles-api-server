@@ -6,22 +6,44 @@ import { query, execute } from '../db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const assignHomework = (req, res) => {
-  const { title, instructions, ageGroup, dueDate } = req.body;
+export const assignHomework = async (req, res) => {
+  const { title, instructions, ageGroup, dueDate, className, grade } = req.body;
   const filePath = req.file ? `/uploads/homework/${req.file.filename}` : null;
 
-  const newHomework = {
-    id: homeworkList.length + 1,
-    title,
-    instructions,
-    fileUrl: filePath,
-    ageGroup,
-    dueDate,
-    teacher: req.user.id
-  };
+  // Validate required fields
+  if (!title || !dueDate || !filePath || !className || !grade) {
+    return res.status(400).json({ error: "All required fields must be provided (title, dueDate, file, className, grade)." });
+  }
 
-  homeworkList.push(newHomework);
-  res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
+  // Format due date
+  const formattedDueDate = new Date(dueDate).toISOString().split('T')[0];
+
+  try {
+    const sql = `
+      INSERT INTO homeworks (title, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
+      VALUES (?, ?, ?, 'Pending', ?, ?, ?, NOW())
+    `;
+    const params = [title, formattedDueDate, filePath, req.user.id, className, grade];
+
+    const result = await execute(sql, params, 'skydek_DB');
+    
+    const newHomework = {
+      id: result.insertId,
+      title,
+      instructions,
+      fileUrl: filePath,
+      ageGroup,
+      dueDate: formattedDueDate,
+      teacher: req.user.id,
+      className,
+      grade
+    };
+
+    res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
+  } catch (error) {
+    console.error('Error assigning homework:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 export const getHomeworkForParent = async (req, res) => {
