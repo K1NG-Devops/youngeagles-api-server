@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const assignHomework = async (req, res) => {
-  const { title, instructions, ageGroup, dueDate, className, grade } = req.body;
+  const { title, instructions, ageGroup, dueDate, className, grade, type } = req.body;
   const filePath = req.file ? `/uploads/homework/${req.file.filename}` : null;
 
   // Validate required fields
@@ -20,10 +20,10 @@ export const assignHomework = async (req, res) => {
 
   try {
     const sql = `
-      INSERT INTO homeworks (title, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
-      VALUES (?, ?, ?, 'Pending', ?, ?, ?, NOW())
+      INSERT INTO homeworks (title, due_date, file_url, instructions, status, uploaded_by_teacher_id, class_name, grade, type, created_at)
+      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, ?, NOW())
     `;
-    const params = [title, formattedDueDate, filePath, req.user.id, className, grade];
+    const params = [title, formattedDueDate, filePath, instructions || null, req.user.id, className, grade, type || null];
 
     const result = await execute(sql, params, 'skydek_DB');
     
@@ -36,7 +36,8 @@ export const assignHomework = async (req, res) => {
       dueDate: formattedDueDate,
       teacher: req.user.id,
       className,
-      grade
+      grade,
+      type
     };
 
     res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
@@ -77,11 +78,12 @@ export const getHomeworkForParent = async (req, res) => {
     console.log('Executing homework query with SQL:', sql);
     const homeworks = await query(sql, classNames, 'skydek_DB');
 
-    // For each homework, check if this parent has submitted
+    // For each homework, check if this parent has submitted and get completion answers
     for (let hw of homeworks) {
       // Save the teacher's file URL separately (handle both file_url and fileUrl)
       hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
-      // Now check for parent's submission
+      
+      // Check for parent's submission
       const [submission] = await query(
         'SELECT id, file_url FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
         [hw.id, parent_id],
@@ -90,6 +92,14 @@ export const getHomeworkForParent = async (req, res) => {
       hw.submitted = !!submission;
       hw.file_url = submission ? submission.file_url : null;
       hw.submission_id = submission ? submission.id : null;
+      
+      // Get completion answer if available
+      const [completion] = await query(
+        'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
+        [hw.id, parent_id],
+        'skydek_DB'
+      );
+      hw.completion_answer = completion ? completion.completion_answer : '';
     }
 
     console.log('Homeworks fetched:', homeworks);

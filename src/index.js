@@ -79,22 +79,110 @@ app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTe
 app.use('/api/homeworks', homeworks);
 app.use('/api/homeworks', homeworkRoutes);
 
-// Add submissions route
-app.post('/api/submissions', authMiddleware, async (req, res) => {
-  const { homeworkId, fileURL, comment } = req.body;
-  const parent_id = req.user.id; // Get parent ID from auth middleware
+// Homework completion endpoint
+app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res) => {
+  const { homeworkId } = req.params;
+  const { completion_answer } = req.body;
+  const parent_id = req.user.id;
 
-  if (!homeworkId || !fileURL) {
-    return res.status(400).json({ message: 'Homework ID and file URL are required' });
+  if (!completion_answer?.trim()) {
+    return res.status(400).json({ message: 'Completion answer is required' });
   }
 
   try {
+    // Check if a completion record already exists
+    const existingSql = 'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?';
+    const [existing] = await query(existingSql, [homeworkId, parent_id], 'skydek_DB');
+
+    if (existing) {
+      // Update existing completion
+      const updateSql = 'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?';
+      await execute(updateSql, [completion_answer, homeworkId, parent_id], 'skydek_DB');
+    } else {
+      // Create new completion record
+      const insertSql = 'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())';
+      await execute(insertSql, [homeworkId, parent_id, completion_answer], 'skydek_DB');
+    }
+
+    res.status(200).json({ message: 'Homework completion saved successfully' });
+  } catch (error) {
+    console.error('Error saving homework completion:', error);
+    res.status(500).json({ message: 'Error saving homework completion', error: error.message });
+  }
+});
+
+// Add submissions routes
+app.post('/api/submissions', authMiddleware, async (req, res) => {
+  const { homeworkId, fileURL, comment, completion_answer } = req.body;
+  const parent_id = req.user.id; // Get parent ID from auth middleware
+
+  if (!homeworkId) {
+    return res.status(400).json({ message: 'Homework ID is required' });
+  }
+
+  // At least one of fileURL or completion_answer must be provided
+  if (!fileURL && !completion_answer?.trim()) {
+    return res.status(400).json({ message: 'Either file upload or completion answer is required' });
+  }
+
+  try {
+    // Insert submission
     const sql = 'INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())';
-    const result = await execute(sql, [homeworkId, parent_id, fileURL, comment || null], 'skydek_DB');
+    const result = await execute(sql, [homeworkId, parent_id, fileURL || null, comment || null], 'skydek_DB');
+    
+    // If completion answer is provided, save/update it
+    if (completion_answer?.trim()) {
+      const existingSql = 'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?';
+      const [existing] = await query(existingSql, [homeworkId, parent_id], 'skydek_DB');
+      
+      if (existing) {
+        await execute(
+          'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
+          [completion_answer, homeworkId, parent_id],
+          'skydek_DB'
+        );
+      } else {
+        await execute(
+          'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+          [homeworkId, parent_id, completion_answer],
+          'skydek_DB'
+        );
+      }
+    }
+    
     res.status(201).json({ message: 'Homework submitted successfully', submissionId: result.insertId });
   } catch (error) {
     console.error('Error submitting homework:', error);
     res.status(500).json({ message: 'Error submitting homework', error: error.message });
+  }
+});
+
+// Delete submission route
+app.delete('/api/submissions/:submissionId', authMiddleware, async (req, res) => {
+  const { submissionId } = req.params;
+  const parent_id = req.user.id;
+
+  try {
+    // First verify the submission belongs to this parent
+    const checkSql = 'SELECT * FROM submissions WHERE id = ? AND parent_id = ?';
+    const [submission] = await query(checkSql, [submissionId, parent_id], 'skydek_DB');
+    
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found or you do not have permission to delete it' });
+    }
+
+    // Delete the submission
+    const deleteSql = 'DELETE FROM submissions WHERE id = ? AND parent_id = ?';
+    const result = await execute(deleteSql, [submissionId, parent_id], 'skydek_DB');
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    res.status(200).json({ message: 'Submission deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting submission:', error);
+    res.status(500).json({ message: 'Error deleting submission', error: error.message });
   }
 });
 app.use('/api/events', eventRoutes);
