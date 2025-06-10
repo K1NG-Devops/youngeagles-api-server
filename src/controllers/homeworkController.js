@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const assignHomework = async (req, res) => {
-  const { title, instructions, ageGroup, dueDate, className, grade, type } = req.body;
+  const { title, instructions, ageGroup, dueDate, className, grade, type, items } = req.body;
   const filePath = req.file ? `/uploads/homework/${req.file.filename}` : null;
 
   // Validate required fields
@@ -20,10 +20,10 @@ export const assignHomework = async (req, res) => {
 
   try {
     const sql = `
-      INSERT INTO homeworks (title, due_date, file_url, instructions, status, uploaded_by_teacher_id, class_name, grade, type, created_at)
-      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, ?, NOW())
+      INSERT INTO homeworks (title, due_date, file_url, instructions, status, uploaded_by_teacher_id, class_name, grade, type, items, created_at)
+      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, NOW())
     `;
-    const params = [title, formattedDueDate, filePath, instructions || null, req.user.id, className, grade, type || null];
+    const params = [title, formattedDueDate, filePath, instructions || null, req.user.id, className, grade, type || null, items ? JSON.stringify(items) : null];
 
     const result = await execute(sql, params, 'skydek_DB');
     
@@ -37,7 +37,8 @@ export const assignHomework = async (req, res) => {
       teacher: req.user.id,
       className,
       grade,
-      type
+      type,
+      items
     };
 
     res.status(201).json({ message: 'Homework assigned successfully.', data: newHomework });
@@ -78,8 +79,11 @@ export const getHomeworkForParent = async (req, res) => {
     console.log('Executing homework query with SQL:', sql);
     const homeworks = await query(sql, classNames, 'skydek_DB');
 
-    // For each homework, check if this parent has submitted and get completion answers
+    // Parse items JSON for each homework
     for (let hw of homeworks) {
+      if (hw.items && typeof hw.items === 'string') {
+        try { hw.items = JSON.parse(hw.items); } catch (e) { hw.items = null; }
+      }
       // Save the teacher's file URL separately (handle both file_url and fileUrl)
       hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
       
@@ -167,6 +171,12 @@ export const getHomeworksForTeacher = async (req, res) => {
       'SELECT * FROM homeworks WHERE uploaded_by_teacher_id = ?',
       [teacherId]
     );
+    // Parse items JSON for each homework
+    for (let hw of homeworks) {
+      if (hw.items && typeof hw.items === 'string') {
+        try { hw.items = JSON.parse(hw.items); } catch (e) { hw.items = null; }
+      }
+    }
     res.json({ homeworks });
   } catch (err) {
     console.error('Error fetching homeworks for teacher:', err);

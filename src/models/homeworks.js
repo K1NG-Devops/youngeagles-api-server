@@ -36,6 +36,10 @@ export default (sequelize, DataTypes) => {
             type: DataTypes.STRING(30),
             allowNull: true, // Interactive type: match, memory, quiz, etc.
         },
+        items: {
+            type: DataTypes.JSON,
+            allowNull: true, // Stores interactive activity content
+        },
         created_at: {
             type: DataTypes.DATE,
             defaultValue: DataTypes.NOW,
