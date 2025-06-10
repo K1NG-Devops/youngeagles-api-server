@@ -14,6 +14,8 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     className,
     grade,
     uploadedBy,
+    type,
+    items
   } = req.body;
 
   // Log the received payload for debugging
@@ -24,6 +26,8 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     className,
     grade,
     uploadedBy,
+    type,
+    items,
     hasTitle: !!title,
     hasDueDate: !!dueDate,
     hasClassName: !!className,
@@ -53,10 +57,10 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
 
   try {
     const sql = `
-      INSERT INTO homeworks (title, instructions, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
-      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, NOW())
+      INSERT INTO homeworks (title, instructions, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, type, items, created_at)
+      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, NOW())
     `;
-    const params = [title, instructions || null, formattedDueDate, fileUrl || null, uploadedBy, className, grade];
+    const params = [title, instructions || null, formattedDueDate, fileUrl || null, uploadedBy, className, grade, type || null, items ? JSON.stringify(items) : null];
 
     const result = await execute(sql, params, 'skydek_DB');
     res.status(201).json({
