@@ -11,6 +11,7 @@ import { getChildrenByTeacher } from './controllers/teacherController.js';
 import morgan from 'morgan';
 import { fileURLToPath } from 'url';
 import homeworkRoutes from './routes/homework.routes.js';
+import { execute } from './db.js';
 import homeworks from './routes/homeworks.js';
 import fs from 'fs';
 import Event from './models/events.js';
@@ -77,6 +78,25 @@ app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/attendance/:teacherId', authMiddleware, isTeacher, getChildrenByTeacher);
 app.use('/api/homeworks', homeworks);
 app.use('/api/homeworks', homeworkRoutes);
+
+// Add submissions route
+app.post('/api/submissions', authMiddleware, async (req, res) => {
+  const { homeworkId, fileURL, comment } = req.body;
+  const parent_id = req.user.id; // Get parent ID from auth middleware
+
+  if (!homeworkId || !fileURL) {
+    return res.status(400).json({ message: 'Homework ID and file URL are required' });
+  }
+
+  try {
+    const sql = 'INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())';
+    const result = await execute(sql, [homeworkId, parent_id, fileURL, comment || null], 'skydek_DB');
+    res.status(201).json({ message: 'Homework submitted successfully', submissionId: result.insertId });
+  } catch (error) {
+    console.error('Error submitting homework:', error);
+    res.status(500).json({ message: 'Error submitting homework', error: error.message });
+  }
+});
 app.use('/api/events', eventRoutes);
 app.get('/api/teachers/by-class', authMiddleware, isTeacherOrAdmin, getTeacherByClass);
 
