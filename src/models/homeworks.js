@@ -10,7 +10,11 @@ export default (sequelize, DataTypes) => {
         },
         file_url: {
             type: DataTypes.TEXT,
-            allowNull: false,
+            allowNull: true, // Allow null for activities without file attachments
+        },
+        instructions: {
+            type: DataTypes.TEXT,
+            allowNull: true, // Activity instructions
         },
         status: {
             type: DataTypes.ENUM("Pending", "Completed"),

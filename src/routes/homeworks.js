@@ -8,6 +8,7 @@ const router = express.Router();
 router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
   const {
     title,
+    instructions,
     dueDate,
     fileUrl,
     className,
@@ -15,9 +16,36 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     uploadedBy,
   } = req.body;
 
-  // ✅ First check if `dueDate` exists to safely format it
-  if (!title || !dueDate || !fileUrl || !className || !grade || !uploadedBy) {
-    return res.status(400).json({ error: "All required fields must be provided." });
+  // Log the received payload for debugging
+  console.log('📝 Homework upload request:', {
+    title,
+    dueDate,
+    fileUrl,
+    className,
+    grade,
+    uploadedBy,
+    hasTitle: !!title,
+    hasDueDate: !!dueDate,
+    hasClassName: !!className,
+    hasGrade: !!grade,
+    hasUploadedBy: !!uploadedBy
+  });
+
+  // ✅ Make fileUrl optional - only require core fields
+  if (!title || !dueDate || !className || !grade || !uploadedBy) {
+    const missingFields = [];
+    if (!title) missingFields.push('title');
+    if (!dueDate) missingFields.push('dueDate');
+    if (!className) missingFields.push('className');
+    if (!grade) missingFields.push('grade');
+    if (!uploadedBy) missingFields.push('uploadedBy');
+    
+    console.error('❌ Missing required fields:', missingFields);
+    return res.status(400).json({ 
+      error: "Missing required fields", 
+      missingFields,
+      received: { title, dueDate, className, grade, uploadedBy }
+    });
   }
 
   // ✅ Now that dueDate is confirmed to exist, format it
@@ -25,10 +53,10 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
 
   try {
     const sql = `
-      INSERT INTO homeworks (title, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
-      VALUES (?, ?, ?, 'Pending', ?, ?, ?, NOW())
+      INSERT INTO homeworks (title, instructions, due_date, file_url, status, uploaded_by_teacher_id, class_name, grade, created_at)
+      VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, NOW())
     `;
-    const params = [title, formattedDueDate, fileUrl, uploadedBy, className, grade];
+    const params = [title, instructions || null, formattedDueDate, fileUrl || null, uploadedBy, className, grade];
 
     const result = await execute(sql, params, 'skydek_DB');
     res.status(201).json({
