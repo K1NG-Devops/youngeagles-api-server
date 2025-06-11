@@ -19,6 +19,7 @@ import sequelize from './db.js';
 import eventRoutes from './routes/event.routes.js';
 import { getTeacherByClass } from './controllers/teacherByClassController.js';
 import { Sequelize, DataTypes } from 'sequelize';
+import { initializeFirebaseAdmin } from './config/firebase-admin.js';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +41,10 @@ if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
 }
 
 testAllConnections();
+
+// Initialize Firebase Admin for push notifications
+console.log('🚀 Initializing Firebase Admin SDK...');
+initializeFirebaseAdmin();
 
 const app = express();
 

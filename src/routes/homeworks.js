@@ -2,14 +2,7 @@ import express from 'express';
 import { query, execute } from '../db.js';
 import { getHomeworkForParent, getHomeworksForTeacher } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
-import admin from 'firebase-admin';
-
-// Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
-  // You'll need to add your Firebase service account key
-  // For now, we'll use a mock function
-  console.log('Firebase Admin not initialized - push notifications disabled');
-}
+import { sendPushNotification } from '../utils/pushNotifications.js';
 
 // Function to send homework notification to parents
 const sendHomeworkNotification = async (className, homeworkTitle, teacherName, homeworkId) => {
@@ -67,39 +60,23 @@ const sendHomeworkNotification = async (className, homeworkTitle, teacherName, h
       }
     };
     
-    // For now, just log the notification since Firebase Admin might not be set up
-    console.log('📱 Would send notification to tokens:', {
-      tokenCount: tokens.length,
-      notification,
-      targetTokens: tokens.map(t => `${t.token.substring(0, 20)}...`)
-    });
-    
-    // TODO: Uncomment when Firebase Admin is properly configured
-    /*
+    // Send push notification using the new system
     const tokenList = tokens.map(t => t.token);
     
-    const message = {
+    const pushResult = await sendPushNotification(
+      tokenList,
       notification,
-      data: notification.data,
-      tokens: tokenList
-    };
+      notification.data
+    );
     
-    const response = await admin.messaging().sendMulticast(message);
-    console.log('Push notification sent:', {
-      successCount: response.successCount,
-      failureCount: response.failureCount
-    });
-    
-    if (response.failureCount > 0) {
-      const failedTokens = [];
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          failedTokens.push(tokenList[idx]);
-        }
-      });
-      console.log('Failed tokens:', failedTokens);
+    if (pushResult.success) {
+      console.log(`✅ Push notification sent to ${pushResult.successCount} devices`);
+      if (pushResult.failureCount > 0) {
+        console.log(`⚠️  ${pushResult.failureCount} notifications failed to send`);
+      }
+    } else {
+      console.log(`📱 Push notification not sent: ${pushResult.reason || pushResult.error}`);
     }
-    */
     
     // Store notification in database for parents to see
     for (const parent of parents) {
@@ -271,6 +248,71 @@ router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);
 
 // Route for fetching homeworks posted by a specific teacher
 router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
+
+// Route for listing homeworks by class
+// Route for completing homework (saving completion answer)
+router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
+  const { homeworkId } = req.params;
+  const { completion_answer, activity_result } = req.body;
+  
+  console.log('📝 Homework completion request:', {
+    homeworkId,
+    hasAnswer: !!completion_answer,
+    hasActivityResult: !!activity_result,
+    userId: req.user.id
+  });
+
+  if (!completion_answer && !activity_result) {
+    return res.status(400).json({ error: 'Either completion_answer or activity_result is required' });
+  }
+
+  try {
+    // Check if completion already exists
+    const [existingCompletion] = await query(
+      'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?',
+      [homeworkId, req.user.id],
+      'skydek_DB'
+    );
+
+    if (existingCompletion) {
+      // Update existing completion
+      await execute(
+        'UPDATE homework_completions SET completion_answer = ?, activity_result = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
+        [completion_answer || '', activity_result ? JSON.stringify(activity_result) : null, homeworkId, req.user.id],
+        'skydek_DB'
+      );
+      console.log('✅ Updated existing homework completion');
+    } else {
+      // Create table if not exists (for first-time setup)
+      await execute(`CREATE TABLE IF NOT EXISTS homework_completions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        homework_id INT NOT NULL,
+        parent_id INT NOT NULL,
+        completion_answer TEXT,
+        activity_result JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_homework_parent (homework_id, parent_id)
+      )`, [], 'skydek_DB');
+
+      // Insert new completion
+      await execute(
+        'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, activity_result, created_at) VALUES (?, ?, ?, ?, NOW())',
+        [homeworkId, req.user.id, completion_answer || '', activity_result ? JSON.stringify(activity_result) : null],
+        'skydek_DB'
+      );
+      console.log('✅ Created new homework completion');
+    }
+
+    res.status(200).json({ message: 'Homework completion saved successfully' });
+  } catch (err) {
+    console.error('🔥 Error saving homework completion:', err);
+    res.status(500).json({ 
+      error: 'Failed to save homework completion',
+      message: err.message
+    });
+  }
+});
 
 // Route for listing homeworks by class
 router.get('/list', authMiddleware, async (req, res) => {
