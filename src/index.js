@@ -114,54 +114,91 @@ app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res)
 
 // Add submissions routes
 app.post('/api/submissions', authMiddleware, async (req, res) => {
+  console.log('📥 Submission request received:', {
+    body: req.body,
+    user: req.user,
+    headers: req.headers.authorization ? 'Bearer token present' : 'No auth header'
+  });
+  
   const { homeworkId, parentId, fileURL, comment, completion_answer, activity_result, isInteractive } = req.body;
   const parent_id = parentId || req.user.id; // Use provided parentId or fall back to auth user
 
+  console.log('📋 Processed submission data:', {
+    homeworkId,
+    parentId,
+    parent_id,
+    hasFileURL: !!fileURL,
+    hasCompletionAnswer: !!completion_answer,
+    hasActivityResult: !!activity_result,
+    isInteractive
+  });
+
   if (!homeworkId) {
+    console.error('❌ Missing homework ID');
     return res.status(400).json({ message: 'Homework ID is required' });
   }
 
-  // For interactive activities, activity_result is required. For others, fileURL or completion_answer
+  // For interactive activities, we need either activity_result or completion_answer
+  // For file-based homework, we need fileURL or completion_answer
   if (isInteractive) {
     if (!activity_result && !completion_answer?.trim()) {
+      console.error('❌ Interactive homework missing required data');
       return res.status(400).json({ message: 'Activity result or completion answer is required for interactive homework' });
     }
   } else {
     if (!fileURL && !completion_answer?.trim()) {
+      console.error('❌ File-based homework missing required data');
       return res.status(400).json({ message: 'Either file upload or completion answer is required' });
     }
   }
 
   try {
+    console.log('💾 Inserting submission into database...');
     // Insert submission
     const sql = 'INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())';
     const result = await execute(sql, [homeworkId, parent_id, fileURL || null, comment || null], 'skydek_DB');
+    console.log('✅ Submission inserted with ID:', result.insertId);
     
     // If completion answer or activity result is provided, save/update it
     const answerToSave = completion_answer?.trim() || (activity_result ? JSON.stringify(activity_result) : null);
     if (answerToSave) {
+      console.log('💾 Saving completion answer/activity result...');
       const existingSql = 'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?';
       const [existing] = await query(existingSql, [homeworkId, parent_id], 'skydek_DB');
       
       if (existing) {
+        console.log('🔄 Updating existing completion record...');
         await execute(
           'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
           [answerToSave, homeworkId, parent_id],
           'skydek_DB'
         );
       } else {
+        console.log('➕ Creating new completion record...');
         await execute(
           'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
           [homeworkId, parent_id, answerToSave],
           'skydek_DB'
         );
       }
+      console.log('✅ Completion data saved successfully');
     }
     
+    console.log('🎉 Homework submission completed successfully');
     res.status(201).json({ message: 'Homework submitted successfully', submissionId: result.insertId });
   } catch (error) {
-    console.error('Error submitting homework:', error);
-    res.status(500).json({ message: 'Error submitting homework', error: error.message });
+    console.error('🔥 Error submitting homework:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Error submitting homework', 
+      error: error.message,
+      ...(process.env.NODE_ENV === 'development' && { details: error.stack })
+    });
   }
 });
 

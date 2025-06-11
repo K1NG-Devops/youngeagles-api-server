@@ -2,6 +2,127 @@ import express from 'express';
 import { query, execute } from '../db.js';
 import { getHomeworkForParent } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
+import admin from 'firebase-admin';
+
+// Initialize Firebase Admin if not already initialized
+if (!admin.apps.length) {
+  // You'll need to add your Firebase service account key
+  // For now, we'll use a mock function
+  console.log('Firebase Admin not initialized - push notifications disabled');
+}
+
+// Function to send homework notification to parents
+const sendHomeworkNotification = async (className, homeworkTitle, teacherName, homeworkId) => {
+  try {
+    console.log('📢 Sending homework notification:', {
+      className,
+      homeworkTitle,
+      teacherName,
+      homeworkId
+    });
+    
+    // Get all parents with children in this class
+    const parents = await query(
+      `SELECT DISTINCT c.parent_id, u.name as parent_name 
+       FROM children c 
+       LEFT JOIN users u ON c.parent_id = u.id 
+       WHERE c.className = ?`,
+      [className],
+      'skydek_DB'
+    );
+    
+    console.log(`Found ${parents.length} parents in class ${className}`);
+    
+    // Get FCM tokens for these parents
+    const parentIds = parents.map(p => p.parent_id);
+    if (parentIds.length === 0) return;
+    
+    const tokens = await query(
+      `SELECT user_id, token FROM fcm_tokens 
+       WHERE user_id IN (${parentIds.map(() => '?').join(',')}) AND is_active = TRUE`,
+      parentIds,
+      'skydek_DB'
+    );
+    
+    console.log(`Found ${tokens.length} active FCM tokens`);
+    
+    if (tokens.length === 0) {
+      console.log('No active FCM tokens found for parents in this class');
+      return;
+    }
+    
+    // Prepare notification payload
+    const notification = {
+      title: 'New Homework Posted! 📚',
+      body: `Teacher ${teacherName} posted "${homeworkTitle}" for your child's class.`,
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-96x96.png',
+      tag: `homework-${homeworkId}`,
+      data: {
+        type: 'homework',
+        homeworkId: homeworkId.toString(),
+        teacherName,
+        className,
+        url: '/homework'
+      }
+    };
+    
+    // For now, just log the notification since Firebase Admin might not be set up
+    console.log('📱 Would send notification to tokens:', {
+      tokenCount: tokens.length,
+      notification,
+      targetTokens: tokens.map(t => `${t.token.substring(0, 20)}...`)
+    });
+    
+    // TODO: Uncomment when Firebase Admin is properly configured
+    /*
+    const tokenList = tokens.map(t => t.token);
+    
+    const message = {
+      notification,
+      data: notification.data,
+      tokens: tokenList
+    };
+    
+    const response = await admin.messaging().sendMulticast(message);
+    console.log('Push notification sent:', {
+      successCount: response.successCount,
+      failureCount: response.failureCount
+    });
+    
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          failedTokens.push(tokenList[idx]);
+        }
+      });
+      console.log('Failed tokens:', failedTokens);
+    }
+    */
+    
+    // Store notification in database for parents to see
+    for (const parent of parents) {
+      await execute(
+        `INSERT INTO notifications (user_id, user_type, title, message, type, related_id, related_type, created_at) 
+         VALUES (?, 'parent', ?, ?, 'homework', ?, 'homework', NOW())`,
+        [
+          parent.parent_id,
+          notification.title,
+          notification.body,
+          homeworkId
+        ],
+        'skydek_DB'
+      );
+    }
+    
+    console.log('✅ Homework notification process completed');
+    
+  } catch (error) {
+    console.error('❌ Error sending homework notification:', error);
+    // Don't throw error to prevent homework upload from failing
+  }
+};
 
 const router = express.Router();
 
@@ -63,6 +184,18 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     const params = [title, instructions || null, formattedDueDate, fileUrl || null, uploadedBy, className, grade, type || null, items ? JSON.stringify(items) : null];
 
     const result = await execute(sql, params, 'skydek_DB');
+    
+    // Get teacher's name for notification
+    const [teacher] = await query(
+      'SELECT name FROM users WHERE id = ?',
+      [uploadedBy],
+      'railway'
+    );
+    const teacherName = teacher?.name || 'Your teacher';
+    
+    // Send push notification to parents in this class
+    await sendHomeworkNotification(className, title, teacherName, result.insertId);
+    
     res.status(201).json({
       message: "Homework uploaded successfully",
       insertedId: result.insertId,
