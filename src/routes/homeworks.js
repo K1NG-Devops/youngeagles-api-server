@@ -1,6 +1,6 @@
 import express from 'express';
 import { query, execute } from '../db.js';
-import { getHomeworkForParent } from '../controllers/homeworkController.js';
+import { getHomeworkForParent, getHomeworksForTeacher } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 import admin from 'firebase-admin';
 
@@ -266,10 +266,13 @@ router.post('/fcm/token', authMiddleware, async (req, res) => {
   }
 });
 
-export default router;
-
+// Route for fetching homeworks for a specific parent
 router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);
 
+// Route for fetching homeworks posted by a specific teacher
+router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
+
+// Route for listing homeworks by class
 router.get('/list', authMiddleware, async (req, res) => {
   const { className } = req.query;
 
@@ -294,4 +297,5 @@ router.get('/list', authMiddleware, async (req, res) => {
   }
 });
 
+export default router;
 
