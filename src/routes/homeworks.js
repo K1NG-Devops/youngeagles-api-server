@@ -266,6 +266,13 @@ router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Either completion_answer or activity_result is required' });
   }
 
+  // Prepare the completion answer to include activity result if provided
+  const finalAnswer = completion_answer || (
+    activity_result ? 
+      `Interactive Activity Result: ${JSON.stringify(activity_result)}` : 
+      ''
+  );
+
   try {
     // Check if completion already exists
     const [existingCompletion] = await query(
@@ -275,30 +282,18 @@ router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
     );
 
     if (existingCompletion) {
-      // Update existing completion
+      // Update existing completion - use only basic columns
       await execute(
-        'UPDATE homework_completions SET completion_answer = ?, activity_result = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
-        [completion_answer || '', activity_result ? JSON.stringify(activity_result) : null, homeworkId, req.user.id],
+        'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
+        [finalAnswer, homeworkId, req.user.id],
         'skydek_DB'
       );
       console.log('✅ Updated existing homework completion');
     } else {
-      // Create table if not exists (for first-time setup)
-      await execute(`CREATE TABLE IF NOT EXISTS homework_completions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        homework_id INT NOT NULL,
-        parent_id INT NOT NULL,
-        completion_answer TEXT,
-        activity_result JSON,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY unique_homework_parent (homework_id, parent_id)
-      )`, [], 'skydek_DB');
-
-      // Insert new completion
+      // Insert new completion - use only basic columns
       await execute(
-        'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, activity_result, created_at) VALUES (?, ?, ?, ?, NOW())',
-        [homeworkId, req.user.id, completion_answer || '', activity_result ? JSON.stringify(activity_result) : null],
+        'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
+        [homeworkId, req.user.id, finalAnswer],
         'skydek_DB'
       );
       console.log('✅ Created new homework completion');
