@@ -75,30 +75,61 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
 
 // FCM token registration endpoint
 router.post('/fcm/token', authMiddleware, async (req, res) => {
-  const { token } = req.body;
-  const userId = req.user.id; // Assumes authMiddleware sets req.user
+  console.log('🔔 FCM token registration request:', {
+    body: req.body,
+    user: req.user,
+    headers: req.headers.authorization ? 'Has auth header' : 'No auth header'
+  });
+  
+  const { token, parentId } = req.body;
+  // Use parentId from request body if provided, otherwise fall back to auth user
+  const userId = parentId || req.user.id;
+  
+  console.log('📋 FCM token data:', {
+    token: token ? `${token.substring(0, 20)}...` : 'No token',
+    userId,
+    parentId,
+    authUserId: req.user.id
+  });
 
   if (!token) {
+    console.error('❌ FCM token is required');
     return res.status(400).json({ error: 'FCM token is required' });
   }
 
   try {
+    console.log('💾 Creating/updating FCM token in database...');
     // Create table if not exists (for first-time setup)
     await execute(`CREATE TABLE IF NOT EXISTS fcm_tokens (
       user_id INT PRIMARY KEY,
-      token VARCHAR(255) NOT NULL
+      token VARCHAR(255) NOT NULL,
+      device_type VARCHAR(50) DEFAULT 'web',
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`, [], 'skydek_DB');
 
     // Insert or update the token for the user
     await execute(
-      'INSERT INTO fcm_tokens (user_id, token) VALUES (?, ?) ON DUPLICATE KEY UPDATE token = ?',
-      [userId, token, token],
+      'INSERT INTO fcm_tokens (user_id, token, device_type, updated_at) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE token = ?, device_type = ?, updated_at = NOW()',
+      [userId, token, 'web', token, 'web'],
       'skydek_DB'
     );
-    res.status(200).json({ message: 'Token saved' });
+    
+    console.log('✅ FCM token saved successfully for user:', userId);
+    res.status(200).json({ message: 'FCM token registered successfully', userId });
   } catch (err) {
-    console.error('Error saving FCM token:', err);
-    res.status(500).json({ error: 'Failed to save FCM token' });
+    console.error('🔥 Error saving FCM token:', {
+      error: err.message,
+      stack: err.stack,
+      code: err.code,
+      sqlState: err.sqlState
+    });
+    res.status(500).json({ 
+      error: 'Failed to save FCM token',
+      message: err.message,
+      ...(process.env.NODE_ENV === 'development' && { details: err.stack })
+    });
   }
 });
 
