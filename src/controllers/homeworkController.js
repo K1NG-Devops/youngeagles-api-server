@@ -237,3 +237,91 @@ export const updateHomework = async (req, res) => {
     res.status(500).json({ message: 'Server error.', error: err.message });
   }
 };
+
+// Get all submissions for a specific homework (for teachers)
+export const getSubmissionsForHomework = async (req, res) => {
+  const { homeworkId } = req.params;
+  try {
+    // First verify the homework exists and belongs to the teacher
+    const [homework] = await query(
+      'SELECT * FROM homeworks WHERE id = ? AND uploaded_by_teacher_id = ?',
+      [homeworkId, req.user.id],
+      'skydek_DB'
+    );
+    
+    if (!homework) {
+      return res.status(404).json({ message: 'Homework not found or unauthorized' });
+    }
+    
+    // Get all submissions for this homework with parent/student details
+    const submissions = await query(`
+      SELECT 
+        s.*,
+        c.first_name as student_name,
+        c.last_name as student_last_name,
+        c.className,
+        hc.completion_answer
+      FROM submissions s
+      LEFT JOIN children c ON s.parent_id = c.parent_id
+      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id
+      WHERE s.homework_id = ?
+      ORDER BY s.submitted_at DESC
+    `, [homeworkId], 'skydek_DB');
+    
+    // Get all students in the class to show who hasn't submitted
+    const allStudents = await query(
+      'SELECT * FROM children WHERE className = ?',
+      [homework.class_name],
+      'skydek_DB'
+    );
+    
+    // Mark which students have submitted
+    const submittedParentIds = submissions.map(s => s.parent_id);
+    const studentsWithStatus = allStudents.map(student => ({
+      ...student,
+      hasSubmitted: submittedParentIds.includes(student.parent_id),
+      submission: submissions.find(s => s.parent_id === student.parent_id) || null
+    }));
+    
+    res.json({
+      homework,
+      submissions,
+      studentsWithStatus,
+      totalStudents: allStudents.length,
+      submittedCount: submissions.length,
+      pendingCount: allStudents.length - submissions.length
+    });
+  } catch (err) {
+    console.error('Error fetching submissions:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// Get all submissions across all homework for a teacher (dashboard view)
+export const getAllSubmissionsForTeacher = async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    
+    const submissions = await query(`
+      SELECT 
+        s.*,
+        h.title as homework_title,
+        h.due_date,
+        h.class_name,
+        c.first_name as student_name,
+        c.last_name as student_last_name,
+        hc.completion_answer
+      FROM submissions s
+      JOIN homeworks h ON s.homework_id = h.id
+      LEFT JOIN children c ON s.parent_id = c.parent_id
+      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id
+      WHERE h.uploaded_by_teacher_id = ?
+      ORDER BY s.submitted_at DESC
+    `, [teacherId], 'skydek_DB');
+    
+    res.json({ submissions });
+  } catch (err) {
+    console.error('Error fetching all submissions:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
