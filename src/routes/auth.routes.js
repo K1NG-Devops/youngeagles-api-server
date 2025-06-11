@@ -111,6 +111,77 @@ router.get('/children', authMiddleware, isTeacher, getChildrenByTeacher)
 // GET /auth/parent/children (for parents to fetch their children)
 router.get('/parent/children', authMiddleware, getChildrenForParent);
 
+// GET /auth/parents/:id/children - Get children for a specific parent
+router.get('/parents/:id/children', async (req, res) => {
+  const { id: parentId } = req.params;
+  
+  try {
+    console.log('Fetching children for parent ID:', parentId);
+    
+    // Verify parent exists
+    const parent = await query(
+      'SELECT id FROM users WHERE id = ? AND role = ?', 
+      [parentId, 'parent'], 
+      'skydek_DB'
+    );
+    
+    if (parent.length === 0) {
+      return res.status(404).json({ message: 'Parent not found.' });
+    }
+    
+    // Fetch children for this parent
+    const children = await query(
+      'SELECT id, name, gender, dob, age, grade, className, parent_id FROM children WHERE parent_id = ?',
+      [parentId],
+      'skydek_DB'
+    );
+    
+    console.log('Children found:', children);
+    
+    // Split name into first_name and last_name for compatibility
+    const formattedChildren = children.map(child => ({
+      ...child,
+      first_name: child.name ? child.name.split(' ')[0] : '',
+      last_name: child.name ? child.name.split(' ').slice(1).join(' ') : ''
+    }));
+    
+    res.json(formattedChildren);
+  } catch (err) {
+    console.error('Error fetching children for parent:', err);
+    res.status(500).json({ message: 'Server error fetching children.' });
+  }
+});
+
+// DEBUG: Get all parents and children for debugging
+router.get('/debug/data', async (req, res) => {
+  try {
+    // Get all parents
+    const parents = await query(
+      'SELECT id, name, email, role FROM users WHERE role = "parent" LIMIT 10',
+      [],
+      'skydek_DB'
+    );
+    
+    // Get all children
+    const children = await query(
+      'SELECT id, name, parent_id, className FROM children LIMIT 10',
+      [],
+      'skydek_DB'
+    );
+    
+    res.json({
+      message: 'Debug data retrieved',
+      parents,
+      children,
+      parentCount: parents.length,
+      childrenCount: children.length
+    });
+  } catch (err) {
+    console.error('Error fetching debug data:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // /auth/profile
 router.get('/profile', verifyToken, async (req, res) => {
   try {
