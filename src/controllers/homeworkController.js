@@ -116,17 +116,39 @@ export const getHomeworkForParent = async (req, res) => {
 };
 
 export const submitHomework = async (req, res) => {
+  console.log('📝 Submit homework request received:', req.body);
   const { homeworkId, parentId, fileUrl, comment } = req.body;
+  
+  // Log the extracted values for debugging
+  console.log('📊 Extracted values:', { homeworkId, parentId, fileUrl, comment });
+  
   if (!fileUrl) {
+    console.log('❌ Validation failed: File URL is required');
     return res.status(400).json({ message: "File URL is required" });
   }
+  
   try {
+    console.log('🔄 Attempting to insert submission into database...');
     const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment) VALUES (?, ?, ?, ?)`;
-    await execute(sql, [homeworkId, parentId, fileUrl, comment], 'skydek_DB');
+    const result = await execute(sql, [homeworkId, parentId, fileUrl, comment], 'skydek_DB');
+    console.log('✅ Submission inserted successfully:', result);
     res.status(201).json({ message: "Homework submitted successfully" });
   } catch (error) {
-    console.error('🔥 Error submitting homework:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('🔥 Error submitting homework:');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error code:', error.code);
+    console.error('SQL values used:', [homeworkId, parentId, fileUrl, comment]);
+    
+    // Return more specific error information in development
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    res.status(500).json({ 
+      error: 'Internal server error',
+      ...(isDevelopment && { 
+        details: error.message,
+        code: error.code 
+      })
+    });
   }
 };
 
@@ -199,17 +221,19 @@ export const deleteHomework = async (req, res) => {
 
 export const updateHomework = async (req, res) => {
   const { homeworkId } = req.params;
-  const { title, instructions, due_date } = req.body;
+  const { title, instructions, due_date, type, items } = req.body;
   try {
     const result = await execute(
-      'UPDATE homeworks SET title = ?, instructions = ?, due_date = ? WHERE id = ?',
-      [title, instructions, due_date, homeworkId]
+      'UPDATE homeworks SET title = ?, instructions = ?, due_date = ?, type = ?, items = ? WHERE id = ?',
+      [title, instructions, due_date, type || null, items ? JSON.stringify(items) : null, homeworkId],
+      'skydek_DB'
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Homework not found' });
     }
     res.json({ message: 'Homework updated successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Server error.' });
+    console.error('Error updating homework:', err);
+    res.status(500).json({ message: 'Server error.', error: err.message });
   }
 };

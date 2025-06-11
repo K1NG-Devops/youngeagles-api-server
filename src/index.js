@@ -114,16 +114,22 @@ app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res)
 
 // Add submissions routes
 app.post('/api/submissions', authMiddleware, async (req, res) => {
-  const { homeworkId, fileURL, comment, completion_answer } = req.body;
-  const parent_id = req.user.id; // Get parent ID from auth middleware
+  const { homeworkId, parentId, fileURL, comment, completion_answer, activity_result, isInteractive } = req.body;
+  const parent_id = parentId || req.user.id; // Use provided parentId or fall back to auth user
 
   if (!homeworkId) {
     return res.status(400).json({ message: 'Homework ID is required' });
   }
 
-  // At least one of fileURL or completion_answer must be provided
-  if (!fileURL && !completion_answer?.trim()) {
-    return res.status(400).json({ message: 'Either file upload or completion answer is required' });
+  // For interactive activities, activity_result is required. For others, fileURL or completion_answer
+  if (isInteractive) {
+    if (!activity_result && !completion_answer?.trim()) {
+      return res.status(400).json({ message: 'Activity result or completion answer is required for interactive homework' });
+    }
+  } else {
+    if (!fileURL && !completion_answer?.trim()) {
+      return res.status(400).json({ message: 'Either file upload or completion answer is required' });
+    }
   }
 
   try {
@@ -131,21 +137,22 @@ app.post('/api/submissions', authMiddleware, async (req, res) => {
     const sql = 'INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())';
     const result = await execute(sql, [homeworkId, parent_id, fileURL || null, comment || null], 'skydek_DB');
     
-    // If completion answer is provided, save/update it
-    if (completion_answer?.trim()) {
+    // If completion answer or activity result is provided, save/update it
+    const answerToSave = completion_answer?.trim() || (activity_result ? JSON.stringify(activity_result) : null);
+    if (answerToSave) {
       const existingSql = 'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?';
       const [existing] = await query(existingSql, [homeworkId, parent_id], 'skydek_DB');
       
       if (existing) {
         await execute(
           'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
-          [completion_answer, homeworkId, parent_id],
+          [answerToSave, homeworkId, parent_id],
           'skydek_DB'
         );
       } else {
         await execute(
           'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
-          [homeworkId, parent_id, completion_answer],
+          [homeworkId, parent_id, answerToSave],
           'skydek_DB'
         );
       }
@@ -328,21 +335,123 @@ const HomeworkSubmission = sequelize.define('homework_submissions', {
 
 app.post('/api/homework-submissions', authMiddleware, async (req, res) => {
   const { studentId, studentName, className, grade, teacherId, date, day, results, type } = req.body;
-  if (!studentId || !studentName || !className || !grade || !teacherId || !date || !day || !results || !type) {
+  const parent_id = req.user.id;
+  
+  if (!studentId || !studentName || !className || !grade || !results || !type) {
     return res.status(400).json({ message: 'Missing required fields.' });
   }
+  
   try {
+    // Get homework details to find the teacher if not provided
+    let actualTeacherId = teacherId;
+    let homeworkTitle = 'Homework';
+    
+    if (results.homeworkId) {
+      const homework = await query(
+        'SELECT uploaded_by_teacher_id, title FROM homeworks WHERE id = ?',
+        [results.homeworkId],
+        'skydek_DB'
+      );
+      
+      if (homework && homework.length > 0) {
+        actualTeacherId = homework[0].uploaded_by_teacher_id;
+        homeworkTitle = homework[0].title;
+      }
+    }
+    
+    // Create submission record
     const submission = await HomeworkSubmission.create({
       studentId,
       studentName,
       className,
       grade,
-      teacherId,
+      teacherId: actualTeacherId,
       date,
       day,
       results,
       type,
     });
+    
+    // Store in submissions table for parent tracking
+    if (results.homeworkId) {
+      try {
+        const submissionSql = `
+          INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at)
+          VALUES (?, ?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE 
+          file_url = VALUES(file_url),
+          comment = VALUES(comment),
+          submitted_at = VALUES(submitted_at)
+        `;
+        
+        await execute(submissionSql, [
+          results.homeworkId,
+          parent_id,
+          results.fileURL || null,
+          results.comment || ''
+        ], 'skydek_DB');
+        
+        // Save completion answer if provided
+        if (results.completion_answer) {
+          const completionSql = `
+            INSERT INTO homework_completions (homework_id, parent_id, completion_answer, completed_at)
+            VALUES (?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE 
+            completion_answer = VALUES(completion_answer),
+            completed_at = VALUES(completed_at)
+          `;
+          
+          await execute(completionSql, [
+            results.homeworkId,
+            parent_id,
+            results.completion_answer
+          ], 'skydek_DB');
+        }
+      } catch (dbError) {
+        console.error('Error updating submission tables:', dbError);
+      }
+    }
+    
+    // Send notification to teacher
+    if (actualTeacherId) {
+      try {
+        const notificationMessage = `${studentName} has submitted homework: ${homeworkTitle}`;
+        
+        // Create notifications table if it doesn't exist
+        await execute(`
+          CREATE TABLE IF NOT EXISTS notifications (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            user_id INT NOT NULL,
+            user_type ENUM('teacher', 'parent', 'admin') DEFAULT 'teacher',
+            title VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
+            type VARCHAR(50) DEFAULT 'homework_submission',
+            related_id INT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `, [], 'skydek_DB');
+        
+        // Store notification
+        const notificationSql = `
+          INSERT INTO notifications (user_id, user_type, title, message, type, related_id, created_at)
+          VALUES (?, 'teacher', ?, ?, 'homework_submission', ?, NOW())
+        `;
+        
+        await execute(notificationSql, [
+          actualTeacherId,
+          'New Homework Submission',
+          notificationMessage,
+          results.homeworkId || null
+        ], 'skydek_DB');
+        
+        console.log(`✅ Notification sent to teacher ${actualTeacherId} for ${studentName}'s submission`);
+      } catch (notificationError) {
+        console.error('Error sending teacher notification:', notificationError);
+        // Don't fail the submission if notification fails
+      }
+    }
+    
     res.status(201).json({ message: 'Homework submission saved!', submission });
   } catch (error) {
     console.error('Error saving homework submission:', error);
@@ -366,10 +475,128 @@ app.listen(port, () => {
   console.log(`API server is running on port ${port}`);
 });
 
-app.post('/api/fcm/token', authMiddleware, (req, res) => {
-  const { token } = req.body;
+app.post('/api/fcm/token', authMiddleware, async (req, res) => {
+  const { token, deviceInfo } = req.body;
   const userId = req.user.id;
-  // TODO: Save the token in the database associated with userId
-  console.log(`Received FCM token for user ${userId}:`, token);
-  res.status(200).json({ message: 'Token received' });
+  const userRole = req.user.role;
+  
+  if (!token) {
+    return res.status(400).json({ message: 'FCM token is required' });
+  }
+  
+  // Determine database and user type based on role
+  let database, userType;
+  if (userRole === 'parent') {
+    database = 'skydek_DB';
+    userType = 'parent';
+  } else if (userRole === 'teacher') {
+    database = 'railway';
+    userType = 'teacher';
+  } else if (userRole === 'admin') {
+    database = 'railway';
+    userType = 'admin';
+  } else {
+    return res.status(400).json({ message: 'Invalid user role for FCM registration' });
+  }
+  
+  try {
+    // Check if token already exists for this user
+    const existingToken = await query(
+      'SELECT id FROM fcm_tokens WHERE user_id = ? AND user_type = ? AND token = ?', 
+      [userId, userType, token],
+      database
+    );
+    
+    if (existingToken.length === 0) {
+      // Insert new token
+      await execute(
+        `INSERT INTO fcm_tokens (user_id, user_type, token, device_info, last_used, created_at, updated_at) 
+         VALUES (?, ?, ?, ?, NOW(), NOW(), NOW()) 
+         ON DUPLICATE KEY UPDATE 
+         device_info = VALUES(device_info), 
+         last_used = NOW(), 
+         updated_at = NOW(), 
+         is_active = TRUE`, 
+        [userId, userType, token, deviceInfo ? JSON.stringify(deviceInfo) : null],
+        database
+      );
+      
+      console.log(`✅ FCM token saved for ${userType} ${userId} in ${database}`);
+    } else {
+      // Update existing token timestamp
+      await execute(
+        'UPDATE fcm_tokens SET last_used = NOW(), updated_at = NOW(), is_active = TRUE WHERE user_id = ? AND user_type = ? AND token = ?',
+        [userId, userType, token],
+        database
+      );
+      
+      console.log(`🔄 FCM token updated for ${userType} ${userId} in ${database}`);
+    }
+    
+    res.status(200).json({ 
+      message: 'FCM token registered successfully',
+      userType,
+      database: database === 'skydek_DB' ? 'Parents/Children DB' : 'Teachers/Admin DB'
+    });
+  } catch (error) {
+    console.error('Error saving FCM token:', error);
+    res.status(500).json({ 
+      message: 'Failed to register FCM token', 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+    });
+  }
+});
+
+// FCM Token cleanup endpoint (optional - for removing inactive tokens)
+app.delete('/api/fcm/token/:tokenId', authMiddleware, async (req, res) => {
+  const { tokenId } = req.params;
+  const userId = req.user.id;
+  const userRole = req.user.role;
+  
+  const database = (userRole === 'parent') ? 'skydek_DB' : 'railway';
+  const userType = userRole === 'admin' ? 'admin' : userRole;
+  
+  try {
+    const result = await execute(
+      'UPDATE fcm_tokens SET is_active = FALSE WHERE id = ? AND user_id = ? AND user_type = ?',
+      [tokenId, userId, userType],
+      database
+    );
+    
+    if (result.affectedRows > 0) {
+      res.status(200).json({ message: 'FCM token deactivated successfully' });
+    } else {
+      res.status(404).json({ message: 'FCM token not found or already inactive' });
+    }
+  } catch (error) {
+    console.error('Error deactivating FCM token:', error);
+    res.status(500).json({ message: 'Failed to deactivate FCM token' });
+  }
+});
+
+// Get user's FCM tokens (for debugging/admin purposes)
+app.get('/api/fcm/tokens', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const userRole = req.user.role;
+  
+  const database = (userRole === 'parent') ? 'skydek_DB' : 'railway';
+  const userType = userRole === 'admin' ? 'admin' : userRole;
+  
+  try {
+    const tokens = await query(
+      'SELECT id, device_type, is_active, last_used, created_at FROM fcm_tokens WHERE user_id = ? AND user_type = ? AND is_active = TRUE',
+      [userId, userType],
+      database
+    );
+    
+    res.status(200).json({ 
+      tokens,
+      count: tokens.length,
+      userType,
+      database: database === 'skydek_DB' ? 'Parents/Children DB' : 'Teachers/Admin DB'
+    });
+  } catch (error) {
+    console.error('Error fetching FCM tokens:', error);
+    res.status(500).json({ message: 'Failed to fetch FCM tokens' });
+  }
 });

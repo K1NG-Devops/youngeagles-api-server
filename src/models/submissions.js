@@ -10,7 +10,7 @@ export default (sequelize, DataTypes) => {
     },
     file_url: {
       type: DataTypes.TEXT,
-      allowNull: false,
+      allowNull: true, // Allow null for interactive activities without file uploads
     },
     comment: {
       type: DataTypes.TEXT,
