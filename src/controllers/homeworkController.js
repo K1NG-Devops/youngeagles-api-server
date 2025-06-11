@@ -90,11 +90,11 @@ export const getHomeworkForParent = async (req, res) => {
       if (hw.uploaded_by_teacher_id) {
         try {
           const [teacher] = await query(
-            'SELECT name, fullname FROM users WHERE id = ?',
+            'SELECT name FROM users WHERE id = ?',
             [hw.uploaded_by_teacher_id],
             'railway'
           );
-          hw.uploaded_by_teacher_name = teacher ? (teacher.fullname || teacher.name) : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+          hw.uploaded_by_teacher_name = teacher ? teacher.name : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
         } catch (err) {
           console.error('Error fetching teacher name:', err);
           hw.uploaded_by_teacher_name = `Teacher ID: ${hw.uploaded_by_teacher_id}`;
@@ -226,11 +226,11 @@ export const getHomeworksForTeacher = async (req, res) => {
       if (hw.uploaded_by_teacher_id) {
         try {
           const [teacher] = await query(
-            'SELECT name, fullname FROM users WHERE id = ?',
+            'SELECT name FROM users WHERE id = ?',
             [hw.uploaded_by_teacher_id],
             'railway'
           );
-          hw.uploaded_by_teacher_name = teacher ? (teacher.fullname || teacher.name) : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+          hw.uploaded_by_teacher_name = teacher ? teacher.name : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
         } catch (err) {
           console.error('Error fetching teacher name:', err);
           hw.uploaded_by_teacher_name = `Teacher ID: ${hw.uploaded_by_teacher_id}`;
