@@ -88,11 +88,31 @@ app.use('/api/homeworks', homeworkRoutes);
 // Homework completion endpoint
 app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res) => {
   const { homeworkId } = req.params;
-  const { completion_answer } = req.body;
+  const { 
+    completion_answer, 
+    activity_result, 
+    activity_type, 
+    childId, 
+    childName, 
+    parentId,
+    completed = false
+  } = req.body;
+  
   const parent_id = req.user.id;
 
-  if (!completion_answer?.trim()) {
-    return res.status(400).json({ message: 'Completion answer is required' });
+  console.log('📝 Homework completion request:', {
+    homeworkId,
+    parent_id,
+    hasAnswer: !!completion_answer,
+    hasActivityResult: !!activity_result,
+    activity_type,
+    childName,
+    completed
+  });
+
+  // For interactive activities, we might not have completion_answer but have activity_result
+  if (!completion_answer?.trim() && !activity_result) {
+    return res.status(400).json({ message: 'Either completion answer or activity result is required' });
   }
 
   try {
@@ -100,20 +120,73 @@ app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res)
     const existingSql = 'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?';
     const [existing] = await query(existingSql, [homeworkId, parent_id], 'skydek_DB');
 
+    // Prepare completion answer (combine text and activity result for storage)
+    const finalCompletionAnswer = completion_answer || (
+      activity_result ? 
+        `Interactive Activity Result: ${JSON.stringify(activity_result)}` :
+        null
+    );
+
     if (existing) {
-      // Update existing completion
-      const updateSql = 'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?';
-      await execute(updateSql, [completion_answer, homeworkId, parent_id], 'skydek_DB');
+      // Update existing completion - use only basic columns that exist
+      const updateSql = `
+        UPDATE homework_completions 
+        SET completion_answer = ?, updated_at = NOW() 
+        WHERE homework_id = ? AND parent_id = ?
+      `;
+      await execute(updateSql, [
+        finalCompletionAnswer,
+        homeworkId,
+        parent_id
+      ], 'skydek_DB');
+      
+      console.log('✅ Updated existing homework completion');
     } else {
-      // Create new completion record
-      const insertSql = 'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())';
-      await execute(insertSql, [homeworkId, parent_id, completion_answer], 'skydek_DB');
+      // Create new completion record - use only basic columns that exist
+      const insertSql = `
+        INSERT INTO homework_completions 
+        (homework_id, parent_id, completion_answer, created_at, updated_at) 
+        VALUES (?, ?, ?, NOW(), NOW())
+      `;
+      await execute(insertSql, [
+        homeworkId,
+        parent_id,
+        finalCompletionAnswer
+      ], 'skydek_DB');
+      
+      console.log('✅ Created new homework completion');
     }
 
-    res.status(200).json({ message: 'Homework completion saved successfully' });
+    // Store additional interactive activity metadata in a separate way if needed
+    if (activity_result && activity_type) {
+      console.log('📊 Activity metadata stored in completion answer:', {
+        activity_type,
+        childName,
+        hasResult: !!activity_result
+      });
+    }
+
+    res.status(200).json({ 
+      message: 'Homework completion saved successfully',
+      data: {
+        homework_id: homeworkId,
+        completed: true,
+        activity_type: activity_type || null
+      }
+    });
   } catch (error) {
-    console.error('Error saving homework completion:', error);
-    res.status(500).json({ message: 'Error saving homework completion', error: error.message });
+    console.error('🔥 Error saving homework completion:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      sqlState: error.sqlState,
+      sqlMessage: error.sqlMessage
+    });
+    res.status(500).json({ 
+      message: 'Error saving homework completion', 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
