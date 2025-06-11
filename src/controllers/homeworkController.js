@@ -189,10 +189,13 @@ export const getSubmission = async (req, res) => {
 export const getHomeworksForTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
+    console.log('🔍 Fetching homeworks for teacher ID:', teacherId);
     const homeworks = await query(
-      'SELECT * FROM homeworks WHERE uploaded_by_teacher_id = ?',
-      [teacherId]
+      'SELECT * FROM homeworks WHERE uploaded_by_teacher_id = ? ORDER BY created_at DESC',
+      [teacherId],
+      'skydek_DB'
     );
+    console.log('📚 Found homeworks:', homeworks.length);
     // Parse items JSON for each homework
     for (let hw of homeworks) {
       if (hw.items && typeof hw.items === 'string') {
