@@ -71,19 +71,38 @@ export const getHomeworkForParent = async (req, res) => {
 
     const placeholders = classNames.map(() => '?').join(', ');
     const sql = `
-      SELECT * FROM homeworks
-      WHERE class_name IN (${placeholders})
-      ORDER BY due_date DESC
+      SELECT h.*
+      FROM homeworks h
+      WHERE h.class_name IN (${placeholders})
+      ORDER BY h.due_date DESC
     `;
 
     console.log('Executing homework query with SQL:', sql);
     const homeworks = await query(sql, classNames, 'skydek_DB');
 
-    // Parse items JSON for each homework
+    // Parse items JSON and fetch teacher names for each homework
     for (let hw of homeworks) {
       if (hw.items && typeof hw.items === 'string') {
         try { hw.items = JSON.parse(hw.items); } catch (e) { hw.items = null; }
       }
+      
+      // Fetch teacher name from railway database
+      if (hw.uploaded_by_teacher_id) {
+        try {
+          const [teacher] = await query(
+            'SELECT name, fullname FROM users WHERE id = ?',
+            [hw.uploaded_by_teacher_id],
+            'railway'
+          );
+          hw.uploaded_by_teacher_name = teacher ? (teacher.fullname || teacher.name) : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+        } catch (err) {
+          console.error('Error fetching teacher name:', err);
+          hw.uploaded_by_teacher_name = `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+        }
+      } else {
+        hw.uploaded_by_teacher_name = 'Unknown Teacher';
+      }
+      
       // Save the teacher's file URL separately (handle both file_url and fileUrl)
       hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
       
@@ -196,10 +215,28 @@ export const getHomeworksForTeacher = async (req, res) => {
       'skydek_DB'
     );
     console.log('📚 Found homeworks:', homeworks.length);
-    // Parse items JSON for each homework
+    
+    // Parse items JSON and fetch teacher names for each homework
     for (let hw of homeworks) {
       if (hw.items && typeof hw.items === 'string') {
         try { hw.items = JSON.parse(hw.items); } catch (e) { hw.items = null; }
+      }
+      
+      // Fetch teacher name from railway database
+      if (hw.uploaded_by_teacher_id) {
+        try {
+          const [teacher] = await query(
+            'SELECT name, fullname FROM users WHERE id = ?',
+            [hw.uploaded_by_teacher_id],
+            'railway'
+          );
+          hw.uploaded_by_teacher_name = teacher ? (teacher.fullname || teacher.name) : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+        } catch (err) {
+          console.error('Error fetching teacher name:', err);
+          hw.uploaded_by_teacher_name = `Teacher ID: ${hw.uploaded_by_teacher_id}`;
+        }
+      } else {
+        hw.uploaded_by_teacher_name = 'Unknown Teacher';
       }
     }
     res.json({ homeworks });
