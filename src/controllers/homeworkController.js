@@ -345,8 +345,7 @@ export const getSubmissionsForHomework = async (req, res) => {
     const submissions = await query(`
       SELECT 
         s.*,
-        c.first_name as student_name,
-        c.last_name as student_last_name,
+        c.name as student_name,
         c.className,
         hc.completion_answer
       FROM submissions s
@@ -396,8 +395,7 @@ export const getAllSubmissionsForTeacher = async (req, res) => {
         h.title as homework_title,
         h.due_date,
         h.class_name,
-        c.first_name as student_name,
-        c.last_name as student_last_name,
+        c.name as student_name,
         hc.completion_answer
       FROM submissions s
       JOIN homeworks h ON s.homework_id = h.id
