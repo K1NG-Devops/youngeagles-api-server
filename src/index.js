@@ -341,6 +341,34 @@ app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) 
   }
   });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Young Eagles API Server', 
+    status: 'running',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      homework: '/api/homework',
+      homeworks: '/api/homeworks',
+      attendance: '/api/attendance',
+      events: '/api/events',
+      fcm: '/api/fcm'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check route
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    memory: process.memoryUsage()
+  });
+});
+
 // Test route
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running' });
