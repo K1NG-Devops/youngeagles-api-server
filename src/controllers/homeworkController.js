@@ -176,15 +176,15 @@ export const submitHomework = async (req, res) => {
   try {
     console.log('🔄 Attempting to insert submission into database...');
     
-    // Insert the homework submission
-    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment, completion_answer, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())`;
-    const finalAnswer = completion_answer || (activity_result ? JSON.stringify(activity_result) : null);
-    const result = await execute(sql, [homeworkId, parentId, fileURL || null, comment || null, finalAnswer], 'skydek_DB');
+    // Insert the homework submission (submissions table only has: homework_id, parent_id, file_url, comment, submitted_at)
+    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())`;
+    const result = await execute(sql, [homeworkId, parentId, fileURL || null, comment || null], 'skydek_DB');
     
     console.log('✅ Submission inserted successfully:', result);
     
-    // Also update or insert homework completion record
+    // Store completion answers in the homework_completions table
     if (completion_answer || activity_result) {
+      const finalAnswer = completion_answer || (activity_result ? JSON.stringify(activity_result) : null);
       const completionSql = `
         INSERT INTO homework_completions (homework_id, parent_id, completion_answer, completed_at)
         VALUES (?, ?, ?, NOW())
