@@ -136,28 +136,76 @@ export const getHomeworkForParent = async (req, res) => {
 
 export const submitHomework = async (req, res) => {
   console.log('📝 Submit homework request received:', req.body);
-  const { homeworkId, parentId, fileUrl, comment } = req.body;
+  const { 
+    homeworkId, 
+    parentId, 
+    childId, 
+    childName, 
+    fileURL, // Note: frontend sends fileURL 
+    comment, 
+    completion_answer, 
+    activity_result, 
+    isInteractive 
+  } = req.body;
   
   // Log the extracted values for debugging
-  console.log('📊 Extracted values:', { homeworkId, parentId, fileUrl, comment });
+  console.log('📊 Extracted values:', {
+    homeworkId, 
+    parentId, 
+    childId, 
+    childName, 
+    fileURL, 
+    comment, 
+    completion_answer, 
+    activity_result, 
+    isInteractive
+  });
   
-  if (!fileUrl) {
-    console.log('❌ Validation failed: File URL is required');
-    return res.status(400).json({ message: "File URL is required" });
+  // Validate required fields
+  if (!homeworkId || !parentId) {
+    console.log('❌ Validation failed: homeworkId and parentId are required');
+    return res.status(400).json({ message: "Homework ID and Parent ID are required" });
+  }
+  
+  // For non-interactive homework, require either file or completion answer
+  if (!isInteractive && !fileURL && !completion_answer) {
+    console.log('❌ Validation failed: File or completion answer required for non-interactive homework');
+    return res.status(400).json({ message: "Either file upload or completion answer is required" });
   }
   
   try {
     console.log('🔄 Attempting to insert submission into database...');
-    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment) VALUES (?, ?, ?, ?)`;
-    const result = await execute(sql, [homeworkId, parentId, fileUrl, comment], 'skydek_DB');
+    
+    // Insert the homework submission
+    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment, completion_answer, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())`;
+    const finalAnswer = completion_answer || (activity_result ? JSON.stringify(activity_result) : null);
+    const result = await execute(sql, [homeworkId, parentId, fileURL || null, comment || null, finalAnswer], 'skydek_DB');
+    
     console.log('✅ Submission inserted successfully:', result);
-    res.status(201).json({ message: "Homework submitted successfully" });
+    
+    // Also update or insert homework completion record
+    if (completion_answer || activity_result) {
+      const completionSql = `
+        INSERT INTO homework_completions (homework_id, parent_id, completion_answer, completed_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE 
+        completion_answer = VALUES(completion_answer),
+        completed_at = VALUES(completed_at)
+      `;
+      await execute(completionSql, [homeworkId, parentId, finalAnswer], 'skydek_DB');
+      console.log('✅ Homework completion record updated');
+    }
+    
+    res.status(201).json({ 
+      message: "Homework submitted successfully",
+      submissionId: result.insertId
+    });
   } catch (error) {
     console.error('🔥 Error submitting homework:');
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
     console.error('Error code:', error.code);
-    console.error('SQL values used:', [homeworkId, parentId, fileUrl, comment]);
+    console.error('SQL values used:', [homeworkId, parentId, fileURL, comment, completion_answer]);
     
     // Return more specific error information in development
     const isDevelopment = process.env.NODE_ENV === 'development';

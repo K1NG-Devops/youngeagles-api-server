@@ -19,7 +19,7 @@ const router = Router();
 
 router.post('/assign', authMiddleware, upload.single('file'), assignHomework);
 router.get('/', authMiddleware, getHomeworkForParent);
-router.post('/submit', submitHomework);
+router.post('/submit', authMiddleware, submitHomework);
 router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);  
 router.delete('/submissions/:submissionId', authMiddleware, deleteSubmissions);
 router.get('/submissions/:homeworkId/:parentId', getSubmission);
