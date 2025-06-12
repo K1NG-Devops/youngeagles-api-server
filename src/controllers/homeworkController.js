@@ -177,8 +177,9 @@ export const submitHomework = async (req, res) => {
     console.log('🔄 Attempting to insert submission into database...');
     
     // Insert the homework submission (submissions table only has: homework_id, parent_id, file_url, comment, submitted_at)
+    // Use empty string for file_url if null to avoid NOT NULL constraint
     const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())`;
-    const result = await execute(sql, [homeworkId, parentId, fileURL || null, comment || null], 'skydek_DB');
+    const result = await execute(sql, [homeworkId, parentId, fileURL || '', comment || ''], 'skydek_DB');
     
     console.log('✅ Submission inserted successfully:', result);
     
