@@ -15,6 +15,29 @@ export const assignHomework = async (req, res) => {
     return res.status(400).json({ error: "All required fields must be provided (title, dueDate, file, className, grade)." });
   }
 
+  // Validate teacher is assigned to this class
+  try {
+    const teacherClass = await query(
+      'SELECT className, grade FROM users WHERE id = ? AND role = "teacher"',
+      [req.user.id],
+      'railway'
+    );
+    
+    if (teacherClass.length === 0) {
+      return res.status(403).json({ error: "Teacher not found or not authorized." });
+    }
+    
+    const teacher = teacherClass[0];
+    if (teacher.className !== className || teacher.grade !== grade) {
+      return res.status(403).json({ 
+        error: `You are not authorized to assign homework to ${className} ${grade}. You are assigned to ${teacher.className} ${teacher.grade}.`
+      });
+    }
+  } catch (error) {
+    console.error('Error validating teacher assignment:', error);
+    return res.status(500).json({ error: 'Error validating teacher assignment' });
+  }
+
   // Format due date
   const formattedDueDate = new Date(dueDate).toISOString().split('T')[0];
 

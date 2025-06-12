@@ -216,3 +216,114 @@ export const updateEvent = async (req, res) => {
   }
 };
 
+// Firebase authentication endpoint
+export const firebaseLogin = async (req, res) => {
+  try {
+    const { email, phone, uid, displayName } = req.body;
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Firebase ID token required' });
+    }
+    
+    const idToken = authHeader.split('Bearer ')[1];
+    
+    // Verify Firebase ID token
+    const admin = require('firebase-admin');
+    let decodedToken;
+    
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+      
+      // Check if email is verified (for email-based authentication)
+      if (email && !decodedToken.email_verified) {
+        return res.status(403).json({ 
+          message: 'Email not verified. Please verify your email before signing in.',
+          code: 'EMAIL_NOT_VERIFIED'
+        });
+      }
+      
+    } catch (error) {
+      console.error('Firebase token verification failed:', error);
+      return res.status(401).json({ message: 'Invalid Firebase token' });
+    }
+    
+    // Check if user exists in database
+    let user;
+    const identifier = email || phone;
+    
+    if (email) {
+      const [existingUser] = await query(
+        'SELECT * FROM parents WHERE email = ?',
+        [email],
+        'skydek_DB'
+      );
+      user = existingUser;
+    } else if (phone) {
+      const [existingUser] = await query(
+        'SELECT * FROM parents WHERE phone = ?',
+        [phone],
+        'skydek_DB'
+      );
+      user = existingUser;
+    }
+    
+    // If user doesn't exist, create new user
+    if (!user) {
+      const insertSql = `
+        INSERT INTO parents (email, phone, name, firebase_uid, created_at, updated_at)
+        VALUES (?, ?, ?, ?, NOW(), NOW())
+      `;
+      
+      const result = await execute(insertSql, [
+        email || null,
+        phone || null,
+        displayName || 'User',
+        uid
+      ], 'skydek_DB');
+      
+      // Fetch the newly created user
+      const [newUser] = await query(
+        'SELECT * FROM parents WHERE id = ?',
+        [result.insertId],
+        'skydek_DB'
+      );
+      user = newUser;
+    } else {
+      // Update existing user with Firebase UID if not set
+      if (!user.firebase_uid) {
+        await execute(
+          'UPDATE parents SET firebase_uid = ?, updated_at = NOW() WHERE id = ?',
+          [uid, user.id],
+          'skydek_DB'
+        );
+        user.firebase_uid = uid;
+      }
+    }
+    
+    // Generate JWT token for your system
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      phone: user.phone,
+      role: 'parent'
+    });
+    
+    res.status(200).json({
+      message: 'Firebase authentication successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: 'parent'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Firebase login error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+

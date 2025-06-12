@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query, execute } from '../db.js';
 import { body, validationResult } from 'express-validator';
 import { generateToken, verifyToken } from '../utils/jwt.js';
-import { registerChild, registerUser, loginUser, teacherLogin, adminLogin } from '../controllers/authController.js';
+import { registerChild, registerUser, loginUser, teacherLogin, adminLogin, firebaseLogin } from '../controllers/authController.js';
 import { getChildrenByTeacher } from '../controllers/teacherController.js';
 import { getChildrenForParent } from '../controllers/parentController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
@@ -105,6 +105,9 @@ router.post('/admin-login',
   adminLogin
 );
 
+
+// Firebase authentication route
+router.post('/firebase-login', firebaseLogin);
 
 router.get('/children', authMiddleware, isTeacher, getChildrenByTeacher)
 
