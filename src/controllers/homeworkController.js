@@ -187,11 +187,10 @@ export const submitHomework = async (req, res) => {
     if (completion_answer || activity_result) {
       const finalAnswer = completion_answer || (activity_result ? JSON.stringify(activity_result) : null);
       const completionSql = `
-        INSERT INTO homework_completions (homework_id, parent_id, completion_answer, completed_at)
-        VALUES (?, ?, ?, NOW())
+        INSERT INTO homework_completions (homework_id, parent_id, completion_answer)
+        VALUES (?, ?, ?)
         ON DUPLICATE KEY UPDATE 
-        completion_answer = VALUES(completion_answer),
-        completed_at = VALUES(completed_at)
+        completion_answer = VALUES(completion_answer)
       `;
       await execute(completionSql, [homeworkId, parentId, finalAnswer], 'skydek_DB');
       console.log('✅ Homework completion record updated');
