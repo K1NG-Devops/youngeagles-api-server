@@ -90,7 +90,7 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(user, process.env.JWT_SECRET, { expiresIn: '1h' }); // Token with expiry
+    const token = generateToken(user); // Token with expiry
     res.json({
       message: 'Login successful!',
       token,
@@ -130,16 +130,14 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(
-      {
-        id: user.id,
-        role: 'teacher',
-        grade: user.grade,
-        className: user.className,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: 'teacher',
+      grade: user.grade,
+      className: user.className,
+    });
 
     res.status(200).json({
       message: 'Login successful!',
@@ -181,14 +179,12 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
 
-    const token = generateToken(
-      {
-        id: user.id,
-        role: 'admin',
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: 'admin',
+    });
 
     res.status(200).json({
       message: 'Login successful!',
