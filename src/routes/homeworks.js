@@ -1,6 +1,6 @@
 import express from 'express';
 import { query, execute } from '../db.js';
-import { getHomeworkForParent, getHomeworksForTeacher } from '../controllers/homeworkController.js';
+import { getHomeworkForParent, getHomeworksForTeacher, submitHomework } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 import { sendPushNotification } from '../utils/pushNotifications.js';
 
@@ -249,11 +249,14 @@ router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);
 // Route for fetching homeworks posted by a specific teacher
 router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
 
+// Route for submitting homework
+router.post('/submit', authMiddleware, submitHomework);
+
 // Route for listing homeworks by class
 // Route for completing homework (saving completion answer)
 router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
   const { homeworkId } = req.params;
-  const { completion_answer, activity_result } = req.body;
+  const { completion_answer, activity_result, childId, parentId } = req.body;
   
   console.log('📝 Homework completion request:', {
     homeworkId,
@@ -274,26 +277,39 @@ router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
   );
 
   try {
-    // Check if completion already exists
-    const [existingCompletion] = await query(
-      'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ?',
-      [homeworkId, req.user.id],
-      'skydek_DB'
-    );
+    // Use parentId from request if provided, otherwise fall back to authenticated user
+    const effectiveParentId = parentId || req.user.id;
+    const effectiveChildId = childId || null;
+    
+    // Check if completion already exists (considering child_id if provided)
+    let existingCompletion;
+    if (effectiveChildId) {
+      [existingCompletion] = await query(
+        'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ? AND child_id = ?',
+        [homeworkId, effectiveParentId, effectiveChildId],
+        'skydek_DB'
+      );
+    } else {
+      [existingCompletion] = await query(
+        'SELECT id FROM homework_completions WHERE homework_id = ? AND parent_id = ? AND (child_id IS NULL OR child_id = ?)',
+        [homeworkId, effectiveParentId, effectiveChildId],
+        'skydek_DB'
+      );
+    }
 
     if (existingCompletion) {
-      // Update existing completion - use only basic columns
+      // Update existing completion
       await execute(
-        'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ?',
-        [finalAnswer, homeworkId, req.user.id],
+        'UPDATE homework_completions SET completion_answer = ?, updated_at = NOW() WHERE homework_id = ? AND parent_id = ? AND (child_id = ? OR (child_id IS NULL AND ? IS NULL))',
+        [finalAnswer, homeworkId, effectiveParentId, effectiveChildId, effectiveChildId],
         'skydek_DB'
       );
       console.log('✅ Updated existing homework completion');
     } else {
-      // Insert new completion - use only basic columns
+      // Insert new completion with child_id
       await execute(
-        'INSERT INTO homework_completions (homework_id, parent_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
-        [homeworkId, req.user.id, finalAnswer],
+        'INSERT INTO homework_completions (homework_id, parent_id, child_id, completion_answer, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
+        [homeworkId, effectiveParentId, effectiveChildId, finalAnswer],
         'skydek_DB'
       );
       console.log('✅ Created new homework completion');

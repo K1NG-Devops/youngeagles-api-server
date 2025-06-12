@@ -49,24 +49,42 @@ export const assignHomework = async (req, res) => {
 };
 
 export const getHomeworkForParent = async (req, res) => {
-  const { parent_id } = req.params;
+const { parent_id } = req.params;
+const { child_id } = req.query; // Required child filter
 
   try {
-    console.log('Fetching class names for parent:', parent_id);
-    
+    console.log('Fetching homework for parent:', parent_id, 'child_id:', child_id);
+    if (!child_id) {
+      return res.status(400).json({ message: 'Child ID must be specified.' });
+    }
+    // Fetch child details based on the selected child_id
     const children = await query(
-      'SELECT className FROM children WHERE parent_id = ?',
-      [parent_id],
+      'SELECT id, name, className, grade FROM children WHERE parent_id = ? AND id = ?',
+      [parent_id, child_id],
       'skydek_DB'
     );
 
     console.log('Children fetched:', children);
 
-    const classNames = children.map(child => child.className).filter(Boolean);
-    console.log('Extracted classNames:', classNames);
+    if (children.length === 0) {
+      return res.status(404).json({ message: 'No children found for this parent.' });
+    }
+
+    let targetChildren = children;
+    
+    // If a specific child is requested, filter for that child
+    if (child_id) {
+      targetChildren = children.filter(child => child.id.toString() === child_id.toString());
+      if (targetChildren.length === 0) {
+        return res.status(404).json({ message: 'Child not found for this parent.' });
+      }
+    }
+
+    const classNames = targetChildren.map(child => child.className).filter(Boolean);
+    console.log('Target class names:', classNames);
 
     if (classNames.length === 0) {
-      return res.status(404).json({ message: 'No children or class names found for this parent.' });
+      return res.status(404).json({ message: 'No classes found for the specified children.' });
     }
 
     const placeholders = classNames.map(() => '?').join(', ');
@@ -106,27 +124,54 @@ export const getHomeworkForParent = async (req, res) => {
       // Save the teacher's file URL separately (handle both file_url and fileUrl)
       hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
       
-      // Check for parent's submission
-      const [submission] = await query(
-        'SELECT id, file_url FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
-        [hw.id, parent_id],
-        'skydek_DB'
-      );
-      hw.submitted = !!submission;
-      hw.file_url = submission ? submission.file_url : null;
-      hw.submission_id = submission ? submission.id : null;
-      
-      // Get completion answer if available
-      const [completion] = await query(
-        'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
-        [hw.id, parent_id],
-        'skydek_DB'
-      );
-      hw.completion_answer = completion ? completion.completion_answer : '';
+      // Check for submissions by specific children (if child_id filter is applied)
+      if (child_id) {
+        // Check for submission by the specific child
+        const [submission] = await query(
+          'SELECT id, file_url, child_id FROM submissions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
+          [hw.id, parent_id, child_id],
+          'skydek_DB'
+        );
+        hw.submitted = !!submission;
+        hw.file_url = submission ? submission.file_url : null;
+        hw.submission_id = submission ? submission.id : null;
+        hw.child_id = submission ? submission.child_id : null;
+        
+        // Get completion answer for the specific child
+        const [completion] = await query(
+          'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
+          [hw.id, parent_id, child_id],
+          'skydek_DB'
+        );
+        hw.completion_answer = completion ? completion.completion_answer : '';
+      } else {
+        // Check for ANY submission from this parent (backward compatibility)
+        const [submission] = await query(
+          'SELECT id, file_url, child_id FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
+          [hw.id, parent_id],
+          'skydek_DB'
+        );
+        hw.submitted = !!submission;
+        hw.file_url = submission ? submission.file_url : null;
+        hw.submission_id = submission ? submission.id : null;
+        hw.child_id = submission ? submission.child_id : null;
+        
+        // Get completion answer
+        const [completion] = await query(
+          'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
+          [hw.id, parent_id],
+          'skydek_DB'
+        );
+        hw.completion_answer = completion ? completion.completion_answer : '';
+      }
     }
 
     console.log('Homeworks fetched:', homeworks);
-    return res.status(200).json({ homeworks });
+    return res.status(200).json({ 
+      homeworks,
+      children: targetChildren,
+      filtered_by_child: !!child_id
+    });
 
   } catch (error) {
     console.error('🔥 Controller Error:', error); // Enhanced logging
@@ -176,23 +221,23 @@ export const submitHomework = async (req, res) => {
   try {
     console.log('🔄 Attempting to insert submission into database...');
     
-    // Insert the homework submission (submissions table only has: homework_id, parent_id, file_url, comment, submitted_at)
+    // Insert the homework submission including child_id for proper differentiation
     // Use empty string for file_url if null to avoid NOT NULL constraint
-    const sql = `INSERT INTO submissions (homework_id, parent_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, NOW())`;
-    const result = await execute(sql, [homeworkId, parentId, fileURL || '', comment || ''], 'skydek_DB');
+    const sql = `INSERT INTO submissions (homework_id, parent_id, child_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())`;
+    const result = await execute(sql, [homeworkId, parentId, childId || null, fileURL || '', comment || ''], 'skydek_DB');
     
     console.log('✅ Submission inserted successfully:', result);
     
-    // Store completion answers in the homework_completions table
+    // Store completion answers in the homework_completions table with child_id
     if (completion_answer || activity_result) {
       const finalAnswer = completion_answer || (activity_result ? JSON.stringify(activity_result) : null);
       const completionSql = `
-        INSERT INTO homework_completions (homework_id, parent_id, completion_answer)
-        VALUES (?, ?, ?)
+        INSERT INTO homework_completions (homework_id, parent_id, child_id, completion_answer)
+        VALUES (?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE 
         completion_answer = VALUES(completion_answer)
       `;
-      await execute(completionSql, [homeworkId, parentId, finalAnswer], 'skydek_DB');
+      await execute(completionSql, [homeworkId, parentId, childId || null, finalAnswer], 'skydek_DB');
       console.log('✅ Homework completion record updated');
     }
     
