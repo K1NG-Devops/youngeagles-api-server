@@ -253,26 +253,26 @@ export const firebaseLogin = async (req, res) => {
     const identifier = email || phone;
     
     if (email) {
-      const [existingUser] = await query(
-        'SELECT * FROM parents WHERE email = ?',
+      const existingUsers = await query(
+        'SELECT * FROM users WHERE email = ?',
         [email],
         'skydek_DB'
       );
-      user = existingUser;
+      user = existingUsers[0];
     } else if (phone) {
-      const [existingUser] = await query(
-        'SELECT * FROM parents WHERE phone = ?',
+      const existingUsers = await query(
+        'SELECT * FROM users WHERE phone = ?',
         [phone],
         'skydek_DB'
       );
-      user = existingUser;
+      user = existingUsers[0];
     }
     
     // If user doesn't exist, create new user
     if (!user) {
       const insertSql = `
-        INSERT INTO parents (email, phone, name, firebase_uid, created_at, updated_at)
-        VALUES (?, ?, ?, ?, NOW(), NOW())
+        INSERT INTO users (email, phone, name, role, firebase_uid, password)
+        VALUES (?, ?, ?, 'parent', ?, 'firebase_auth')
       `;
       
       const result = await execute(insertSql, [
@@ -283,17 +283,17 @@ export const firebaseLogin = async (req, res) => {
       ], 'skydek_DB');
       
       // Fetch the newly created user
-      const [newUser] = await query(
-        'SELECT * FROM parents WHERE id = ?',
+      const newUsers = await query(
+        'SELECT * FROM users WHERE id = ?',
         [result.insertId],
         'skydek_DB'
       );
-      user = newUser;
+      user = newUsers[0];
     } else {
       // Update existing user with Firebase UID if not set
       if (!user.firebase_uid) {
         await execute(
-          'UPDATE parents SET firebase_uid = ?, updated_at = NOW() WHERE id = ?',
+          'UPDATE users SET firebase_uid = ? WHERE id = ?',
           [uid, user.id],
           'skydek_DB'
         );
