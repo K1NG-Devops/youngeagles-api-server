@@ -359,13 +359,25 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check route
+// Health check routes
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     memory: process.memoryUsage()
+  });
+});
+
+// API health check route for consistency
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    memory: process.memoryUsage(),
+    api: 'Young Eagles API Server',
+    version: '1.0.0'
   });
 });
 

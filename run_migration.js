@@ -1,45 +1,85 @@
 import { query, execute } from './src/db.js';
 
+// Helper function to check if column exists
+async function columnExists(tableName, columnName, database) {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+      [database, tableName, columnName],
+      database
+    );
+    return result[0].count > 0;
+  } catch (error) {
+    console.error(`Error checking if column ${columnName} exists in ${tableName}:`, error);
+    return false;
+  }
+}
+
+// Helper function to check if index exists
+async function indexExists(tableName, indexName, database) {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.STATISTICS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+      [database, tableName, indexName],
+      database
+    );
+    return result[0].count > 0;
+  } catch (error) {
+    console.error(`Error checking if index ${indexName} exists in ${tableName}:`, error);
+    return false;
+  }
+}
+
 async function runChildIdMigration() {
   console.log('🚀 Starting child_id migration...');
   
   try {
+    const dbName = 'skydek_DB'; // Use the correct database name
+    
     // Add child_id column to submissions table
-    console.log('📊 Adding child_id column to submissions table...');
-    await execute(
-      'ALTER TABLE submissions ADD COLUMN IF NOT EXISTS child_id INT NULL AFTER parent_id',
-      [],
-      'skydek_DB'
-    );
-    console.log('✅ child_id column added to submissions table');
+    console.log('📊 Checking submissions table for child_id column...');
+    const submissionsHasChildId = await columnExists('submissions', 'child_id', dbName);
+    
+    if (!submissionsHasChildId) {
+      console.log('📊 Adding child_id column to submissions table...');
+      await execute(
+        'ALTER TABLE submissions ADD COLUMN child_id INT NULL AFTER parent_id',
+        [],
+        'skydek_DB'
+      );
+      console.log('✅ child_id column added to submissions table');
+    } else {
+      console.log('ℹ️  child_id column already exists in submissions table');
+    }
     
     // Add indexes for submissions table
-    console.log('📊 Adding indexes to submissions table...');
-    try {
+    console.log('📊 Checking indexes on submissions table...');
+    
+    const hasChildIdIndex = await indexExists('submissions', 'idx_submissions_child_id', dbName);
+    if (!hasChildIdIndex) {
+      console.log('📊 Adding child_id index to submissions table...');
       await execute(
-        'ALTER TABLE submissions ADD INDEX IF NOT EXISTS idx_submissions_child_id (child_id)',
+        'ALTER TABLE submissions ADD INDEX idx_submissions_child_id (child_id)',
         [],
         'skydek_DB'
       );
       console.log('✅ Added index for child_id on submissions');
-    } catch (e) {
-      if (!e.message.includes('Duplicate key name')) {
-        throw e;
-      }
+    } else {
       console.log('ℹ️  Index idx_submissions_child_id already exists');
     }
     
-    try {
+    const hasCompositeIndex = await indexExists('submissions', 'idx_submissions_parent_child', dbName);
+    if (!hasCompositeIndex) {
+      console.log('📊 Adding composite index to submissions table...');
       await execute(
-        'ALTER TABLE submissions ADD INDEX IF NOT EXISTS idx_submissions_parent_child (parent_id, child_id)',
+        'ALTER TABLE submissions ADD INDEX idx_submissions_parent_child (parent_id, child_id)',
         [],
         'skydek_DB'
       );
       console.log('✅ Added composite index for parent_id, child_id on submissions');
-    } catch (e) {
-      if (!e.message.includes('Duplicate key name')) {
-        throw e;
-      }
+    } else {
       console.log('ℹ️  Index idx_submissions_parent_child already exists');
     }
     
@@ -62,36 +102,39 @@ async function runChildIdMigration() {
     console.log('✅ homework_completions table created/verified');
     
     // Add child_id column to homework_completions if it doesn't exist
-    console.log('📊 Adding child_id column to homework_completions table...');
-    try {
+    console.log('📊 Checking homework_completions table for child_id column...');
+    const homeworkHasChildId = await columnExists('homework_completions', 'child_id', dbName);
+    
+    if (!homeworkHasChildId) {
+      console.log('📊 Adding child_id column to homework_completions table...');
       await execute(
-        'ALTER TABLE homework_completions ADD COLUMN IF NOT EXISTS child_id INT NULL AFTER parent_id',
+        'ALTER TABLE homework_completions ADD COLUMN child_id INT NULL AFTER parent_id',
         [],
         'skydek_DB'
       );
       console.log('✅ child_id column added to homework_completions table');
-    } catch (e) {
-      if (!e.message.includes('Duplicate column name')) {
-        throw e;
-      }
-      console.log('ℹ️  child_id column already exists in homework_completions');
+    } else {
+      console.log('ℹ️  child_id column already exists in homework_completions table');
     }
     
     // Try to add unique constraint
-    console.log('📊 Adding unique constraint...');
-    try {
-      await execute(
-        'ALTER TABLE homework_completions ADD UNIQUE KEY IF NOT EXISTS unique_homework_parent_child (homework_id, parent_id, child_id)',
-        [],
-        'skydek_DB'
-      );
-      console.log('✅ Added unique constraint for homework_completions');
-    } catch (e) {
-      if (!e.message.includes('Duplicate key name')) {
-        console.log('⚠️  Could not add unique constraint (may already exist):', e.message);
-      } else {
-        console.log('ℹ️  Unique constraint already exists');
+    console.log('📊 Checking for unique constraint...');
+    const hasUniqueConstraint = await indexExists('homework_completions', 'unique_homework_parent_child', dbName);
+    
+    if (!hasUniqueConstraint) {
+      console.log('📊 Adding unique constraint...');
+      try {
+        await execute(
+          'ALTER TABLE homework_completions ADD UNIQUE KEY unique_homework_parent_child (homework_id, parent_id, child_id)',
+          [],
+          'skydek_DB'
+        );
+        console.log('✅ Added unique constraint for homework_completions');
+      } catch (e) {
+        console.log('⚠️  Could not add unique constraint:', e.message);
       }
+    } else {
+      console.log('ℹ️  Unique constraint already exists');
     }
     
     console.log('🎉 Migration completed successfully!');

@@ -8,18 +8,18 @@ const poolCache = {}; // Cache pools by db name
 
 const dbConfigs = {
   skydek_DB: {
-    host: process.env.MYSQLHOST,
-    user: process.env.MYSQLUSER,
-    password: process.env.MYSQLPASSWORD,
-    database: process.env.MYSQLDATABASE,
-    port: Number(process.env.MYSQLPORT) || 3306,
+    host: process.env.SKYDEK_DB_HOST,
+    user: process.env.SKYDEK_DB_USER,
+    password: process.env.SKYDEK_DB_PASSWORD,
+    database: process.env.SKYDEK_DB_NAME,
+    port: Number(process.env.SKYDEK_DB_PORT) || 3306,
   },
   railway: {
-    host: process.env.RAILWAY_HOST,
-    user: process.env.RAILWAY_USER,
-    password: process.env.RAILWAY_PASSWORD,
-    database: process.env.RAILWAY_DATABASE,
-    port: Number(process.env.RAILWAY_PORT) || 3306,
+    host: process.env.RAILWAY_DB_HOST,
+    user: process.env.RAILWAY_DB_USER,
+    password: process.env.RAILWAY_DB_PASSWORD,
+    database: process.env.RAILWAY_DB_NAME,
+    port: Number(process.env.RAILWAY_DB_PORT) || 3306,
   }
 };
 
@@ -106,13 +106,13 @@ export const transaction = async (queries, db = 'skydek_DB') => {
 };
 
 export const sequelize = new Sequelize(
-  process.env.MYSQLDATABASE,
-  process.env.MYSQLUSER,
-  process.env.MYSQLPASSWORD,
+  process.env.SKYDEK_DB_NAME,
+  process.env.SKYDEK_DB_USER,
+  process.env.SKYDEK_DB_PASSWORD,
   {
-    host: process.env.MYSQLHOST,
+    host: process.env.SKYDEK_DB_HOST,
     dialect: 'mysql',
-    port: Number(process.env.MYSQLPORT) || 3306,
+    port: Number(process.env.SKYDEK_DB_PORT) || 3306,
     logging: false,
   }
 );

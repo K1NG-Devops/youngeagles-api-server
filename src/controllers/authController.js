@@ -5,6 +5,7 @@ import { validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 import winston from 'winston';
 import Event from '../models/events.js';
+import admin from '../config/firebase-admin.js';
 
 dotenv.config();
 
@@ -229,7 +230,6 @@ export const firebaseLogin = async (req, res) => {
     const idToken = authHeader.split('Bearer ')[1];
     
     // Verify Firebase ID token
-    const admin = require('firebase-admin');
     let decodedToken;
     
     try {
