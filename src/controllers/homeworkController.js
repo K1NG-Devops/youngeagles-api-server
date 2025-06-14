@@ -396,10 +396,12 @@ export const updateHomework = async (req, res) => {
 export const getSubmissionsForHomework = async (req, res) => {
   const { homeworkId } = req.params;
   try {
+    const teacherId = req.user.id;
+    
     // First verify the homework exists and belongs to the teacher
     const [homework] = await query(
       'SELECT * FROM homeworks WHERE id = ? AND uploaded_by_teacher_id = ?',
-      [homeworkId, req.user.id],
+      [homeworkId, teacherId],
       'skydek_DB'
     );
     
@@ -407,33 +409,49 @@ export const getSubmissionsForHomework = async (req, res) => {
       return res.status(404).json({ message: 'Homework not found or unauthorized' });
     }
     
-    // Get all submissions for this homework with parent/student details
+    // Get teacher's assigned class to ensure we only show submissions from their class
+    const teacherRows = await query(
+      "SELECT className, grade FROM users WHERE id = ?",
+      [teacherId],
+      'railway'
+    );
+    
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ message: "Teacher not found." });
+    }
+    
+    const teacherClass = teacherRows[0];
+    console.log('🏫 Teacher checking submissions for class:', teacherClass.className);
+    
+    // Get submissions for this homework ONLY from children in teacher's class
     const submissions = await query(`
       SELECT 
         s.*,
         c.name as student_name,
-        c.className,
+        c.className as student_class,
         hc.completion_answer
       FROM submissions s
-      LEFT JOIN children c ON s.parent_id = c.parent_id
-      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id
-      WHERE s.homework_id = ?
+      LEFT JOIN children c ON s.child_id = c.id
+      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id AND hc.child_id = s.child_id
+      WHERE s.homework_id = ? AND c.className = ?
       ORDER BY s.submitted_at DESC
-    `, [homeworkId], 'skydek_DB');
+    `, [homeworkId, teacherClass.className], 'skydek_DB');
     
-    // Get all students in the class to show who hasn't submitted
+    console.log(`📋 Found ${submissions.length} submissions from ${teacherClass.className} class`);
+    
+    // Get all students in the teacher's class to show who hasn't submitted
     const allStudents = await query(
       'SELECT * FROM children WHERE className = ?',
-      [homework.class_name],
+      [teacherClass.className],
       'skydek_DB'
     );
     
-    // Mark which students have submitted
-    const submittedParentIds = submissions.map(s => s.parent_id);
+    // Mark which students have submitted (using child_id for proper matching)
+    const submittedChildIds = submissions.map(s => s.child_id).filter(Boolean);
     const studentsWithStatus = allStudents.map(student => ({
       ...student,
-      hasSubmitted: submittedParentIds.includes(student.parent_id),
-      submission: submissions.find(s => s.parent_id === student.parent_id) || null
+      hasSubmitted: submittedChildIds.includes(student.id),
+      submission: submissions.find(s => s.child_id === student.id) || null
     }));
     
     res.json({
@@ -442,7 +460,8 @@ export const getSubmissionsForHomework = async (req, res) => {
       studentsWithStatus,
       totalStudents: allStudents.length,
       submittedCount: submissions.length,
-      pendingCount: allStudents.length - submissions.length
+      pendingCount: allStudents.length - submissions.length,
+      teacherClass: teacherClass.className
     });
   } catch (err) {
     console.error('Error fetching submissions:', err);
@@ -455,6 +474,21 @@ export const getAllSubmissionsForTeacher = async (req, res) => {
   try {
     const teacherId = req.user.id;
     
+    // Step 1: Get teacher's assigned class
+    const teacherRows = await query(
+      "SELECT className, grade FROM users WHERE id = ?",
+      [teacherId],
+      'railway'
+    );
+    
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ message: "Teacher not found." });
+    }
+    
+    const teacherClass = teacherRows[0];
+    console.log('🏫 Teacher assigned to class:', teacherClass.className, teacherClass.grade);
+    
+    // Step 2: Get submissions for homework created by this teacher AND for children in teacher's class
     const submissions = await query(`
       SELECT 
         s.*,
@@ -462,16 +496,24 @@ export const getAllSubmissionsForTeacher = async (req, res) => {
         h.due_date,
         h.class_name,
         c.name as student_name,
+        c.className as student_class,
         hc.completion_answer
       FROM submissions s
       JOIN homeworks h ON s.homework_id = h.id
-      LEFT JOIN children c ON s.parent_id = c.parent_id
-      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id
-      WHERE h.uploaded_by_teacher_id = ?
+      LEFT JOIN children c ON s.child_id = c.id
+      LEFT JOIN homework_completions hc ON hc.homework_id = s.homework_id AND hc.parent_id = s.parent_id AND hc.child_id = s.child_id
+      WHERE h.uploaded_by_teacher_id = ? 
+        AND c.className = ?
       ORDER BY s.submitted_at DESC
-    `, [teacherId], 'skydek_DB');
+    `, [teacherId, teacherClass.className], 'skydek_DB');
     
-    res.json({ submissions });
+    console.log('📋 Found submissions for teacher class:', submissions.length);
+    
+    res.json({ 
+      submissions,
+      teacherClass: teacherClass.className,
+      teacherGrade: teacherClass.grade
+    });
   } catch (err) {
     console.error('Error fetching all submissions:', err);
     res.status(500).json({ message: 'Server error.' });
