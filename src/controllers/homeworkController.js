@@ -77,8 +77,13 @@ const { child_id } = req.query; // Required child filter
 
   try {
     console.log('Fetching homework for parent:', parent_id, 'child_id:', child_id);
-    if (!child_id) {
-      return res.status(400).json({ message: 'Child ID must be specified.' });
+    
+    // Validate child_id parameter more strictly
+    if (!child_id || child_id.trim() === '' || child_id === 'undefined' || child_id === 'null') {
+      return res.status(400).json({ 
+        message: 'Child ID must be specified and valid.',
+        received: { parent_id, child_id }
+      });
     }
     // Fetch child details based on the selected child_id
     const children = await query(
@@ -147,46 +152,39 @@ const { child_id } = req.query; // Required child filter
       // Save the teacher's file URL separately (handle both file_url and fileUrl)
       hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
       
-      // Check for submissions by specific children (if child_id filter is applied)
-      if (child_id) {
-        // Check for submission by the specific child
-        const [submission] = await query(
-          'SELECT id, file_url, child_id FROM submissions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
-          [hw.id, parent_id, child_id],
-          'skydek_DB'
-        );
-        hw.submitted = !!submission;
-        hw.file_url = submission ? submission.file_url : null;
-        hw.submission_id = submission ? submission.id : null;
-        hw.child_id = submission ? submission.child_id : null;
-        
-        // Get completion answer for the specific child
-        const [completion] = await query(
-          'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
-          [hw.id, parent_id, child_id],
-          'skydek_DB'
-        );
-        hw.completion_answer = completion ? completion.completion_answer : '';
-      } else {
-        // Check for ANY submission from this parent (backward compatibility)
-        const [submission] = await query(
-          'SELECT id, file_url, child_id FROM submissions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
-          [hw.id, parent_id],
-          'skydek_DB'
-        );
-        hw.submitted = !!submission;
-        hw.file_url = submission ? submission.file_url : null;
-        hw.submission_id = submission ? submission.id : null;
-        hw.child_id = submission ? submission.child_id : null;
-        
-        // Get completion answer
-        const [completion] = await query(
-          'SELECT completion_answer FROM homework_completions WHERE homework_id = ? AND parent_id = ? LIMIT 1',
-          [hw.id, parent_id],
-          'skydek_DB'
-        );
-        hw.completion_answer = completion ? completion.completion_answer : '';
-      }
+      // Always check for submissions by the specific child only (since child_id is now required)
+      const [submission] = await query(
+        'SELECT id, file_url, child_id, submitted_at FROM submissions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
+        [hw.id, parent_id, child_id],
+        'skydek_DB'
+      );
+      
+      // Set submission status and details
+      hw.submitted = !!submission;
+      hw.submission_file_url = submission ? submission.file_url : null;
+      hw.submission_id = submission ? submission.id : null;
+      hw.submission_child_id = submission ? submission.child_id : null;
+      hw.submitted_at = submission ? submission.submitted_at : null;
+      
+      // Get completion answer for the specific child
+      const [completion] = await query(
+        'SELECT completion_answer, created_at, updated_at FROM homework_completions WHERE homework_id = ? AND parent_id = ? AND child_id = ? LIMIT 1',
+        [hw.id, parent_id, child_id],
+        'skydek_DB'
+      );
+      
+      hw.completion_answer = completion ? completion.completion_answer : '';
+      hw.completion_created_at = completion ? completion.created_at : null;
+      hw.completion_updated_at = completion ? completion.updated_at : null;
+      
+      // Keep original teacher file URL preserved
+      hw.teacher_file_url = hw.file_url || hw.fileUrl || null;
+      
+      // Set file_url to submission file for consistency with frontend expectations
+      hw.file_url = hw.submission_file_url;
+      
+      console.log(`Homework ${hw.id} for child ${child_id}: submitted=${hw.submitted}, has_completion=${!!hw.completion_answer}`);
+      
     }
 
     console.log('Homeworks fetched:', homeworks);
@@ -477,5 +475,78 @@ export const getAllSubmissionsForTeacher = async (req, res) => {
   } catch (err) {
     console.error('Error fetching all submissions:', err);
     res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+// Debug endpoint to troubleshoot specific homework and submission issues
+export const debugHomeworkSubmission = async (req, res) => {
+  const { homeworkId, parentId, childId } = req.query;
+  
+  try {
+    console.log('🔍 Debug request for:', { homeworkId, parentId, childId });
+    
+    // Get homework details
+    const [homework] = await query(
+      'SELECT * FROM homeworks WHERE id = ?',
+      [homeworkId],
+      'skydek_DB'
+    );
+    
+    // Get all submissions for this homework
+    const allSubmissions = await query(
+      'SELECT * FROM submissions WHERE homework_id = ?',
+      [homeworkId],
+      'skydek_DB'
+    );
+    
+    // Get submissions for this specific parent
+    const parentSubmissions = await query(
+      'SELECT * FROM submissions WHERE homework_id = ? AND parent_id = ?',
+      [homeworkId, parentId],
+      'skydek_DB'
+    );
+    
+    // Get submissions for this specific child
+    const childSubmissions = childId ? await query(
+      'SELECT * FROM submissions WHERE homework_id = ? AND parent_id = ? AND child_id = ?',
+      [homeworkId, parentId, childId],
+      'skydek_DB'
+    ) : [];
+    
+    // Get all completion records for this homework
+    const allCompletions = await query(
+      'SELECT * FROM homework_completions WHERE homework_id = ?',
+      [homeworkId],
+      'skydek_DB'
+    );
+    
+    // Get child details
+    const childDetails = childId ? await query(
+      'SELECT * FROM children WHERE id = ? AND parent_id = ?',
+      [childId, parentId],
+      'skydek_DB'
+    ) : [];
+    
+    res.json({
+      debug_info: {
+        homework,
+        allSubmissions: allSubmissions.length,
+        parentSubmissions: parentSubmissions.length,
+        childSubmissions: childSubmissions.length,
+        allCompletions: allCompletions.length,
+        childDetails: childDetails.length > 0 ? childDetails[0] : null
+      },
+      detailed_data: {
+        homework,
+        allSubmissions,
+        parentSubmissions,
+        childSubmissions,
+        allCompletions,
+        childDetails
+      }
+    });
+  } catch (err) {
+    console.error('Error in debug endpoint:', err);
+    res.status(500).json({ error: 'Debug endpoint error', message: err.message });
   }
 };

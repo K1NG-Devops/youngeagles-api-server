@@ -1,6 +1,6 @@
 import express from 'express';
 import { query, execute } from '../db.js';
-import { getHomeworkForParent, getHomeworksForTeacher, submitHomework } from '../controllers/homeworkController.js';
+import { getHomeworkForParent, getHomeworksForTeacher, submitHomework, debugHomeworkSubmission } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
 import { sendPushNotification } from '../utils/pushNotifications.js';
 
@@ -324,6 +324,9 @@ router.post('/:homeworkId/complete', authMiddleware, async (req, res) => {
     });
   }
 });
+
+// Debug route for troubleshooting homework submission issues
+router.get('/debug', authMiddleware, debugHomeworkSubmission);
 
 // Route for listing homeworks by class
 router.get('/list', authMiddleware, async (req, res) => {
