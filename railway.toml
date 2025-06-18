@@ -1,0 +1,15 @@
+[build]
+builder = "NIXPACKS"
+watchPatterns = ["src/**", "package.json"]
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+
+[environments.production]
+NODE_ENV = "production"
+
+[environments.staging]
+NODE_ENV = "staging"
+
