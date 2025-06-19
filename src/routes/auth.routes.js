@@ -22,7 +22,10 @@ const router = Router();
 // /auth/register
 router.post('/register',
   [
+    body('name').notEmpty().withMessage('Name is required.'),
     body('email').isEmail().withMessage('Invalid email format.'),
+    body('phone').notEmpty().withMessage('Phone number is required.'),
+    body('address').notEmpty().withMessage('Address is required.'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long.'),
   ],
   (req, res, next) => {

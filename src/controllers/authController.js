@@ -37,12 +37,12 @@ export const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12); // Increased salt rounds
     
-    // Convert undefined values to null to prevent MySQL2 errors
+    // Prepare parameters - workAddress can be null, but other fields are required
     const params = [
-      name || null,
-      email || null,
-      phone || null,
-      address || null,
+      name,
+      email,
+      phone,
+      address,
       workAddress || null,
       hashedPassword,
       role
