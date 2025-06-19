@@ -377,6 +377,81 @@ app.get('/api/teachers/:teacherId', authMiddleware, isTeacher, async (req, res) 
   }
   });
 
+// Serve manifest.json for PWA
+app.get('/manifest.json', (req, res) => {
+  const manifest = {
+    "name": "Young Eagles Home Care Centre",
+    "short_name": "Young Eagles",
+    "description": "Educational app connecting teachers, parents and students with homework, messaging and progress tracking",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#3B82F6",
+    "theme_color": "#3B82F6",
+    "orientation": "portrait-primary",
+    "scope": "/",
+    "lang": "en",
+    "icons": [
+      {
+        "src": "/icon-48x48.png",
+        "sizes": "48x48",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/icon-72x72.png",
+        "sizes": "72x72",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/icon-96x96.png",
+        "sizes": "96x96",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/icon-144x144.png",
+        "sizes": "144x144",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/icon-192x192.png",
+        "sizes": "192x192",
+        "type": "image/png",
+        "purpose": "any maskable"
+      },
+      {
+        "src": "/icon-512x512.png",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "any maskable"
+      }
+    ],
+    "categories": ["education", "productivity"],
+    "screenshots": [
+      {
+        "src": "/screenshots/homework-list.png",
+        "sizes": "390x844",
+        "type": "image/png",
+        "platform": "mobile",
+        "label": "Homework List View"
+      },
+      {
+        "src": "/screenshots/interactive-activity.png",
+        "sizes": "390x844",
+        "type": "image/png",
+        "platform": "mobile",
+        "label": "Interactive Learning Activity"
+      }
+    ]
+  };
+  
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins for manifest
+  res.json(manifest);
+});
+
 // Root route
 app.get('/', (req, res) => {
   res.json({ 
@@ -389,7 +464,8 @@ app.get('/', (req, res) => {
       homeworks: '/api/homeworks',
       attendance: '/api/attendance',
       events: '/api/events',
-      fcm: '/api/fcm'
+      fcm: '/api/fcm',
+      manifest: '/manifest.json'
     },
     timestamp: new Date().toISOString()
   });
