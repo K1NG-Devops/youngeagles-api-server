@@ -1,0 +1,46 @@
+{
+  "name": "youngeagles-api-server",
+  "version": "1.0.1",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/K1NG-Devops/youngeagles-api-server.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/K1NG-Devops/youngeagles-api-server/issues"
+  },
+  "homepage": "https://github.com/K1NG-Devops/youngeagles-api-server#readme",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "firebase-admin": "^13.3.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.2",
+    "mysql2": "^3.14.1",
+    "nodemailer": "^7.0.3",
+    "sequelize": "^6.37.7",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.27.0",
+    "nodemon": "^3.1.10"
+  },
+  "keywords": [],
+  "description": ""
+}

@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: youngeagles-api-server-dev
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    branch: development
+    envVars:
+      - key: NODE_ENV
+        value: development
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGIN
+        value: http://localhost:5173
+      # Use existing Railway database connections
+      - key: SKYDEK_DB_HOST
+        sync: false
+      - key: SKYDEK_DB_USER
+        sync: false
+      - key: SKYDEK_DB_PASSWORD
+        sync: false
+      - key: SKYDEK_DB_NAME
+        sync: false
+      - key: SKYDEK_DB_PORT
+        sync: false
+      - key: RAILWAY_DB_HOST
+        sync: false
+      - key: RAILWAY_DB_USER
+        sync: false
+      - key: RAILWAY_DB_PASSWORD
+        sync: false
+      - key: RAILWAY_DB_NAME
+        sync: false
+      - key: RAILWAY_DB_PORT
+        sync: false
+    autoDeploy: true
+    healthCheckPath: /api/health
+    numInstances: 1
+    disk:
+      name: tmp
+      mountPath: /tmp
+      sizeGB: 1
+
+databases:
+  - name: youngeagles-skydek-db
+    databaseName: skydek_DB
+    plan: free
+    ipAllowList: []
+
+  - name: youngeagles-railway-db
+    databaseName: railway
+    plan: free
+    ipAllowList: []
+
