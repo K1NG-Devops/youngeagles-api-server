@@ -642,11 +642,6 @@ sequelize.sync({ alter: true })
     console.error('Error syncing database:', err);
   });
 
-// Start server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`API server is running on port ${port}`);
-});
 
 app.post('/api/fcm/token', authMiddleware, async (req, res) => {
   const { token, deviceInfo } = req.body;
