@@ -31,19 +31,34 @@ import publicRoutes from './routes/public.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const allowedOrigins = [
+// Production origins - always allowed
+const productionOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
-  'http://localhost:5173',
+  'https://youngeagles-app.vercel.app',
+  'https://app.youngeagles.org.za',
 ];
 
-// Always allow localhost:5173 in development for React dev server
+// Development origins - only in development
+const developmentOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+];
+
+// Build allowed origins based on environment
+const allowedOrigins = [...productionOrigins];
+
+// Only add localhost origins in development
 if (process.env.NODE_ENV === 'development') {
-  allowedOrigins.push('http://localhost:5173');
+  allowedOrigins.push(...developmentOrigins);
+  console.log('🔧 Development mode: localhost origins enabled');
 }
 
+// Allow custom CORS origin from environment variable (for development)
 if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
   allowedOrigins.push(process.env.CORS_ORIGIN);
+  console.log('🔧 Custom CORS origin added:', process.env.CORS_ORIGIN);
 }
 
 testAllConnections();
@@ -62,6 +77,9 @@ app.use((req, res, next) => {
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Log allowed origins for debugging
+console.log('🌐 CORS allowed origins:', allowedOrigins);
 
 app.use(cors({
   origin: allowedOrigins,
