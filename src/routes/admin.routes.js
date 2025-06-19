@@ -151,4 +151,53 @@ router.delete('/parents/:id', authMiddleware, isAdmin, async (req, res) => {
 // Reset teacher password (admin only)
 router.post('/teachers/:teacherId/reset-password', authMiddleware, isAdmin, adminResetTeacherPassword);
 
+// Admin dashboard summary endpoint
+router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    // Get user counts
+    const [users, teachers, parents] = await Promise.all([
+      query('SELECT COUNT(*) as count FROM users'),
+      query("SELECT COUNT(*) as count FROM users WHERE role = 'teacher'"),
+      query("SELECT COUNT(*) as count FROM users WHERE role = 'parent'")
+    ]);
+
+    // Get homework and submission counts
+    const [homeworks, submissions] = await Promise.all([
+      query('SELECT COUNT(*) as count FROM homeworks'),
+      query('SELECT COUNT(*) as count FROM homework_submissions')
+    ]);
+
+    // Get recent activity (last 5 users and last 5 homeworks)
+    const recentUsers = await query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5');
+    const recentHomeworks = await query('SELECT id, title, created_at FROM homeworks ORDER BY created_at DESC LIMIT 5');
+
+    // Format recent activity
+    const recentActivity = [
+      ...recentUsers.map(u => ({
+        type: 'user',
+        message: `New ${u.role} registered: ${u.name}`,
+        timestamp: u.created_at
+      })),
+      ...recentHomeworks.map(h => ({
+        type: 'homework',
+        message: `Homework posted: ${h.title}`,
+        timestamp: h.created_at
+      }))
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5);
+
+    res.json({
+      totalUsers: users[0].count,
+      totalTeachers: teachers[0].count,
+      totalParents: parents[0].count,
+      totalHomeworks: homeworks[0].count,
+      totalSubmissions: submissions[0].count,
+      systemHealth: 'Good',
+      recentActivity
+    });
+  } catch (error) {
+    console.error('Error fetching admin dashboard:', error);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 export default router; 
