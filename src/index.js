@@ -31,12 +31,17 @@ import publicRoutes from './routes/public.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Production origins only
+// Production origins and development origins
 const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
   'https://youngeagles-app.vercel.app',
   'https://app.youngeagles.org.za',
+  // Development origins
+  'http://localhost:5173',  // Vite dev server
+  'http://localhost:4173',  // Vite preview
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4173',
 ];
 
 testAllConnections();
