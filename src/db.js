@@ -29,14 +29,12 @@ const getPool = (db = 'skydek_DB') => {
       connectTimeout: 10000,
     };
     
-    // Only use SSL in production environment
-    if (process.env.NODE_ENV !== 'development') {
-      connectionOptions.ssl = { rejectUnauthorized: false };
-    }
+    // Always use SSL
+    connectionOptions.ssl = { rejectUnauthorized: false };
     
     poolCache[db] = mysql.createPool(connectionOptions);
     
-    console.log(`🔌 Creating connection pool for ${db} database in ${process.env.NODE_ENV} environment`);
+    console.log(`🔌 Creating connection pool for ${db} database`);
   }
   return poolCache[db];
 };

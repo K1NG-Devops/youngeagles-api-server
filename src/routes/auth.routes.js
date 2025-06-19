@@ -203,7 +203,7 @@ router.get('/debug/data', async (req, res) => {
 });
 
 // /auth/profile
-router.get('/profile', verifyToken, async (req, res) => {
+router.get('/profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const rows = await query('SELECT id, name, email, phone FROM users WHERE id = ?', [userId]);
@@ -217,7 +217,7 @@ router.get('/profile', verifyToken, async (req, res) => {
   }
 });
 // /auth/profile
-router.put('/profile', verifyToken, async (req, res) => {
+router.put('/profile', authMiddleware, async (req, res) => {
   const { name, email, phone } = req.body;
   const userId = req.user.id;
 
@@ -240,7 +240,7 @@ router.put('/profile', verifyToken, async (req, res) => {
 // ✅ POST /auth/reset-password
 
 // ✅ GET /auth/users (for admin/testing)
-router.get('/users', verifyToken, async (req, res) => {
+router.get('/users', authMiddleware, async (req, res) => {
   try {
     const users = await query('SELECT id, name, email FROM users');
     res.json(users);
@@ -317,9 +317,23 @@ router.get('/users/:id', async (req, res) => {
 });
 
 // ✅ logout route
-router.post('/logout', verifyToken, (req, res) => {
+router.post('/logout', authMiddleware, (req, res) => {
   // Invalidate the token on the client side
   res.json({ message: 'Logged out successfully!' });
+});
+
+// ✅ verify token route
+router.get('/verify', authMiddleware, (req, res) => {
+  // If we get here, the token is valid (authMiddleware passed)
+  res.json({ 
+    message: 'Token is valid',
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      name: req.user.name
+    }
+  });
 });
 // ✅ refresh token route
 

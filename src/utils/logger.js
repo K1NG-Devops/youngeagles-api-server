@@ -21,11 +21,9 @@ const logColors = {
 // Tell winston that you want to link the colors
 winston.addColors(logColors);
 
-// Define which logs to print based on environment
+// Define which logs to print
 const level = () => {
-  const env = process.env.NODE_ENV || 'development';
-  const isDevelopment = env === 'development';
-  return isDevelopment ? 'debug' : 'warn';
+  return 'warn';
 };
 
 // Define different log formats

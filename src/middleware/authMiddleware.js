@@ -7,15 +7,8 @@ export const authMiddleware = (req, res, next) => {
   console.log('🔐 Auth middleware called:', {
     method: req.method,
     url: req.url,
-    hasAuthHeader: !!authHeader,
-    nodeEnv: process.env.NODE_ENV
+    hasAuthHeader: !!authHeader
   });
-
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🚧 Development mode: bypassing auth');
-    req.user = { id: 1, email:'test@youngeagles.org.za', role: 'teacher'};
-    return next();
-  }
 
   if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
     console.log('❌ No valid auth header found');
@@ -24,6 +17,12 @@ export const authMiddleware = (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
   console.log('🎟️ Token extracted, length:', token?.length);
+
+  // Check if token is a valid string
+  if (!token || typeof token !== 'string' || token.trim() === '') {
+    console.log('❌ Invalid token format');
+    return res.status(401).json({ message: 'Invalid token format.' });
+  }
 
   try {
     const decoded = verifyToken(token);
@@ -35,7 +34,11 @@ export const authMiddleware = (req, res, next) => {
     req.user = decoded; // includes `id`, `role`, etc.
     next();
   } catch (err) {
-    console.log('❌ Token verification failed:', err.message);
+    console.log('❌ Token verification failed:', {
+      error: err.message,
+      tokenLength: token?.length,
+      tokenType: typeof token
+    });
     return res.status(401).json({ message: 'Invalid token.' });
   }
 };

@@ -120,7 +120,7 @@ router.post('/contact',
       console.error('Contact form submission error:', error);
       res.status(500).json({ 
         message: 'Failed to submit contact form',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        error: 'Internal server error'
       });
     }
   }
@@ -306,7 +306,7 @@ router.post('/register-2026',
       console.error('Registration submission error:', error);
       res.status(500).json({ 
         message: 'Failed to submit registration',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        error: 'Internal server error'
       });
     }
   }
@@ -343,7 +343,7 @@ router.get('/registrations-stats', async (req, res) => {
     console.error('Stats retrieval error:', error);
     res.status(500).json({ 
       message: 'Failed to retrieve statistics',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      error: 'Internal server error'
     });
   }
 });

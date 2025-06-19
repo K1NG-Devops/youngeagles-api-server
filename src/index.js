@@ -31,35 +31,13 @@ import publicRoutes from './routes/public.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Production origins - always allowed
-const productionOrigins = [
+// Production origins only
+const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
   'https://youngeagles-app.vercel.app',
   'https://app.youngeagles.org.za',
 ];
-
-// Development origins - only in development
-const developmentOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-];
-
-// Build allowed origins based on environment
-const allowedOrigins = [...productionOrigins];
-
-// Only add localhost origins in development
-if (process.env.NODE_ENV === 'development') {
-  allowedOrigins.push(...developmentOrigins);
-  console.log('🔧 Development mode: localhost origins enabled');
-}
-
-// Allow custom CORS origin from environment variable (for development)
-if (process.env.NODE_ENV === 'development' && process.env.CORS_ORIGIN) {
-  allowedOrigins.push(process.env.CORS_ORIGIN);
-  console.log('🔧 Custom CORS origin added:', process.env.CORS_ORIGIN);
-}
 
 testAllConnections();
 
@@ -220,7 +198,7 @@ app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res)
     res.status(500).json({ 
       message: 'Error saving homework completion', 
       error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: undefined
     });
   }
 });
@@ -310,7 +288,7 @@ app.post('/api/submissions', authMiddleware, async (req, res) => {
     res.status(500).json({ 
       message: 'Error submitting homework', 
       error: error.message,
-      ...(process.env.NODE_ENV === 'development' && { details: error.stack })
+      details: undefined
     });
   }
 });
@@ -804,7 +782,7 @@ app.post('/api/fcm/token', authMiddleware, async (req, res) => {
     console.error('Error saving FCM token:', error);
     res.status(500).json({ 
       message: 'Failed to register FCM token', 
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined 
+      error: undefined
     });
   }
 });

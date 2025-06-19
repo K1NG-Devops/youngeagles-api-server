@@ -273,14 +273,8 @@ export const submitHomework = async (req, res) => {
     console.error('Error code:', error.code);
     console.error('SQL values used:', [homeworkId, parentId, fileURL, comment, completion_answer]);
     
-    // Return more specific error information in development
-    const isDevelopment = process.env.NODE_ENV === 'development';
     res.status(500).json({ 
-      error: 'Internal server error',
-      ...(isDevelopment && { 
-        details: error.message,
-        code: error.code 
-      })
+      error: 'Internal server error'
     });
   }
 };

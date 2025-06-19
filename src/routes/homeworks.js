@@ -237,8 +237,7 @@ router.post('/fcm/token', authMiddleware, async (req, res) => {
     });
     res.status(500).json({ 
       error: 'Failed to save FCM token',
-      message: err.message,
-      ...(process.env.NODE_ENV === 'development' && { details: err.stack })
+      message: err.message
     });
   }
 });
