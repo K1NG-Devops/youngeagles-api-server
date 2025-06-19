@@ -36,9 +36,22 @@ export const registerUser = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12); // Increased salt rounds
+    
+    // Convert undefined values to null to prevent MySQL2 errors
+    const params = [
+      name || null,
+      email || null,
+      phone || null,
+      address || null,
+      workAddress || null,
+      hashedPassword,
+      role
+    ];
+    
     await execute(
       'INSERT INTO users (name, email, phone, address, workaddress, password, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, phone, address, workAddress, hashedPassword, role]
+      params,
+      'skydek_DB'
     );
 
     res.status(201).json({ message: 'Parent registered successfully!' });
@@ -58,9 +71,21 @@ export const registerChild = async (req, res) => {
       return res.status(400).json({ message: 'Parent not found or invalid role.' });
     }
 
+    // Convert undefined values to null to prevent MySQL2 errors
+    const params = [
+      name || null,
+      parent_id || null,
+      gender || null,
+      dob || null,
+      age || null,
+      grade || null,
+      className || null
+    ];
+
     await execute(
       'INSERT INTO children (name, parent_id, gender, dob, age, grade, className) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, parent_id, gender, dob, age, grade, className]
+      params,
+      'skydek_DB'
     );
 
     res.status(201).json({ message: 'Child registered successfully!' });
