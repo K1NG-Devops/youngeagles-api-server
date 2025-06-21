@@ -35,14 +35,24 @@ const __dirname = path.dirname(__filename);
 const allowedOrigins = [
   'https://react-app-iota-nine.vercel.app',
   'https://www.youngeagles.org.za',
+  'https://youngeagles.org.za',
   'https://youngeagles-app.vercel.app',
   'https://app.youngeagles.org.za',
-  'https://youngeagles-pwa.vercel.app',  // Add PWA domain
+  'https://youngeagles-pwa.vercel.app',
+  'https://youngeagles-okhsn0ek5-k1ng-devops-projects.vercel.app',
+  // Add all recent Vercel deployment URLs
+  'https://youngeagles-xn9s9jyvg-k1ng-devops-projects.vercel.app',
+  'https://youngeagles-5zn5e0902-k1ng-devops-projects.vercel.app',
+  'https://youngeagles-ho1q0i7kv-k1ng-devops-projects.vercel.app',
+  // Add wildcard for all Vercel subdomains (temporary for debugging)
+  /https:\/\/youngeagles-.*\.vercel\.app$/,
+  /https:\/\/.*-k1ng-devops-projects\.vercel\.app$/,
   // Development origins
   'http://localhost:5173',  // Vite dev server
   'http://localhost:4173',  // Vite preview
   'http://127.0.0.1:5173',
   'http://127.0.0.1:4173',
+  'http://localhost:3002',  // PWA dev server
 ];
 
 testAllConnections();
@@ -65,13 +75,48 @@ app.use(express.urlencoded({ extended: true }));
 // Log allowed origins for debugging
 console.log('🌐 CORS allowed origins:', allowedOrigins);
 
+// Enhanced CORS configuration with debugging
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    console.log('🔍 CORS check for origin:', origin);
+    
+    // Check against string origins
+    if (allowedOrigins.includes(origin)) {
+      console.log('✅ CORS allowed for:', origin);
+      return callback(null, true);
+    }
+    
+    // Check against regex patterns
+    for (const pattern of allowedOrigins) {
+      if (pattern instanceof RegExp && pattern.test(origin)) {
+        console.log('✅ CORS allowed for (regex match):', origin);
+        return callback(null, true);
+      }
+    }
+    
+    console.log('❌ CORS blocked for:', origin);
+    console.log('📋 Allowed origins:', allowedOrigins);
+    callback(new Error('Not allowed by CORS'), false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'cache-control', 'x-request-source'],
   optionsSuccessStatus: 200,
 }));
+
+// Add explicit preflight handling for auth endpoints
+app.options('/api/auth/*', (req, res) => {
+  console.log('🔄 Preflight request for auth endpoint:', req.url);
+  console.log('🌐 Origin:', req.headers.origin);
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, cache-control, x-request-source');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -776,84 +821,4 @@ app.post('/api/fcm/token', authMiddleware, async (req, res) => {
         database
       );
       
-      console.log(`🔄 FCM token updated for ${userType} ${userId} in ${database}`);
-    }
-    
-    res.status(200).json({ 
-      message: 'FCM token registered successfully',
-      userType,
-      database: database === 'skydek_DB' ? 'Parents/Children DB' : 'Teachers/Admin DB'
-    });
-  } catch (error) {
-    console.error('Error saving FCM token:', error);
-    res.status(500).json({ 
-      message: 'Failed to register FCM token', 
-      error: undefined
-    });
-  }
-});
-
-// FCM Token cleanup endpoint (optional - for removing inactive tokens)
-app.delete('/api/fcm/token/:tokenId', authMiddleware, async (req, res) => {
-  const { tokenId } = req.params;
-  const userId = req.user.id;
-  const userRole = req.user.role;
-  
-  const database = (userRole === 'parent') ? 'skydek_DB' : 'railway';
-  const userType = userRole === 'admin' ? 'admin' : userRole;
-  
-  try {
-    const result = await execute(
-      'UPDATE fcm_tokens SET is_active = FALSE WHERE id = ? AND user_id = ? AND user_type = ?',
-      [tokenId, userId, userType],
-      database
-    );
-    
-    if (result.affectedRows > 0) {
-      res.status(200).json({ message: 'FCM token deactivated successfully' });
-    } else {
-      res.status(404).json({ message: 'FCM token not found or already inactive' });
-    }
-  } catch (error) {
-    console.error('Error deactivating FCM token:', error);
-    res.status(500).json({ message: 'Failed to deactivate FCM token' });
-  }
-});
-
-// Get user's FCM tokens (for debugging/admin purposes)
-app.get('/api/fcm/tokens', authMiddleware, async (req, res) => {
-  const userId = req.user.id;
-  const userRole = req.user.role;
-  
-  const database = (userRole === 'parent') ? 'skydek_DB' : 'railway';
-  const userType = userRole === 'admin' ? 'admin' : userRole;
-  
-  try {
-    const tokens = await query(
-      'SELECT id, device_type, is_active, last_used, created_at FROM fcm_tokens WHERE user_id = ? AND user_type = ? AND is_active = TRUE',
-      [userId, userType],
-      database
-    );
-    
-    res.status(200).json({ 
-      tokens,
-      count: tokens.length,
-      userType,
-      database: database === 'skydek_DB' ? 'Parents/Children DB' : 'Teachers/Admin DB'
-    });
-  } catch (error) {
-    console.error('Error fetching FCM tokens:', error);
-    res.status(500).json({ message: 'Failed to fetch FCM tokens' });
-  }
-});
-
-// Initialize database route
-app.use('/api/init-db', initDbRoutes);
-
-// Start server
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🚀 Young Eagles API server is running on port ${port}`);
-  console.log(`📍 API endpoints available at http://localhost:${port}/api`);
-  console.log(`🏥 Health check: http://localhost:${port}/health`);
-});
+      console.log(`
