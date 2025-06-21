@@ -69,7 +69,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'cache-control'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'cache-control', 'x-request-source'],
   optionsSuccessStatus: 200,
 }));
 
