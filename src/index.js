@@ -154,6 +154,20 @@ app.set('trust proxy', 1);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static('uploads'));
 
+// Debug CORS endpoint
+app.get('/api/cors-test', (req, res) => {
+  console.log('🧪 CORS Test - Origin:', req.headers.origin);
+  console.log('🧪 CORS Test - All Origins:', allowedOrigins);
+  console.log('🧪 CORS Test - Response Headers:', res.getHeaders());
+  
+  res.json({ 
+    origin: req.headers.origin,
+    allowedOrigins,
+    responseHeaders: res.getHeaders(),
+    message: 'CORS test endpoint'
+  });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/homework', homeworkRoutes);
