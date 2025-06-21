@@ -27,8 +27,8 @@ import adminRoutes from './routes/admin.routes.js';
 import initDbRoutes from './routes/init-db.routes.js';
 import publicRoutes from './routes/public.routes.js';
 import messagingRoutes from './routes/messaging.routes.js';
-// Temporarily comment out new routes to debug healthcheck
-// import parentRoutes from './routes/parent.routes.js';
+// Re-enable simplified routes
+import parentRoutes from './routes/parent.routes.js';
 // import teacherRoutes from './routes/teacher.routes.js';
 
 // Setup paths and CORS
@@ -177,8 +177,8 @@ app.use('/api/public', publicRoutes);
 
 app.use('/api/messages', messagingRoutes);
 app.use('/api/messaging', messagingRoutes);
-// Temporarily comment out new routes to debug healthcheck
-// app.use('/api/parent', parentRoutes);
+// Re-enable simplified routes
+app.use('/api/parent', parentRoutes);
 // app.use('/api/teacher', teacherRoutes);
 
 // Homework completion endpoint
