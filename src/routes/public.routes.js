@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import { query, execute } from '../db.js';
 import nodemailer from 'nodemailer';
+import { getParentReport } from '../controllers/parentController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
@@ -347,6 +349,8 @@ router.get('/registrations-stats', async (req, res) => {
     });
   }
 });
+
+router.get('/parent/reports', authMiddleware, getParentReport);
 
 export default router;
 

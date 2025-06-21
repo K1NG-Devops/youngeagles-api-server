@@ -9,7 +9,8 @@ const router = Router();
 // Get all teachers
 router.get('/teachers', authMiddleware, isAdmin, async (req, res) => {
   try {
-    const teachers = await query('SELECT id, name, email FROM users WHERE role = ?', ['teacher']);
+    // Use staff table instead of users table for teachers
+    const teachers = await query('SELECT id, name, email, className FROM staff WHERE role = ?', ['teacher']);
     res.json(teachers);
   } catch (error) {
     console.error('Error fetching teachers:', error);
@@ -19,7 +20,8 @@ router.get('/teachers', authMiddleware, isAdmin, async (req, res) => {
 
 // Add a new teacher
 router.post('/teachers', authMiddleware, isAdmin, async (req, res) => {
-  const { name, email, password } = req.body;
+  console.log('Creating new teacher with request body:', req.body);
+  const { name, email, password, className } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'All fields are required.' });
@@ -27,25 +29,78 @@ router.post('/teachers', authMiddleware, isAdmin, async (req, res) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 12);
-    await execute('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)', [name, email, hashedPassword, 'teacher']);
-    res.status(201).json({ message: 'Teacher added successfully!' });
+    
+    // Check if className column exists in staff table first
+    let columnExists = false;
+    try {
+      const columns = await query('SHOW COLUMNS FROM staff LIKE ?', ['className']);
+      columnExists = columns.length > 0;
+      console.log('className column exists in staff table:', columnExists);
+    } catch (columnError) {
+      console.error('Error checking for className column:', columnError);
+      // Continue without the column check
+    }
+    
+    // Only try to insert className if the column exists
+    if (className && columnExists) {
+      console.log('Including className in teacher creation');
+      await execute(
+        'INSERT INTO staff (name, email, password, role, className) VALUES (?, ?, ?, ?, ?)', 
+        [name, email, hashedPassword, 'teacher', className]
+      );
+    } else {
+      console.log('Creating teacher without className field');
+      await execute(
+        'INSERT INTO staff (name, email, password, role) VALUES (?, ?, ?, ?)', 
+        [name, email, hashedPassword, 'teacher']
+      );
+    }
+    
+    res.status(201).json({ 
+      message: 'Teacher added successfully!',
+      teacherInfo: { name, email, className, hasClassName: columnExists }
+    });
   } catch (error) {
     console.error('Error adding teacher:', error);
-    res.status(500).json({ message: 'Server error.' });
+    
+    // More detailed error logging
+    console.error('SQL Error:', error.sqlMessage || 'No SQL message');
+    console.error('Error Code:', error.code);
+    console.error('Request Body:', req.body);
+    
+    // Return more helpful error information
+    res.status(500).json({ 
+      message: 'Server error when creating teacher.',
+      details: error.sqlMessage || error.message,
+      errorCode: error.code
+    });
   }
 });
 
 // Update a teacher
 router.put('/teachers/:id', authMiddleware, isAdmin, async (req, res) => {
+  console.log('Updating teacher ID:', id, 'with request body:', req.body);
   const { id } = req.params;
-  const { name, email, password } = req.body;
+  const { name, email, password, className } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ message: 'Name and email are required.' });
   }
 
   try {
-    let updateQuery = 'UPDATE users SET name = ?, email = ?';
+    // Check if className column exists in staff table
+    let columnExists = false;
+    try {
+      const columns = await query('SHOW COLUMNS FROM staff LIKE ?', ['className']);
+      columnExists = columns.length > 0;
+      console.log('className column exists in staff table:', columnExists);
+    } catch (columnError) {
+      console.error('Error checking for className column:', columnError);
+      // Continue without the column check
+    }
+    
+    // Use staff table instead of users table for teachers
+    let updateQuery = 'UPDATE staff SET name = ?, email = ?';
     const params = [name, email];
 
     if (password) {
@@ -53,15 +108,37 @@ router.put('/teachers/:id', authMiddleware, isAdmin, async (req, res) => {
       updateQuery += ', password = ?';
       params.push(hashedPassword);
     }
+    
+    // Include className in update if provided and column exists
+    if (className !== undefined && columnExists) {
+      updateQuery += ', className = ?';
+      params.push(className);
+    }
 
     updateQuery += ' WHERE id = ? AND role = ?';
     params.push(id, 'teacher');
 
-    await execute(updateQuery, params);
-    res.json({ message: 'Teacher updated successfully!' });
+    const result = await execute(updateQuery, params);
+    console.log('Update result:', result);
+    
+    res.json({ 
+      message: 'Teacher updated successfully!',
+      affectedRows: result.affectedRows,
+      teacherInfo: { name, email, className, hasClassName: columnExists }
+    });
   } catch (error) {
     console.error('Error updating teacher:', error);
-    res.status(500).json({ message: 'Server error.' });
+    
+    // More detailed error logging
+    console.error('SQL Error:', error.sqlMessage || 'No SQL message');
+    console.error('Error Code:', error.code);
+    console.error('Request Body:', req.body);
+    
+    res.status(500).json({ 
+      message: 'Server error when updating teacher.',
+      details: error.sqlMessage || error.message,
+      errorCode: error.code
+    });
   }
 });
 
@@ -69,7 +146,8 @@ router.put('/teachers/:id', authMiddleware, isAdmin, async (req, res) => {
 router.delete('/teachers/:id', authMiddleware, isAdmin, async (req, res) => {
   const { id } = req.params;
   try {
-    await execute('DELETE FROM users WHERE id = ? AND role = ?', [id, 'teacher']);
+    // Use staff table instead of users table for teachers
+    await execute('DELETE FROM staff WHERE id = ? AND role = ?', [id, 'teacher']);
     res.json({ message: 'Teacher deleted successfully!' });
   } catch (error) {
     console.error('Error deleting teacher:', error);
@@ -154,29 +232,45 @@ router.post('/teachers/:teacherId/reset-password', authMiddleware, isAdmin, admi
 // Admin dashboard summary endpoint
 router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
   try {
-    // Get user counts
-    const [users, teachers, parents] = await Promise.all([
-      query('SELECT COUNT(*) as count FROM users'),
-      query("SELECT COUNT(*) as count FROM users WHERE role = 'teacher'"),
+    // Get parent count (from users table)
+    const [parents] = await Promise.all([
       query("SELECT COUNT(*) as count FROM users WHERE role = 'parent'")
     ]);
+
+    // Get teacher count (from staff table)
+    const [teachers] = await Promise.all([
+      query("SELECT COUNT(*) as count FROM staff WHERE role = 'teacher'")
+    ]);
+
+    // Calculate total users (parents + teachers + admins)
+    const [admins] = await Promise.all([
+      query("SELECT COUNT(*) as count FROM staff WHERE role = 'admin'")
+    ]);
+    
+    const totalUsers = parents[0].count + teachers[0].count + admins[0].count;
 
     // Get homework and submission counts
     const [homeworks, submissions] = await Promise.all([
       query('SELECT COUNT(*) as count FROM homeworks'),
-      query('SELECT COUNT(*) as count FROM homework_submissions')
+      query('SELECT COUNT(*) as count FROM submissions')
     ]);
 
-    // Get recent activity (last 5 users and last 5 homeworks)
-    const recentUsers = await query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5');
-    const recentHomeworks = await query('SELECT id, title, created_at FROM homeworks ORDER BY created_at DESC LIMIT 5');
+    // Get recent activity by combining parent users and staff (teachers/admins)
+    const recentParents = await query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 3');
+    const recentStaff = await query('SELECT id, name, email, role, created_at FROM staff ORDER BY created_at DESC LIMIT 3');
+    const recentHomeworks = await query('SELECT id, title, created_at FROM homeworks ORDER BY created_at DESC LIMIT 3');
 
     // Format recent activity
     const recentActivity = [
-      ...recentUsers.map(u => ({
+      ...recentParents.map(u => ({
         type: 'user',
-        message: `New ${u.role} registered: ${u.name}`,
+        message: `New parent registered: ${u.name}`,
         timestamp: u.created_at
+      })),
+      ...recentStaff.map(s => ({
+        type: 'staff',
+        message: `New ${s.role} added: ${s.name}`,
+        timestamp: s.created_at
       })),
       ...recentHomeworks.map(h => ({
         type: 'homework',
@@ -186,7 +280,7 @@ router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
     ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 5);
 
     res.json({
-      totalUsers: users[0].count,
+      totalUsers: totalUsers,
       totalTeachers: teachers[0].count,
       totalParents: parents[0].count,
       totalHomeworks: homeworks[0].count,
@@ -196,7 +290,16 @@ router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching admin dashboard:', error);
-    res.status(500).json({ message: 'Server error.' });
+    // Include more error details for debugging
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
+    res.status(500).json({ 
+      message: 'Error fetching admin dashboard data.', 
+      error: error.message 
+    });
   }
 });
 
