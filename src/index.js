@@ -29,7 +29,12 @@ const io = new Server(server, {
       // Allow any Vercel domain
       /^https:\/\/.*\.vercel\.app$/,
       // Allow any localhost
-      /^http:\/\/localhost:\d+$/
+      /^http:\/\/localhost:\d+$/,
+      'http://localhost:3003', 
+      'http://localhost:5173',
+      'https://youngeagles.org.za',
+      'https://www.youngeagles.org.za',
+      'https://youngeagles-app.vercel.app',
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
@@ -152,11 +157,7 @@ const corsOptions = {
       'https://www.youngeagles.org.za',
       'https://youngeagles-app.vercel.app',
       'https://youngeagles-pwa.vercel.app',
-      'https://young-eagles-pwa.vercel.app',
-      // Allow any Vercel deployment
-      /^https:\/\/.*\.vercel\.app$/,
-      // Allow any localhost for development
-      /^http:\/\/localhost:\d+$/
+      'https://young-eagles-pwa.vercel.app'
     ];
     
     // Allow requests with no origin (mobile apps, curl, etc.)
