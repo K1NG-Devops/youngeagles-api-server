@@ -11,6 +11,7 @@ import {
   getNotifications,
   markNotificationAsRead
 } from '../controllers/messagingController.js';
+import { query } from '../db.js';
 
 const router = express.Router();
 
@@ -32,6 +33,47 @@ const validateMessage = [
 // Message routes
 router.post('/send', authMiddleware, validateMessage, sendMessage);
 router.get('/', authMiddleware, getMessages);
+router.get('/conversations', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userType = req.user.role;
+    
+    // Get all conversations for this user
+    const conversations = await query(
+      `SELECT DISTINCT
+        CASE 
+          WHEN sender_id = ? AND sender_type = ? THEN recipient_id
+          ELSE sender_id
+        END as other_user_id,
+        CASE 
+          WHEN sender_id = ? AND sender_type = ? THEN recipient_type
+          ELSE sender_type
+        END as other_user_type,
+        MAX(created_at) as last_message_time,
+        COUNT(*) as message_count,
+        SUM(CASE WHEN recipient_id = ? AND recipient_type = ? AND is_read = FALSE THEN 1 ELSE 0 END) as unread_count
+       FROM messages 
+       WHERE (sender_id = ? AND sender_type = ?) OR (recipient_id = ? AND recipient_type = ?)
+       GROUP BY other_user_id, other_user_type
+       ORDER BY last_message_time DESC`,
+      [userId, userType, userId, userType, userId, userType, userId, userType, userId, userType],
+      'skydek_DB'
+    );
+    
+    res.json({
+      success: true,
+      conversations: conversations || [],
+      count: conversations ? conversations.length : 0
+    });
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching conversations',
+      error: error.message 
+    });
+  }
+});
 router.get('/conversation/:otherUserId/:otherUserType', authMiddleware, getConversation);
 router.put('/:messageId/read', authMiddleware, markAsRead);
 router.get('/unread-count', authMiddleware, getUnreadCount);

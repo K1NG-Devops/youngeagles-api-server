@@ -229,6 +229,49 @@ router.delete('/parents/:id', authMiddleware, isAdmin, async (req, res) => {
 // Reset teacher password (admin only)
 router.post('/teachers/:teacherId/reset-password', authMiddleware, isAdmin, adminResetTeacherPassword);
 
+// Get all users (parents, teachers, and admins)
+router.get('/users', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    // Get parents from users table
+    const parents = await query(
+      'SELECT id, name, email, role, created_at FROM users WHERE role = ?', 
+      ['parent'],
+      'skydek_DB'
+    );
+    
+    // Get teachers and admins from staff table
+    const staff = await query(
+      'SELECT id, name, email, role, className, created_at FROM staff WHERE role IN (?, ?)', 
+      ['teacher', 'admin'],
+      'railway'
+    );
+    
+    // Combine all users
+    const allUsers = [
+      ...parents.map(user => ({ ...user, source: 'users_table' })),
+      ...staff.map(user => ({ ...user, source: 'staff_table' }))
+    ];
+    
+    res.json({
+      success: true,
+      users: allUsers,
+      count: allUsers.length,
+      breakdown: {
+        parents: parents.length,
+        teachers: staff.filter(s => s.role === 'teacher').length,
+        admins: staff.filter(s => s.role === 'admin').length
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching users',
+      error: error.message 
+    });
+  }
+});
+
 // Admin dashboard summary endpoint
 router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
   try {
