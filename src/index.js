@@ -63,6 +63,7 @@ app.get('/', (req, res) => {
     version: 'minimal-1.0.0',
     status: 'active',
     timestamp: new Date().toISOString(),
+    deploymentTime: '2025-06-21T11:27:00Z', // Force deployment
     availableEndpoints: [
       'GET /',
       'GET /health',
