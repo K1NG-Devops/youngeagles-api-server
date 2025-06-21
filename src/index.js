@@ -199,9 +199,9 @@ app.use((req, res, next) => {
   
   // List of allowed origins
   const allowedOrigins = [
-    '# LOCALHOST_REMOVED_FOR_SECURITY',
-    '# LOCALHOST_REMOVED_FOR_SECURITY', 
-    '# LOCALHOST_REMOVED_FOR_SECURITY',
+    'http://localhost:3002',
+    'http://localhost:3003', 
+    'http://localhost:5173',
     'https://youngeagles.org.za',
     'https://www.youngeagles.org.za',
     'https://youngeagles-app.vercel.app',
