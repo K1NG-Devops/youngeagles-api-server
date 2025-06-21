@@ -233,6 +233,23 @@ const upload = multer({
 // HEALTH CHECK & ROOT ENDPOINTS
 // =============================================================================
 
+// Root endpoint for Railway health check
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Young Eagles API Server is running',
+    status: 'healthy',
+    version: '2.0.0',
+    environment: 'production',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/health',
+      api: '/api',
+      auth: '/api/auth/*',
+      admin: '/api/admin/*'
+    }
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
