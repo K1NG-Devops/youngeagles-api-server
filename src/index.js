@@ -37,6 +37,7 @@ const allowedOrigins = [
   'https://www.youngeagles.org.za',
   'https://youngeagles-app.vercel.app',
   'https://app.youngeagles.org.za',
+  'https://youngeagles-pwa.vercel.app',  // Add PWA domain
   // Development origins
   'http://localhost:5173',  // Vite dev server
   'http://localhost:4173',  // Vite preview
