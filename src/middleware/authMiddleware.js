@@ -5,6 +5,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/refresh',
+  '/api/auth/logout',
   '/api/public',
   '/health',
   '/manifest.json'
@@ -13,6 +14,7 @@ const PUBLIC_ROUTES = [
 // List of routes that should skip redirect on auth failure
 const SKIP_REDIRECT_ROUTES = [
   '/api/auth/verify',
+  '/api/auth/logout',
   '/api/homework',
   '/api/children',
   '/api/reports/parent'
@@ -33,6 +35,12 @@ export const authMiddleware = (req, res, next) => {
   if (PUBLIC_ROUTES.some(route => currentPath.startsWith(route))) {
     console.log('📢 Skipping auth for public route:', currentPath);
     return next();
+  }
+
+  // For logout requests without auth header, return success
+  if (currentPath.includes('/auth/logout') && !authHeader) {
+    console.log('👋 Allowing unauthenticated logout');
+    return res.status(200).json({ message: 'Logged out successfully' });
   }
 
   if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
