@@ -3,12 +3,24 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+// MINIMAL IMPORTS - Start with basic functionality
 import { query, testAllConnections } from './db.js';
 import morgan from 'morgan';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-// Setup paths
+// Comment out complex imports for now
+// import authRoutes from './routes/auth.routes.js';
+// import homeworkRoutes from './routes/homework.routes.js';
+// import attendanceRoutes from './routes/attendance.routes.js';
+// import eventRoutes from './routes/event.routes.js';
+// import initDbRoutes from './routes/init-db.routes.js';
+// import publicRoutes from './routes/public.routes.js';
+// import messagingRoutes from './routes/messaging.routes.js';
+// import adminRoutes from './routes/admin.routes.js';
+// import parentRoutes from './routes/parent.routes.js';
+
+// Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -20,7 +32,6 @@ const allowedOrigins = [
   'http://localhost:3002',
 ];
 
-console.log('🔧 Starting MINIMAL server configuration...');
 testAllConnections();
 
 const app = express();
@@ -39,13 +50,10 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
-console.log('✅ Basic middleware configured');
-
 // MINIMAL ROUTES - Start with just these basic endpoints
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  console.log('🏥 Health check requested');
   res.status(200).json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
@@ -57,7 +65,6 @@ app.get('/health', (req, res) => {
 
 // Root endpoint
 app.get('/', (req, res) => {
-  console.log('🏠 Root endpoint requested');
   res.json({ 
     message: 'Young Eagles API Server - MINIMAL VERSION',
     version: 'minimal-1.0.0',
@@ -67,15 +74,13 @@ app.get('/', (req, res) => {
       'GET /',
       'GET /health',
       'GET /api/test',
-      'GET /api/minimal-test',
-      'GET /api/test-db'
+      'GET /api/minimal-test'
     ]
   });
 });
 
 // Simple API test endpoint
 app.get('/api/test', (req, res) => {
-  console.log('🧪 API test endpoint requested');
   res.json({
     message: 'API test endpoint working',
     timestamp: new Date().toISOString(),
@@ -85,7 +90,6 @@ app.get('/api/test', (req, res) => {
 
 // Minimal test endpoint
 app.get('/api/minimal-test', (req, res) => {
-  console.log('⚡ Minimal test endpoint requested');
   res.json({
     message: 'Minimal API configuration is working',
     timestamp: new Date().toISOString(),
@@ -96,7 +100,6 @@ app.get('/api/minimal-test', (req, res) => {
 
 // Database test endpoint
 app.get('/api/test-db', async (req, res) => {
-  console.log('🗄️ Database test requested');
   try {
     const rows = await query('SELECT DATABASE() AS db, USER() AS user, VERSION() AS version');
     res.json({
@@ -107,7 +110,7 @@ app.get('/api/test-db', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('❌ Database test error:', error);
+    console.error('Database test error:', error);
     res.status(500).json({ 
       message: 'Database connection failed', 
       error: error.message 
@@ -115,9 +118,25 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// Comment out all complex route mounting for now
+// app.use('/api/auth', authRoutes);
+// app.use('/api/homework', homeworkRoutes);
+// app.use('/api/attendance', attendanceRoutes);
+// app.use('/api/children', authMiddleware, isTeacher, getChildrenByTeacher);
+// app.use('/api/homeworks', homeworks);
+// app.use('/api/init-db', initDbRoutes);
+// app.use('/api/public', publicRoutes);
+// app.use('/api/messages', messagingRoutes);
+// app.use('/api/messaging', messagingRoutes);
+// app.use('/api/parent', parentRoutes);
+// app.use('/api/events', eventRoutes);
+// app.use('/api/admin', adminRoutes);
+
+// Comment out all complex middleware and endpoints
+// ... (all the homework completion, submissions, etc. endpoints commented out)
+
 // 404 handler for unmatched routes
 app.use('*', (req, res) => {
-  console.log(`❓ 404 - Unmatched route: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     message: 'Endpoint not found in minimal configuration',
     path: req.originalUrl,
@@ -141,12 +160,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`⚡ Mode: MINIMAL - Basic endpoints only`);
-  console.log(`📋 Available endpoints:`);
-  console.log(`   • GET /`);
-  console.log(`   • GET /health`);
-  console.log(`   • GET /api/test`);
-  console.log(`   • GET /api/minimal-test`);
-  console.log(`   • GET /api/test-db`);
 });
 
 // Graceful shutdown
@@ -158,4 +171,4 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
   process.exit(0);
-}); 
+});
