@@ -148,6 +148,21 @@ app.get('/api/cors-test', (req, res) => {
   });
 });
 
+// Test endpoint to verify new routes are loaded
+app.get('/api/routes-test', (req, res) => {
+  res.json({
+    message: 'Routes test endpoint',
+    timestamp: new Date().toISOString(),
+    routes: {
+      parent: 'Available at /api/parent/*',
+      teacher: 'Available at /api/teacher/*',
+      messaging: 'Available at /api/messaging/*',
+      admin: 'Available at /api/admin/*'
+    },
+    version: '2.0.0'
+  });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/homework', homeworkRoutes);
