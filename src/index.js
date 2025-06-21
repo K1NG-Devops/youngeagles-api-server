@@ -831,4 +831,51 @@ app.post('/api/fcm/token', authMiddleware, async (req, res) => {
         database
       );
       
-      console.log(`
+      console.log(`✅ FCM token updated for ${userType} ${userId} in ${database}`);
+    }
+    
+    res.status(200).json({ message: 'FCM token registered successfully' });
+  } catch (error) {
+    console.error('Error saving FCM token:', error);
+    res.status(500).json({ message: 'Error saving FCM token', error: error.message });
+  }
+});
+
+// Health check endpoint for Railway
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Young Eagles API Server is running!',
+    version: '1.0.0',
+    status: 'active'
+  });
+});
+
+// Start the server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 API Base URL: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
