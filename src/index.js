@@ -107,14 +107,34 @@ app.use(cors({
   optionsSuccessStatus: 200,
 }));
 
+// Add explicit CORS headers to all responses
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  console.log('🌐 Request from origin:', origin);
+  
+  if (origin) {
+    // Check if origin is allowed
+    const isAllowed = allowedOrigins.includes(origin) || 
+                     allowedOrigins.some(pattern => pattern instanceof RegExp && pattern.test(origin));
+    
+    if (isAllowed) {
+      console.log('✅ Setting CORS headers for:', origin);
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,cache-control,x-request-source');
+    } else {
+      console.log('❌ Origin not allowed:', origin);
+    }
+  }
+  
+  next();
+});
+
 // Add explicit preflight handling for auth endpoints
 app.options('/api/auth/*', (req, res) => {
   console.log('🔄 Preflight request for auth endpoint:', req.url);
   console.log('🌐 Origin:', req.headers.origin);
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, cache-control, x-request-source');
-  res.header('Access-Control-Allow-Credentials', 'true');
   res.sendStatus(200);
 });
 
