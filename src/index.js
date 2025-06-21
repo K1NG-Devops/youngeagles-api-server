@@ -26,6 +26,7 @@ import { initializeFirebaseAdmin } from './config/firebase-admin.js';
 import adminRoutes from './routes/admin.routes.js';
 import initDbRoutes from './routes/init-db.routes.js';
 import publicRoutes from './routes/public.routes.js';
+import messagingRoutes from './routes/messaging.routes.js';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -156,8 +157,6 @@ app.use('/api/homeworks', homeworkRoutes);
 app.use('/api/init-db', initDbRoutes);
 app.use('/api/public', publicRoutes);
 
-// Import messaging routes
-import messagingRoutes from './routes/messaging.routes.js';
 app.use('/api/messages', messagingRoutes);
 
 // Homework completion endpoint
