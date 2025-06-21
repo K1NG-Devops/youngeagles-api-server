@@ -72,7 +72,8 @@ export const assignHomework = async (req, res) => {
 };
 
 export const getHomeworkForParent = async (req, res) => {
-const { parent_id } = req.params;
+// Get parent_id from either query params or route params
+const parent_id = req.query.parent_id || req.params.parent_id;
 const { child_id } = req.query; // Required child filter
 
   try {
