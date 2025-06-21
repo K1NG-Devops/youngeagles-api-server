@@ -38,7 +38,7 @@ export const generateRefreshToken = (user) => {
 // Function to verify access token
 export const verifyToken = (token) => {
   try {
-    return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, JWT_SECRET);
   } catch (error) {
     console.error('Token verification failed:', error.message);
     throw error;

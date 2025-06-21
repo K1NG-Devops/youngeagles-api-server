@@ -27,8 +27,9 @@ import adminRoutes from './routes/admin.routes.js';
 import initDbRoutes from './routes/init-db.routes.js';
 import publicRoutes from './routes/public.routes.js';
 import messagingRoutes from './routes/messaging.routes.js';
-import parentRoutes from './routes/parent.routes.js';
-import teacherRoutes from './routes/teacher.routes.js';
+// Temporarily comment out new routes to debug healthcheck
+// import parentRoutes from './routes/parent.routes.js';
+// import teacherRoutes from './routes/teacher.routes.js';
 
 // Setup paths and CORS
 const __filename = fileURLToPath(import.meta.url);
@@ -176,8 +177,9 @@ app.use('/api/public', publicRoutes);
 
 app.use('/api/messages', messagingRoutes);
 app.use('/api/messaging', messagingRoutes);
-app.use('/api/parent', parentRoutes);
-app.use('/api/teacher', teacherRoutes);
+// Temporarily comment out new routes to debug healthcheck
+// app.use('/api/parent', parentRoutes);
+// app.use('/api/teacher', teacherRoutes);
 
 // Homework completion endpoint
 app.post('/api/homeworks/:homeworkId/complete', authMiddleware, async (req, res) => {
