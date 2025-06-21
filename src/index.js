@@ -452,13 +452,13 @@ app.get('/api/admin/dashboard', async (req, res) => {
   try {
     const [userStats] = await db.execute('SELECT COUNT(*) as count FROM users WHERE role = "parent"');
     const [childrenStats] = await db.execute('SELECT COUNT(*) as count FROM children');
-    const [homeworkStats] = await db.execute('SELECT COUNT(*) as count FROM homework');
+    const [homeworkStats] = await db.execute('SELECT COUNT(*) as count FROM homeworks');
     const [staffStats] = await db.execute('SELECT COUNT(*) as count FROM staff WHERE role = "teacher"');
     const [submissionStats] = await db.execute('SELECT COUNT(*) as count FROM submissions');
     
     // Get recent activity
     const [recentUsers] = await db.execute('SELECT name, email, created_at FROM users ORDER BY created_at DESC LIMIT 3');
-    const [recentHomework] = await db.execute('SELECT title, created_at FROM homework ORDER BY created_at DESC LIMIT 3');
+    const [recentHomework] = await db.execute('SELECT title, created_at FROM homeworks ORDER BY created_at DESC LIMIT 3');
     
     const recentActivity = [
       ...recentUsers.map(u => ({
@@ -560,7 +560,7 @@ app.get('/api/admin/quick-actions', async (req, res) => {
   try {
     // Get pending items that need admin attention
     const [pendingUsers] = await db.execute('SELECT COUNT(*) as count FROM users WHERE is_verified = FALSE');
-    const [overdueHomework] = await db.execute('SELECT COUNT(*) as count FROM homework WHERE due_date < NOW() AND status != "completed"');
+    const [overdueHomework] = await db.execute('SELECT COUNT(*) as count FROM homeworks WHERE due_date < NOW() AND status != "completed"');
     const [unreadMessages] = await db.execute('SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = FALSE', [user.id]);
     
     const quickActions = [
