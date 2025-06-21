@@ -17,7 +17,18 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3002", "http://localhost:3003", "http://localhost:5173", "https://youngeagles-app.vercel.app"],
+    origin: [
+      "http://localhost:3002", 
+      "http://localhost:3003", 
+      "http://localhost:5173", 
+      "https://youngeagles-app.vercel.app",
+      "https://youngeagles-pwa.vercel.app",
+      "https://young-eagles-pwa.vercel.app",
+      // Allow any Vercel domain
+      /^https:\/\/.*\.vercel\.app$/,
+      // Allow any localhost
+      /^http:\/\/localhost:\d+$/
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
   }
@@ -135,10 +146,31 @@ const corsOptions = {
       'http://localhost:3002',
       'http://localhost:3003', 
       'http://localhost:5173',
-      'https://youngeagles-app.vercel.app'
+      'https://youngeagles-app.vercel.app',
+      'https://youngeagles-pwa.vercel.app',
+      'https://young-eagles-pwa.vercel.app',
+      // Allow any Vercel deployment
+      /^https:\/\/.*\.vercel\.app$/,
+      // Allow any localhost for development
+      /^http:\/\/localhost:\d+$/
     ];
     
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Check if origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return allowedOrigin === origin;
+      } else if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -156,11 +188,31 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Custom CORS middleware
+// Custom CORS middleware for additional flexibility
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173', 'https://youngeagles-app.vercel.app'].includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  
+  // List of allowed origins
+  const allowedOrigins = [
+    'http://localhost:3002',
+    'http://localhost:3003', 
+    'http://localhost:5173',
+    'https://youngeagles-app.vercel.app',
+    'https://youngeagles-pwa.vercel.app',
+    'https://young-eagles-pwa.vercel.app'
+  ];
+  
+  // Check if origin is allowed or matches patterns
+  if (origin) {
+    const isAllowed = allowedOrigins.includes(origin) || 
+                     /^https:\/\/.*\.vercel\.app$/.test(origin) ||
+                     /^http:\/\/localhost:\d+$/.test(origin);
+    
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
   } else {
     res.setHeader('Access-Control-Allow-Origin', '*');
   }
