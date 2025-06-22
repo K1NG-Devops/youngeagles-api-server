@@ -2340,8 +2340,8 @@ async function startServer() {
       
       // Insert new parent user
       const [result] = await db.execute(
-        'INSERT INTO users (name, email, role, password, phone, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-        [name, email, 'parent', hashedPassword, phone || null]
+        'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
+        [name, email, 'parent', hashedPassword]
       );
       
       // Fetch the newly created user
@@ -2359,8 +2359,7 @@ async function startServer() {
           id: newUser.id,
           email: newUser.email,
           name: newUser.name,
-          role: newUser.role,
-          phone: phone || null
+          role: newUser.role
         }
       });
       
