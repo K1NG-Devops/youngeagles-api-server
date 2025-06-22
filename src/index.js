@@ -294,10 +294,6 @@ async function startServer() {
     process.exit(1);
   }
   
-  // Give database connection a moment to stabilize
-  console.log('⏳ Allowing database connection to stabilize...');
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  
   console.log('🔐 Setting up production authentication system...');
   console.log('🛡️ Password requirements: 8+ chars, uppercase, lowercase, numbers, special chars');
   console.log('🚫 All mock data removed - using real database');
@@ -308,17 +304,9 @@ async function startServer() {
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '2.1.1',
+      version: '2.1.2',
       environment: 'production',
-      deployment_timestamp: '2025-06-22T12:39:00Z',
-      endpoints: {
-        health: '/api/health',
-        auth: '/api/auth/*',
-        admin: '/api/admin/*',
-        parent: '/api/parent/*',
-        teacher: '/api/teacher/*',
-        homework: '/api/homework/*'
-      }
+      timestamp: new Date().toISOString()
     });
   });
 
