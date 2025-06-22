@@ -154,6 +154,7 @@ const corsOptions = {
       'http://localhost:3002',
       'http://localhost:3003', 
       'http://localhost:5173',
+      'https://youngeagles.org.za',
       'https://youngeagles-app.vercel.app'
     ];
     
@@ -181,7 +182,7 @@ app.use((req, res, next) => {
     
     if (corsOptions.origin === '*' || 
         (typeof corsOptions.origin === 'function' && 
-         ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173', 'https://youngeagles-app.vercel.app'].includes(origin))) {
+         ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173', 'https://youngeagles.org.za', 'https://youngeagles-app.vercel.app'].includes(origin))) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       console.log(`✅ Setting Access-Control-Allow-Origin: ${origin}`);
     }
