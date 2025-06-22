@@ -1015,37 +1015,34 @@ async function startServer() {
     }
   });
 
-  // Get homework for specific parent/child
+
+
+  // Homework endpoint for parents
   app.get('/api/homework/parent/:parentId/child/:childId', async (req, res) => {
-    console.log('📚 Homework requested for parent:', req.params.parentId, 'child:', req.params.childId);
-    const user = verifyToken(req);
-    if (!user || user.role !== 'parent') {
-      return res.status(403).json({
-        message: 'Forbidden - parent access required',
-        error: 'FORBIDDEN'
-      });
-    }
-
-    const { parentId, childId } = req.params;
+    console.log('📚 Fetching homework for parent-child pair');
     
-    // Verify the requested parent ID matches the authenticated user
-    if (parseInt(parentId) !== user.id) {
-      return res.status(403).json({
-        message: 'Access denied - can only view your own children',
-        error: 'ACCESS_DENIED'
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired token',
+        error: 'INVALID_TOKEN'
       });
     }
-
+    
+    const { parentId, childId } = req.params;
+    console.log(`📚 Parent ID: ${parentId}, Child ID: ${childId}`);
+    
     try {
-      // Verify child belongs to this parent
+      // Verify the child belongs to the parent
       const [child] = await db.execute(
-        'SELECT id, name, grade, className FROM children WHERE id = ? AND parent_id = ?',
+        'SELECT id, name, className, grade FROM children WHERE id = ? AND parent_id = ?',
         [childId, parentId]
       );
       
       if (child.length === 0) {
+        console.log(`❌ Child ${childId} not found for parent ${parentId}`);
         return res.status(404).json({
-          message: 'Child not found or access denied',
+          message: 'Child not found for this parent',
           error: 'CHILD_NOT_FOUND'
         });
       }
@@ -1053,76 +1050,55 @@ async function startServer() {
       const childInfo = child[0];
       console.log(`✅ Found child: ${childInfo.name} (ID: ${childId})`);
       
-      // Return mock homework data
-      const mockHomework = [
-        {
-          id: 1,
-          title: `Math Worksheet for ${childInfo.name}`,
-          subject: 'Mathematics',
-          description: 'Complete pages 12-15 in your math workbook. Focus on multiplication tables.',
-          due_date: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
-          assigned_date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          submitted: false,
-          submitted_at: null,
-          status: 'pending',
-          priority: 'medium',
-          teacher: 'Mrs. Smith',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Show all your work and double-check your answers.'
-        },
-        {
-          id: 2,
-          title: 'Reading Assignment',
-          subject: 'English',
-          description: 'Read Chapter 3 of "The Magic Garden" and answer the questions.',
-          due_date: new Date(Date.now() + 172800000).toISOString(), // Day after tomorrow
-          assigned_date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-          submitted: true,
-          submitted_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-          status: 'submitted',
-          priority: 'high',
-          teacher: 'Ms. Johnson',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Write complete sentences and use examples from the text.'
-        },
-        {
-          id: 3,
-          title: 'Science Observation',
-          subject: 'Science',
-          description: 'Observe and draw 3 different types of leaves from your garden.',
-          due_date: new Date(Date.now() + 259200000).toISOString(), // 3 days from now
-          assigned_date: new Date().toISOString(), // Today
-          submitted: false,
-          submitted_at: null,
-          status: 'pending',
-          priority: 'low',
-          teacher: 'Mr. Brown',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Label each leaf with its name and note any interesting features.'
-        }
-      ];
+      // Fetch actual homework from database based on child's class
+      const [homeworks] = await db.execute(`
+        SELECT h.*,
+               CASE WHEN s.id IS NOT NULL THEN true ELSE false END as submitted,
+               s.submitted_at,
+               s.file_url as submission_file_url,
+               hc.completion_answer
+        FROM homeworks h
+        LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ? AND s.parent_id = ?
+        LEFT JOIN homework_completions hc ON h.id = hc.homework_id AND hc.child_id = ? AND hc.parent_id = ?
+        WHERE h.class_name = ?
+        ORDER BY h.due_date DESC
+      `, [childId, parentId, childId, parentId, childInfo.className]);
       
-      console.log(`✅ Returning ${mockHomework.length} homework items for child ${childId}`);
+      // Transform the data to match frontend expectations
+      const homeworkData = homeworks.map(hw => ({
+        id: hw.id,
+        title: hw.title,
+        subject: hw.type || 'General',
+        description: hw.instructions || 'No description provided',
+        due_date: hw.due_date,
+        assigned_date: hw.created_at,
+        submitted: hw.submitted,
+        submitted_at: hw.submitted_at,
+        status: hw.submitted ? 'submitted' : 'pending',
+        priority: 'medium', // Can be enhanced based on due date
+        teacher: hw.uploaded_by_teacher_name || 'Teacher',
+        childId: parseInt(childId),
+        childName: childInfo.name,
+        className: childInfo.className,
+        attachments: hw.file_url ? [{ url: hw.file_url, type: 'file' }] : [],
+        instructions: hw.instructions || '',
+        completion_answer: hw.completion_answer || '',
+        teacher_file_url: hw.file_url,
+        submission_file_url: hw.submission_file_url
+      }));
+      
+      console.log(`✅ Returning ${homeworkData.length} homework items for child ${childId}`);
       
       res.json({
         success: true,
-        data: mockHomework,
+        data: homeworkData,
         child: {
           id: parseInt(childId),
           name: childInfo.name,
           grade: childInfo.grade,
           className: childInfo.className
         },
-        total_count: mockHomework.length
+        total_count: homeworkData.length
       });
       
     } catch (error) {
@@ -2379,6 +2355,128 @@ async function startServer() {
           error: 'INTERNAL_ERROR'
         });
       }
+    }
+  });
+
+  // Homework submission endpoint
+  app.post('/api/homework/submit/:homeworkId', upload.array('files', 5), async (req, res) => {
+    console.log('📝 Homework submission requested');
+    
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired token',
+        error: 'INVALID_TOKEN'
+      });
+    }
+    
+    const { homeworkId } = req.params;
+    const { child_id, parent_id, comment } = req.body;
+    
+    console.log('📝 Submission details:', {
+      homeworkId,
+      child_id,
+      parent_id,
+      comment,
+      filesCount: req.files ? req.files.length : 0,
+      userId: user.id
+    });
+    
+    // Validate required fields
+    if (!homeworkId || !child_id || !parent_id) {
+      return res.status(400).json({
+        message: 'Homework ID, child ID, and parent ID are required',
+        error: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+    
+    // Verify the parent_id matches the authenticated user
+    if (parseInt(parent_id) !== user.id) {
+      return res.status(403).json({
+        message: 'Access denied - can only submit for your own children',
+        error: 'ACCESS_DENIED'
+      });
+    }
+    
+    try {
+      // Verify the child belongs to the parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [child_id, parent_id]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found for this parent',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Verify the homework exists and is for the child's class
+      const [homework] = await db.execute(
+        'SELECT id, title, class_name FROM homeworks WHERE id = ?',
+        [homeworkId]
+      );
+      
+      if (homework.length === 0) {
+        return res.status(404).json({
+          message: 'Homework assignment not found',
+          error: 'HOMEWORK_NOT_FOUND'
+        });
+      }
+      
+      if (homework[0].class_name !== child[0].className) {
+        return res.status(403).json({
+          message: 'This homework is not assigned to your child\'s class',
+          error: 'CLASS_MISMATCH'
+        });
+      }
+      
+      // Check if already submitted
+      const [existingSubmission] = await db.execute(
+        'SELECT id FROM submissions WHERE homework_id = ? AND child_id = ? AND parent_id = ?',
+        [homeworkId, child_id, parent_id]
+      );
+      
+      if (existingSubmission.length > 0) {
+        return res.status(409).json({
+          message: 'Homework already submitted for this child',
+          error: 'ALREADY_SUBMITTED'
+        });
+      }
+      
+      // Process uploaded files
+      let fileUrls = [];
+      if (req.files && req.files.length > 0) {
+        fileUrls = req.files.map(file => `/uploads/homework/${file.filename}`);
+      }
+      
+      // Insert submission
+      const [result] = await db.execute(
+        'INSERT INTO submissions (homework_id, parent_id, child_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        [homeworkId, parent_id, child_id, JSON.stringify(fileUrls), comment || '']
+      );
+      
+      console.log('✅ Homework submitted successfully:', {
+        submissionId: result.insertId,
+        homeworkId,
+        child_id,
+        filesCount: fileUrls.length
+      });
+      
+      res.json({
+        success: true,
+        message: 'Homework submitted successfully',
+        submissionId: result.insertId,
+        files: fileUrls
+      });
+      
+    } catch (error) {
+      console.error('❌ Error submitting homework:', error);
+      res.status(500).json({
+        message: 'Failed to submit homework',
+        error: 'DATABASE_ERROR'
+      });
     }
   });
 
