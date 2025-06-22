@@ -340,10 +340,10 @@ async function startServer() {
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '3.1.1',
+      version: '3.1.2',
       environment: isProduction ? 'production' : 'development',
       timestamp: new Date().toISOString(),
-      deployment_id: 'railway-deploy-v3.1.1-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.2-' + Date.now(),
       endpoints: {
         health: '/api/health',
         api: '/api',
@@ -361,9 +361,9 @@ async function startServer() {
     console.log('📋 API endpoints info requested');
     res.json({ 
       message: 'Young Eagles API Server',
-      version: '3.1.1',
+      version: '3.1.2',
       environment: isProduction ? 'production' : 'development',
-      deployment_id: 'railway-deploy-v3.1.1-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.2-' + Date.now(),
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',
@@ -2231,6 +2231,153 @@ async function startServer() {
         error: 'DATABASE_ERROR',
         details: error.message
       });
+    }
+  });
+
+  // Firebase login endpoint
+  app.post('/api/auth/firebase-login', async (req, res) => {
+    console.log('🔥 Firebase login requested');
+    try {
+      const { idToken, email, name, photoURL } = req.body;
+      
+      if (!idToken || !email) {
+        return res.status(400).json({
+          message: 'Firebase ID token and email are required',
+          error: 'MISSING_CREDENTIALS'
+        });
+      }
+      
+      console.log(`🔥 Firebase login attempt: ${email}`);
+      
+      // Check if user exists in database
+      let user = await findUserByEmail(email);
+      
+      if (!user) {
+        // Create new user from Firebase data
+        console.log('👤 Creating new user from Firebase data');
+        
+        const hashedPassword = PasswordSecurity.hashPassword(idToken); // Use token as password
+        
+        try {
+          await db.execute(
+            'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
+            [name || email.split('@')[0], email, 'parent', hashedPassword]
+          );
+          
+          // Fetch the newly created user
+          user = await findUserByEmail(email);
+          console.log('✅ New Firebase user created:', email);
+        } catch (dbError) {
+          console.error('❌ Failed to create Firebase user:', dbError);
+          return res.status(500).json({
+            message: 'Failed to create user account',
+            error: 'USER_CREATION_FAILED'
+          });
+        }
+      }
+      
+      // Generate access token
+      const accessToken = TokenManager.generateToken(user);
+      
+      console.log('✅ Firebase login successful:', user.email);
+      
+      res.json({
+        message: 'Firebase login successful',
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          photoURL: photoURL || null
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Firebase login error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Parent registration endpoint
+  app.post('/api/auth/register', async (req, res) => {
+    console.log('👤 Parent registration requested');
+    try {
+      const { name, email, password, phone } = req.body;
+      
+      if (!name || !email || !password) {
+        return res.status(400).json({
+          message: 'Name, email, and password are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+      
+      // Validate password
+      const passwordValidation = PasswordSecurity.validatePassword(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: passwordValidation.message,
+          error: 'INVALID_PASSWORD'
+        });
+      }
+      
+      console.log(`👤 Registering parent: ${email}`);
+      
+      // Check if user already exists
+      const existingUser = await findUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      }
+      
+      // Hash password
+      const hashedPassword = PasswordSecurity.hashPassword(password);
+      
+      // Insert new parent user
+      const [result] = await db.execute(
+        'INSERT INTO users (name, email, role, password, phone, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        [name, email, 'parent', hashedPassword, phone || null]
+      );
+      
+      // Fetch the newly created user
+      const newUser = await findUserByEmail(email);
+      
+      // Generate access token
+      const accessToken = TokenManager.generateToken(newUser);
+      
+      console.log('✅ Parent registered successfully:', email);
+      
+      res.status(201).json({
+        message: 'Registration successful',
+        accessToken,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role,
+          phone: phone || null
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Parent registration error:', error);
+      
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      } else {
+        res.status(500).json({
+          message: 'Internal server error',
+          error: 'INTERNAL_ERROR'
+        });
+      }
     }
   });
 
