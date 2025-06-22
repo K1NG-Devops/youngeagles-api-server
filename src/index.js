@@ -340,10 +340,10 @@ async function startServer() {
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '3.1.0',
+      version: '3.1.1',
       environment: isProduction ? 'production' : 'development',
       timestamp: new Date().toISOString(),
-      deployment_id: 'railway-deploy-v3.1.0-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.1-' + Date.now(),
       endpoints: {
         health: '/api/health',
         api: '/api',
@@ -361,9 +361,9 @@ async function startServer() {
     console.log('📋 API endpoints info requested');
     res.json({ 
       message: 'Young Eagles API Server',
-      version: '3.1.0',
+      version: '3.1.1',
       environment: isProduction ? 'production' : 'development',
-      deployment_id: 'railway-deploy-v3.1.0-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.1-' + Date.now(),
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',
@@ -1609,99 +1609,116 @@ async function startServer() {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 50;
       const search = req.query.search || '';
-      const offset = (page - 1) * limit;
+      const showAll = req.query.all === 'true'; // New parameter to get all children
       
-      // Validate parameters
-      if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1 || limit > 200) {
-        return res.status(400).json({
-          message: 'Invalid pagination parameters',
-          error: 'INVALID_PARAMS'
-        });
-      }
+      console.log('🔍 Getting children:', { page, limit, search, showAll });
       
-      // Ensure limit and offset are safe integers
-      const limitParam = Math.max(1, Math.min(200, parseInt(limit)));
-      const offsetParam = Math.max(0, parseInt(offset));
+      // Build base query with JOIN to get parent info efficiently
+      let baseQuery = `
+        SELECT 
+          c.id,
+          c.name,
+          c.dob,
+          c.age,
+          c.gender,
+          c.grade,
+          c.className,
+          c.parent_id,
+          c.created_at,
+          u.name as parent_name,
+          u.email as parent_email
+        FROM children c
+        LEFT JOIN users u ON c.parent_id = u.id
+      `;
       
-      console.log('🔍 Getting children with pagination:', { page, limit: limitParam, offset: offsetParam });
-      
-      // Simplified query without JOIN for now
-      let query = 'SELECT * FROM children';
-      let countQuery = 'SELECT COUNT(*) as total FROM children';
+      let whereClause = '';
       let params = [];
       
       if (search) {
-        query += ' WHERE name LIKE ? OR grade LIKE ? OR className LIKE ?';
-        countQuery += ' WHERE name LIKE ? OR grade LIKE ? OR className LIKE ?';
+        whereClause = ' WHERE (c.name LIKE ? OR c.grade LIKE ? OR c.className LIKE ? OR u.name LIKE ? OR u.email LIKE ?)';
         const searchParam = `%${search}%`;
-        params = [searchParam, searchParam, searchParam];
+        params = [searchParam, searchParam, searchParam, searchParam, searchParam];
       }
       
-      query += ` ORDER BY created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`;
+      // Count query for pagination
+      const countQuery = `SELECT COUNT(*) as total FROM children c LEFT JOIN users u ON c.parent_id = u.id${whereClause}`;
       
-      console.log('🔍 Executing simplified query:', query);
+      // Main query with ordering
+      let mainQuery = baseQuery + whereClause + ' ORDER BY c.created_at DESC';
+      
+      // Add pagination unless showAll is requested
+      if (!showAll) {
+        // Validate pagination parameters
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1 || limit > 500) {
+          return res.status(400).json({
+            message: 'Invalid pagination parameters',
+            error: 'INVALID_PARAMS'
+          });
+        }
+        
+        const limitParam = Math.max(1, Math.min(500, parseInt(limit))); // Increased max limit
+        const offsetParam = Math.max(0, (page - 1) * limitParam);
+        
+        mainQuery += ` LIMIT ${limitParam} OFFSET ${offsetParam}`;
+        console.log('🔍 Using pagination:', { page, limit: limitParam, offset: offsetParam });
+      } else {
+        console.log('🔍 Retrieving ALL children (no pagination)');
+      }
+      
+      console.log('🔍 Executing query:', mainQuery);
       console.log('🔍 With params:', params);
       
       // Execute queries
-      const [children] = await db.execute(query, params);
+      const [children] = await db.execute(mainQuery, params);
       const [totalResult] = await db.execute(countQuery, params);
       
       const total = totalResult[0].total;
-      const pages = Math.ceil(total / limitParam);
+      const pages = showAll ? 1 : Math.ceil(total / limit);
       
-      // Get parent info separately to avoid JOIN issues
-      const childrenWithParents = await Promise.all(
-        children.map(async (child) => {
-          try {
-            const [parentResult] = await db.execute(
-              'SELECT name, email FROM users WHERE id = ?',
-              [child.parent_id]
-            );
-            
-            return {
-              ...child,
-              class_name: child.className,
-              parent_name: parentResult[0]?.name || 'Unknown',
-              parent_email: parentResult[0]?.email || '',
-              first_name: child.name ? child.name.split(' ')[0] : '',
-              last_name: child.name ? child.name.split(' ').slice(1).join(' ') : '',
-              date_of_birth: child.dob,
-              emergency_contact: '',
-              medical_notes: '',
-              allergies: ''
-            };
-          } catch (error) {
-            console.error('Error getting parent for child:', child.id, error.message);
-            return {
-              ...child,
-              class_name: child.className,
-              parent_name: 'Unknown',
-              parent_email: '',
-              first_name: child.name ? child.name.split(' ')[0] : '',
-              last_name: child.name ? child.name.split(' ').slice(1).join(' ') : '',
-              date_of_birth: child.dob,
-              emergency_contact: '',
-              medical_notes: '',
-              allergies: ''
-            };
-          }
-        })
-      );
+      // Format children data for frontend compatibility
+      const formattedChildren = children.map(child => ({
+        id: child.id,
+        name: child.name,
+        dob: child.dob,
+        age: child.age,
+        gender: child.gender,
+        grade: child.grade,
+        className: child.className,
+        class_name: child.className, // Frontend compatibility
+        parent_id: child.parent_id,
+        parent_name: child.parent_name || 'Unknown',
+        parent_email: child.parent_email || '',
+        first_name: child.name ? child.name.split(' ')[0] : '',
+        last_name: child.name ? child.name.split(' ').slice(1).join(' ') : '',
+        date_of_birth: child.dob,
+        created_at: child.created_at,
+        emergency_contact: '',
+        medical_notes: '',
+        allergies: ''
+      }));
       
-      console.log(`✅ Children data retrieved: ${childrenWithParents.length} children`);
+      console.log(`✅ Children data retrieved: ${formattedChildren.length} children (Total in DB: ${total})`);
       
-      res.json({
+      const response = {
         success: true,
-        data: childrenWithParents,
-        pagination: {
+        data: formattedChildren,
+        total_count: total,
+        retrieved_count: formattedChildren.length
+      };
+      
+      // Add pagination info only if not showing all
+      if (!showAll) {
+        response.pagination = {
           page,
-          limit: limitParam,
+          limit: parseInt(limit),
           total,
           pages,
           hasNext: page < pages,
           hasPrev: page > 1
-        }
-      });
+        };
+      }
+      
+      res.json(response);
       
     } catch (error) {
       console.error('❌ Children list error:', error);
@@ -1714,7 +1731,8 @@ async function startServer() {
       });
       res.status(500).json({
         message: 'Internal server error',
-        error: 'DATABASE_ERROR'
+        error: 'DATABASE_ERROR',
+        details: error.message
       });
     }
   });
@@ -2124,6 +2142,94 @@ async function startServer() {
       res.status(500).json({
         message: 'Failed to fetch homework grades',
         error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get ALL children (no pagination) - Admin only
+  app.get('/api/admin/children/all', async (req, res) => {
+    console.log('👶 Admin requesting ALL children (no pagination)');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({
+        message: 'Forbidden - admin access required',
+        error: 'FORBIDDEN'
+      });
+    }
+    
+    try {
+      const search = req.query.search || '';
+      
+      // Build query to get ALL children with parent info
+      let query = `
+        SELECT 
+          c.id,
+          c.name,
+          c.dob,
+          c.age,
+          c.gender,
+          c.grade,
+          c.className,
+          c.parent_id,
+          c.created_at,
+          u.name as parent_name,
+          u.email as parent_email
+        FROM children c
+        LEFT JOIN users u ON c.parent_id = u.id
+      `;
+      
+      let params = [];
+      
+      if (search) {
+        query += ' WHERE (c.name LIKE ? OR c.grade LIKE ? OR c.className LIKE ? OR u.name LIKE ? OR u.email LIKE ?)';
+        const searchParam = `%${search}%`;
+        params = [searchParam, searchParam, searchParam, searchParam, searchParam];
+      }
+      
+      query += ' ORDER BY c.created_at DESC';
+      
+      console.log('🔍 Executing query for ALL children:', query);
+      console.log('🔍 With params:', params);
+      
+      const [children] = await db.execute(query, params);
+      
+      // Format children data
+      const formattedChildren = children.map(child => ({
+        id: child.id,
+        name: child.name,
+        dob: child.dob,
+        age: child.age,
+        gender: child.gender,
+        grade: child.grade,
+        className: child.className,
+        class_name: child.className,
+        parent_id: child.parent_id,
+        parent_name: child.parent_name || 'Unknown',
+        parent_email: child.parent_email || '',
+        first_name: child.name ? child.name.split(' ')[0] : '',
+        last_name: child.name ? child.name.split(' ').slice(1).join(' ') : '',
+        date_of_birth: child.dob,
+        created_at: child.created_at,
+        emergency_contact: '',
+        medical_notes: '',
+        allergies: ''
+      }));
+      
+      console.log(`✅ ALL children retrieved: ${formattedChildren.length} total children`);
+      
+      res.json({
+        success: true,
+        data: formattedChildren,
+        total_count: formattedChildren.length,
+        message: `Retrieved all ${formattedChildren.length} children from database`
+      });
+      
+    } catch (error) {
+      console.error('❌ Get all children error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR',
+        details: error.message
       });
     }
   });
