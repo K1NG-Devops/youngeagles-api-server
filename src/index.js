@@ -579,6 +579,60 @@ async function startServer() {
     }
   });
 
+  // Firebase login endpoint for Google sign-in
+  app.post('/api/auth/firebase-login', async (req, res) => {
+    console.log('🔥 Firebase login requested');
+    try {
+      const { email, uid, displayName } = req.body;
+      
+      if (!email || !uid) {
+        return res.status(400).json({
+          message: 'Email and UID are required',
+          error: 'MISSING_CREDENTIALS'
+        });
+      }
+      
+      console.log(`🔥 Attempting Firebase login: ${email}`);
+      
+      // Find user in database (check both users and staff tables)
+      let user = await findUserByEmail(email, 'parent');
+      if (!user) {
+        user = await findStaffByEmail(email);
+      }
+      
+      if (!user) {
+        console.log('❌ User not found for Firebase login');
+        return res.status(401).json({
+          message: 'User not found. Please contact administrator to create your account.',
+          error: 'USER_NOT_FOUND'
+        });
+      }
+      
+      // Generate token for Firebase user
+      const accessToken = TokenManager.generateToken(user);
+      
+      console.log('✅ Firebase login successful:', user.email);
+      
+      res.json({
+        message: 'Firebase login successful',
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name || displayName,
+          role: user.role
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Firebase login error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
   // =============================================================================
   // CHILD MANAGEMENT ENDPOINTS - PRODUCTION READY
   // =============================================================================
