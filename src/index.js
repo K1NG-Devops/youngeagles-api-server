@@ -49,6 +49,7 @@ const dbConfig = {
 };
 
 let db;
+let serverReady = false;
 
 // Initialize database connection
 async function initDatabase() {
@@ -293,6 +294,10 @@ async function startServer() {
     process.exit(1);
   }
   
+  // Give database connection a moment to stabilize
+  console.log('⏳ Allowing database connection to stabilize...');
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
   console.log('🔐 Setting up production authentication system...');
   console.log('🛡️ Password requirements: 8+ chars, uppercase, lowercase, numbers, special chars');
   console.log('🚫 All mock data removed - using real database');
@@ -303,8 +308,9 @@ async function startServer() {
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '2.0.0',
+      version: '2.1.1',
       environment: 'production',
+      deployment_timestamp: '2025-06-22T12:39:00Z',
       endpoints: {
         health: '/api/health',
         auth: '/api/auth/*',
@@ -321,8 +327,9 @@ async function startServer() {
     console.log('📋 API endpoints info requested');
     res.json({ 
       message: 'Young Eagles API Server',
-      version: '2.0.0',
+      version: '2.1.1',
       environment: 'production',
+      deployment_timestamp: '2025-06-22T12:39:00Z',
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',
@@ -334,16 +341,46 @@ async function startServer() {
   });
 
   // Health check endpoint
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', async (req, res) => {
     console.log('💓 Health check requested');
-    res.json({ 
-      status: 'healthy', 
-      timestamp: new Date().toISOString(),
-      environment: 'production',
-      database: 'connected',
-      authentication: 'secure',
-      version: '2.1.0'
-    });
+    
+    // Check if server is ready
+    if (!serverReady) {
+      return res.status(503).json({
+        status: 'starting',
+        message: 'Server is starting up, please wait...',
+        timestamp: new Date().toISOString(),
+        ready: false
+      });
+    }
+    
+    // Test database connection
+    try {
+      if (db) {
+        const connection = await db.getConnection();
+        connection.release();
+      }
+      
+      res.json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        environment: 'production',
+        database: 'connected',
+        authentication: 'secure',
+        version: '2.1.1',
+        deployment_timestamp: '2025-06-22T12:39:00Z',
+        ready: true
+      });
+    } catch (error) {
+      console.error('❌ Health check database error:', error);
+      res.status(503).json({
+        status: 'unhealthy',
+        message: 'Database connection failed',
+        timestamp: new Date().toISOString(),
+        ready: false,
+        error: error.message
+      });
+    }
   });
 
   // Test endpoint to verify deployment
@@ -352,8 +389,9 @@ async function startServer() {
     res.json({
       message: 'API test successful',
       timestamp: new Date().toISOString(),
-      version: '2.1.0',
-      deployment: 'latest'
+      version: '2.1.1',
+      deployment: 'latest',
+      deployment_timestamp: '2025-06-22T12:39:00Z'
     });
   });
 
@@ -1720,6 +1758,10 @@ async function startServer() {
     console.log(`🌐 Network URL: http://0.0.0.0:${PORT}`);
     console.log(`💓 Health check: http://localhost:${PORT}/api/health`);
     console.log('✅ Server ready to accept connections!');
+    
+    // Mark server as ready for health checks
+    serverReady = true;
+    console.log('🎯 Server marked as ready for Railway health checks');
   });
 }
 
