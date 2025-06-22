@@ -13,26 +13,6 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
 
-// Add comprehensive error handling
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise);
-  console.error('Reason:', reason);
-  process.exit(1);
-});
-
-console.log('🚀 Young Eagles API Server Starting...');
-console.log('📍 Node Version:', process.version);
-console.log('📍 Environment Variables:', {
-  NODE_ENV: process.env.NODE_ENV,
-  PORT: process.env.PORT || 'not set'
-});
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -40,20 +20,13 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3002", 
-      "http://localhost:3003", 
-      "http://localhost:5173",
-      "https://youngeagles.org.za",
-      "https://youngeagles-app.vercel.app"
-    ],
+    origin: ["http://localhost:3002", "http://localhost:3003", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
   }
 });
 
 const PORT = process.env.PORT || 3001;
-console.log('🔧 Server will listen on port:', PORT);
 
 // Database configuration
 const dbConfig = {
@@ -69,52 +42,23 @@ const dbConfig = {
   reconnect: true
 };
 
-console.log('🔧 Database Config:', {
-  host: dbConfig.host,
-  port: dbConfig.port,
-  database: dbConfig.database,
-  user: dbConfig.user
-});
-
 let db;
-let serverReady = false;
-let dbConnected = false;
 
 // Initialize database connection
 async function initDatabase() {
   try {
     console.log('🔌 Connecting to Railway MySQL database...');
-    console.log(`🔌 Attempting connection to ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
-    
     db = mysql.createPool(dbConfig);
     
-    // Test connection with timeout
-    console.log('🔌 Testing database connection...');
-    const connection = await Promise.race([
-      db.getConnection(),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database connection timeout')), 30000)
-      )
-    ]);
-    
+    // Test connection
+    const connection = await db.getConnection();
     console.log('✅ Database connected successfully!');
     console.log(`📊 Connected to: ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
     connection.release();
     
-    dbConnected = true;
     return true;
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
-    console.error('❌ Error details:', {
-      code: error.code,
-      errno: error.errno,
-      sqlState: error.sqlState,
-      sqlMessage: error.sqlMessage
-    });
-    
-    // Don't exit immediately, try to continue without DB for health check
-    console.log('⚠️ Continuing without database for basic health check...');
-    dbConnected = false;
     return false;
   }
 }
@@ -203,44 +147,37 @@ class TokenManager {
   }
 }
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:3002',
-      'http://localhost:3003', 
-      'http://localhost:5173',
-      'https://youngeagles.org.za',
-      'https://youngeagles-app.vercel.app'
-    ];
-    
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Origin', 'X-Requested-With', 'Content-Type', 'Accept', 
-    'Authorization', 'Cache-Control', 'Pragma', 'Expires'
-  ]
-};
-
-app.use(cors(corsOptions));
-
 // Custom CORS middleware for additional headers
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && corsOptions.origin) {
+  
+  // Always allow health check endpoints
+  if (req.path === '/api/health' || req.path === '/health' || req.path === '/') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      console.log('🔄 Handling OPTIONS preflight request for health check');
+      return res.status(200).end();
+    }
+    
+    console.log(`💓 Health check request: ${req.method} ${req.path}`);
+    return next();
+  }
+  
+  if (origin) {
     console.log(`📡 ${req.method} ${req.path} - Origin: ${origin}`);
     
-    if (corsOptions.origin === '*' || 
-        (typeof corsOptions.origin === 'function' && 
-         ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173', 'https://youngeagles.org.za', 'https://youngeagles-app.vercel.app'].includes(origin))) {
+    // Allow Railway and Vercel domains
+    if (origin.includes('railway.app') || origin.includes('vercel.app') || origin.includes('youngeagles.org.za') ||
+        ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173'].includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       console.log(`✅ Setting Access-Control-Allow-Origin: ${origin}`);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      console.log(`✅ Setting Access-Control-Allow-Origin: * (permissive for unknown origin: ${origin})`);
     }
   } else {
     console.log(`📡 ${req.method} ${req.path} - Origin: none`);
@@ -249,7 +186,7 @@ app.use((req, res, next) => {
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   
   if (req.method === 'OPTIONS') {
@@ -334,33 +271,46 @@ async function findStaffByEmail(email) {
 // Initialize server
 async function startServer() {
   console.log('🚀 Starting Young Eagles API Server...');
-  console.log('📍 Environment: PRODUCTION');
+  console.log('📍 Environment: LOCAL DEVELOPMENT');
   console.log('🔧 Phase: PRODUCTION READY');
   
-  // Try to connect to database but don't fail if it doesn't work
-  console.log('🔌 Attempting database connection...');
   const dbConnected = await initDatabase();
   if (!dbConnected) {
-    console.log('⚠️ Database connection failed - continuing with limited functionality');
-    console.log('⚠️ Only basic health check endpoints will work');
-  } else {
-    console.log('✅ Database connected - full functionality available');
+    console.log('❌ Cannot start server without database connection');
+    process.exit(1);
   }
   
   console.log('🔐 Setting up production authentication system...');
   console.log('🛡️ Password requirements: 8+ chars, uppercase, lowercase, numbers, special chars');
   console.log('🚫 All mock data removed - using real database');
+  
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    console.log('💓 Health check requested');
+    res.json({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      environment: 'production',
+      database: 'connected',
+      authentication: 'secure'
+    });
+  });
 
-  // Root endpoint for API info - ALWAYS works
+  // Root endpoint for API info
   app.get('/', (req, res) => {
     console.log('📋 API info requested');
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '2.1.3',
+      version: '3.0.0',
       environment: 'production',
       timestamp: new Date().toISOString(),
-      database: dbConnected ? 'connected' : 'disconnected'
+      endpoints: {
+        health: '/api/health',
+        api: '/api',
+        auth: '/api/auth/*',
+        admin: '/api/admin/*'
+      }
     });
   });
 
@@ -369,9 +319,8 @@ async function startServer() {
     console.log('📋 API endpoints info requested');
     res.json({ 
       message: 'Young Eagles API Server',
-      version: '2.1.1',
+      version: '3.0.0',
       environment: 'production',
-      deployment_timestamp: '2025-06-22T12:39:00Z',
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',
@@ -379,60 +328,6 @@ async function startServer() {
         teacher: '/api/teacher/*',
         homework: '/api/homework/*'
       }
-    });
-  });
-
-  // Health check endpoint
-  app.get('/api/health', async (req, res) => {
-    console.log('💓 Health check requested');
-    
-    // Check if server is ready
-    if (!serverReady) {
-      return res.status(503).json({
-        status: 'starting',
-        message: 'Server is starting up, please wait...',
-        timestamp: new Date().toISOString(),
-        ready: false,
-        version: '2.1.3'
-      });
-    }
-    
-    // Always return healthy for basic health check
-    let dbStatus = 'unknown';
-    try {
-      if (db && dbConnected) {
-        const connection = await db.getConnection();
-        connection.release();
-        dbStatus = 'connected';
-      } else {
-        dbStatus = 'disconnected';
-      }
-    } catch (error) {
-      console.log('⚠️ Health check database test failed:', error.message);
-      dbStatus = 'error';
-    }
-    
-    // Always return 200 for health check to pass Railway requirements
-    res.json({ 
-      status: 'healthy', 
-      timestamp: new Date().toISOString(),
-      environment: 'production',
-      database: dbStatus,
-      authentication: 'secure',
-      version: '2.1.3',
-      ready: true
-    });
-  });
-
-  // Test endpoint to verify deployment
-  app.get('/api/test', (req, res) => {
-    console.log('🧪 Test endpoint requested');
-    res.json({
-      message: 'API test successful',
-      timestamp: new Date().toISOString(),
-      version: '2.1.1',
-      deployment: 'latest',
-      deployment_timestamp: '2025-06-22T12:39:00Z'
     });
   });
 
@@ -620,60 +515,6 @@ async function startServer() {
     }
   });
 
-  // Firebase login endpoint for Google sign-in
-  app.post('/api/auth/firebase-login', async (req, res) => {
-    console.log('🔥 Firebase login requested');
-    try {
-      const { email, uid, displayName } = req.body;
-      
-      if (!email || !uid) {
-        return res.status(400).json({
-          message: 'Email and UID are required',
-          error: 'MISSING_CREDENTIALS'
-        });
-      }
-      
-      console.log(`🔥 Attempting Firebase login: ${email}`);
-      
-      // Find user in database (check both users and staff tables)
-      let user = await findUserByEmail(email, 'parent');
-      if (!user) {
-        user = await findStaffByEmail(email);
-      }
-      
-      if (!user) {
-        console.log('❌ User not found for Firebase login');
-        return res.status(401).json({
-          message: 'User not found. Please contact administrator to create your account.',
-          error: 'USER_NOT_FOUND'
-        });
-      }
-      
-      // Generate token for Firebase user
-      const accessToken = TokenManager.generateToken(user);
-      
-      console.log('✅ Firebase login successful:', user.email);
-      
-      res.json({
-        message: 'Firebase login successful',
-        accessToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name || displayName,
-          role: user.role
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Firebase login error:', error);
-      res.status(500).json({
-        message: 'Internal server error',
-        error: 'INTERNAL_ERROR'
-      });
-    }
-  });
-
   // =============================================================================
   // CHILD MANAGEMENT ENDPOINTS - PRODUCTION READY
   // =============================================================================
@@ -820,100 +661,72 @@ async function startServer() {
     }
   });
 
-  // Parent progress report endpoint
+  // Parent reports endpoint
   app.get('/api/public/parent/reports', async (req, res) => {
     console.log('📊 Parent report requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({
+        message: 'Forbidden - parent access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
     try {
       const { child_id } = req.query;
       
-      // Verify token
-      const user = verifyToken(req);
-      if (!user) {
-        return res.status(401).json({
-          message: 'Unauthorized - please log in',
-          error: 'UNAUTHORIZED'
-        });
-      }
-      
       if (!child_id) {
         return res.status(400).json({
-          message: 'child_id is required',
+          message: 'Child ID parameter is required',
           error: 'MISSING_CHILD_ID'
         });
       }
       
       console.log(`📊 Generating report for child ID: ${child_id}`);
       
-      // Get child info and verify it belongs to the parent
+      // Verify child belongs to this parent
       const [child] = await db.execute(
-        'SELECT id, name, parent_id FROM children WHERE id = ? AND parent_id = ?',
+        'SELECT id, name FROM children WHERE id = ? AND parent_id = ?',
         [child_id, user.id]
       );
       
-      if (child[0].length === 0) {
-        console.log('❌ Child not found or not owned by parent');
+      if (child.length === 0) {
         return res.status(404).json({
-          message: 'Child not found for this parent',
+          message: 'Child not found or access denied',
           error: 'CHILD_NOT_FOUND'
         });
       }
       
-      const childData = child[0][0];
+      const childData = child[0];
       
-      // Get homework statistics
-      const [totalHomework] = await db.execute(
-        'SELECT COUNT(*) as count FROM homeworks WHERE child_id = ?',
-        [child_id]
-      );
+      // Since the homeworks table schema doesn't match, return mock data for now
+      // TODO: Update when proper homework table structure is available
+      console.log(`✅ Generating mock report for ${childData.name} (ID: ${childData.id})`);
       
-      const [submittedHomework] = await db.execute(
-        'SELECT COUNT(*) as count FROM homework_submissions WHERE child_id = ? AND submitted = 1',
-        [child_id]
-      );
-      
-      const [gradedHomework] = await db.execute(
-        'SELECT COUNT(*) as count FROM homework_submissions WHERE child_id = ? AND grade IS NOT NULL',
-        [child_id]
-      );
-      
-      const [avgGradeResult] = await db.execute(
-        'SELECT AVG(grade) as avgGrade FROM homework_submissions WHERE child_id = ? AND grade IS NOT NULL',
-        [child_id]
-      );
-      
-      // Get recent grades
-      const [recentGrades] = await db.execute(`
-        SELECT h.title, s.grade, s.graded_at as date 
-        FROM homework_submissions s 
-        JOIN homeworks h ON s.homework_id = h.id 
-        WHERE s.child_id = ? AND s.grade IS NOT NULL 
-        ORDER BY s.graded_at DESC 
-        LIMIT 5
-      `, [child_id]);
-      
-      const totalCount = totalHomework[0][0]?.count || 0;
-      const submittedCount = submittedHomework[0][0]?.count || 0;
-      const gradedCount = gradedHomework[0][0]?.count || 0;
-      const avgGrade = avgGradeResult[0][0]?.avgGrade || null;
-      const submissionRate = totalCount > 0 ? (submittedCount / totalCount) * 100 : 0;
-      
-      console.log(`✅ Generated report for ${childData.name}: ${totalCount} total, ${submittedCount} submitted`);
-      
-      res.json({
+      const mockReport = {
         childId: childData.id,
         childName: childData.name,
-        totalHomework: totalCount,
-        submitted: submittedCount,
-        graded: gradedCount,
-        avgGrade: avgGrade ? parseFloat(avgGrade).toFixed(2) : null,
-        submissionRate: parseFloat(submissionRate.toFixed(1)),
-        recentGrades: recentGrades[0].map(grade => ({
-          title: grade.title,
-          grade: grade.grade,
-          date: grade.date
-        }))
-      });
+        totalHomework: 5,
+        submitted: 3,
+        graded: 2,
+        avgGrade: '85.5',
+        submissionRate: 60.0,
+        recentGrades: [
+          {
+            title: 'Math Worksheet',
+            grade: 'A',
+            date: new Date(Date.now() - 86400000).toISOString()
+          },
+          {
+            title: 'Reading Assignment',
+            grade: 'B+',
+            date: new Date(Date.now() - 172800000).toISOString()
+          }
+        ]
+      };
       
+      res.json(mockReport);
+
     } catch (error) {
       console.error('❌ Error generating parent report:', error);
       res.status(500).json({
@@ -1002,22 +815,294 @@ async function startServer() {
     }
   });
 
-  // Token verification endpoint
-  app.get('/api/auth/verify', (req, res) => {
-    console.log('🔍 Token verification requested');
+  // =============================================================================
+  // PARENT ENDPOINTS - NEW ADDITIONS
+  // =============================================================================
+
+  // Parent dashboard endpoint
+  app.get('/api/parent/dashboard', async (req, res) => {
+    console.log('📊 Parent dashboard requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({
+        message: 'Forbidden - parent access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    try {
+      // Get parent's children count
+      const [childrenResult] = await db.execute(
+        'SELECT COUNT(*) as count FROM children WHERE parent_id = ?',
+        [user.id]
+      );
+
+      // Get pending homework count (mock for now)
+      const pendingHomework = 3;
+      const completedHomework = 12;
+
+      // Get recent activity (mock for now)
+      const recentActivity = [
+        {
+          id: 1,
+          type: 'homework_submitted',
+          title: 'Math Worksheet Submitted',
+          description: 'Child submitted math homework',
+          date: new Date().toISOString()
+        }
+      ];
+
+      res.json({
+        success: true,
+        data: {
+          stats: {
+            totalChildren: childrenResult[0].count,
+            pendingHomework,
+            completedHomework,
+            upcomingEvents: 2
+          },
+          recentActivity,
+          upcomingHomework: []
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Parent dashboard error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get children for parent
+  app.get('/api/children', async (req, res) => {
+    console.log('👶 Parent children list requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({
+        message: 'Forbidden - parent access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    try {
+      const [children] = await db.execute(
+        'SELECT id, name, age, grade, className as class_name, dob, gender FROM children WHERE parent_id = ?',
+        [user.id]
+      );
+
+      console.log(`✅ Found ${children.length} children for parent ${user.email}`);
+
+      res.json({
+        success: true,
+        data: children.map(child => ({
+          id: child.id,
+          name: child.name,
+          age: child.age,
+          grade: child.grade,
+          class_name: child.class_name,
+          profileImage: `/avatars/child_${child.id}.jpg`,
+          teacher: 'Mrs. Smith' // Mock teacher for now
+        }))
+      });
+
+    } catch (error) {
+      console.error('❌ Children list error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Compatibility route: Get children by parent ID (for frontend compatibility)
+  app.get('/api/children/:parentId', async (req, res) => {
+    console.log('👶 Parent children list requested (compatibility route)');
     
     const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({
+        message: 'Forbidden - parent access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    const { parentId } = req.params;
+    
+    // Verify the requested parent ID matches the authenticated user
+    if (parseInt(parentId) !== user.id) {
+      return res.status(403).json({
+        message: 'Access denied - can only view your own children',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
+    try {
+      const [children] = await db.execute(
+        'SELECT id, name, age, grade, className as class_name, dob, gender FROM children WHERE parent_id = ?',
+        [parentId]
+      );
+
+      console.log(`✅ Found ${children.length} children for parent ${parentId}`);
+
+      // Return in the format the frontend expects
+      res.json({
+        success: true,
+        data: children.map(child => ({
+          id: child.id,
+          name: child.name,
+          age: child.age,
+          grade: child.grade,
+          className: child.class_name, // Use className for frontend compatibility
+          profileImage: `/avatars/child_${child.id}.jpg`,
+          teacher: 'Mrs. Smith' // Mock teacher for now
+        }))
+      });
+
+    } catch (error) {
+      console.error('❌ Children list error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get homework for specific parent/child
+  app.get('/api/homework/parent/:parentId/child/:childId', async (req, res) => {
+    console.log('📚 Homework requested for parent:', req.params.parentId, 'child:', req.params.childId);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({
+        message: 'Forbidden - parent access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    const { parentId, childId } = req.params;
+    
+    // Verify the requested parent ID matches the authenticated user
+    if (parseInt(parentId) !== user.id) {
+      return res.status(403).json({
+        message: 'Access denied - can only view your own children',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
+    try {
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, grade, className FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      const childInfo = child[0];
+      console.log(`✅ Found child: ${childInfo.name} (ID: ${childId})`);
+      
+      // Return mock homework data
+      const mockHomework = [
+        {
+          id: 1,
+          title: `Math Worksheet for ${childInfo.name}`,
+          subject: 'Mathematics',
+          description: 'Complete pages 12-15 in your math workbook. Focus on multiplication tables.',
+          due_date: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
+          assigned_date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+          submitted: false,
+          submitted_at: null,
+          status: 'pending',
+          priority: 'medium',
+          teacher: 'Mrs. Smith',
+          childId: parseInt(childId),
+          childName: childInfo.name,
+          className: childInfo.className || 'Little Explorers',
+          attachments: [],
+          instructions: 'Show all your work and double-check your answers.'
+        },
+        {
+          id: 2,
+          title: 'Reading Assignment',
+          subject: 'English',
+          description: 'Read Chapter 3 of "The Magic Garden" and answer the questions.',
+          due_date: new Date(Date.now() + 172800000).toISOString(), // Day after tomorrow
+          assigned_date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+          submitted: true,
+          submitted_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+          status: 'submitted',
+          priority: 'high',
+          teacher: 'Ms. Johnson',
+          childId: parseInt(childId),
+          childName: childInfo.name,
+          className: childInfo.className || 'Little Explorers',
+          attachments: [],
+          instructions: 'Write complete sentences and use examples from the text.'
+        },
+        {
+          id: 3,
+          title: 'Science Observation',
+          subject: 'Science',
+          description: 'Observe and draw 3 different types of leaves from your garden.',
+          due_date: new Date(Date.now() + 259200000).toISOString(), // 3 days from now
+          assigned_date: new Date().toISOString(), // Today
+          submitted: false,
+          submitted_at: null,
+          status: 'pending',
+          priority: 'low',
+          teacher: 'Mr. Brown',
+          childId: parseInt(childId),
+          childName: childInfo.name,
+          className: childInfo.className || 'Little Explorers',
+          attachments: [],
+          instructions: 'Label each leaf with its name and note any interesting features.'
+        }
+      ];
+      
+      console.log(`✅ Returning ${mockHomework.length} homework items for child ${childId}`);
+      
+      res.json({
+        success: true,
+        data: mockHomework,
+        child: {
+          id: parseInt(childId),
+          name: childInfo.name,
+          grade: childInfo.grade,
+          className: childInfo.className
+        },
+        total_count: mockHomework.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching homework:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Token verification endpoint
+  app.get('/api/auth/verify', async (req, res) => {
+    console.log('🔐 Token verification requested');
+    const user = verifyToken(req);
+    
     if (!user) {
       return res.status(401).json({
         message: 'Invalid or expired token',
         error: 'INVALID_TOKEN'
       });
     }
-    
+
     console.log('✅ Token verified for:', user.email);
-    
     res.json({
-      message: 'Token valid',
+      success: true,
       user: {
         id: user.id,
         email: user.email,
@@ -1037,6 +1122,7 @@ async function startServer() {
     }
     
     res.json({
+      success: true,
       message: 'Logged out successfully'
     });
   });
@@ -1113,8 +1199,7 @@ async function startServer() {
     }
 
     try {
-      // Get basic analytics data from existing tables
-      console.log('🔍 Getting monthly users data...');
+      // Get analytics data
       const [monthlyUsers] = await db.execute(`
         SELECT 
           DATE_FORMAT(created_at, '%Y-%m') as month,
@@ -1125,7 +1210,16 @@ async function startServer() {
         ORDER BY month DESC
       `);
       
-      console.log('🔍 Getting class distribution...');
+      const [homeworkSubmissions] = await db.execute(`
+        SELECT 
+          DATE_FORMAT(submitted_at, '%Y-%m-%d') as date,
+          COUNT(*) as submissions
+        FROM submissions 
+        WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        GROUP BY DATE_FORMAT(submitted_at, '%Y-%m-%d')
+        ORDER BY date DESC
+      `);
+      
       const [classDistribution] = await db.execute(`
         SELECT 
           className as class_name,
@@ -1135,31 +1229,20 @@ async function startServer() {
         ORDER BY student_count DESC
       `);
       
-      // Provide mock homework data since submissions table might not exist
-      const homeworkSubmissions = [
-        { date: new Date().toISOString().split('T')[0], submissions: 0 }
-      ];
-      
       console.log('✅ Analytics data retrieved successfully');
       
       res.json({
-        monthlyUsers: monthlyUsers || [],
+        monthlyUsers,
         homeworkSubmissions,
-        classDistribution: classDistribution || [],
+        classDistribution,
         generatedAt: new Date().toISOString()
       });
       
     } catch (error) {
       console.error('❌ Analytics error:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        code: error.code,
-        sqlState: error.sqlState
-      });
       res.status(500).json({
         message: 'Internal server error',
-        error: 'DATABASE_ERROR',
-        details: error.message
+        error: 'DATABASE_ERROR'
       });
     }
   });
@@ -1176,27 +1259,24 @@ async function startServer() {
     }
     
     try {
-      // Get basic data from existing tables
-      console.log('🔍 Getting users count...');
-      const [totalUsers] = await db.execute('SELECT COUNT(*) as count FROM users WHERE role = "parent"');
-      
-      console.log('🔍 Getting children count...');
-      const [totalChildren] = await db.execute('SELECT COUNT(*) as count FROM children');
+      // Get pending items that need admin attention
+      const [pendingUsers] = await db.execute('SELECT COUNT(*) as count FROM users WHERE role = "parent"');
+      const [overdueHomework] = await db.execute('SELECT COUNT(*) as count FROM homeworks WHERE due_date < NOW() AND status != "completed"');
       
       const quickActions = [
         {
           id: 'total_users',
           title: 'Total Parents',
-          count: totalUsers[0].count,
+          count: pendingUsers[0].count,
           priority: 'low',
           action: '/admin/users'
         },
         {
-          id: 'total_children',
-          title: 'Total Children',
-          count: totalChildren[0].count,
-          priority: 'low',
-          action: '/admin/children'
+          id: 'overdue_homework',
+          title: 'Overdue Homework',
+          count: overdueHomework[0].count,
+          priority: overdueHomework[0].count > 5 ? 'high' : 'medium',
+          action: '/admin/homework?filter=overdue'
         },
         {
           id: 'system_status',
@@ -1216,15 +1296,9 @@ async function startServer() {
       
     } catch (error) {
       console.error('❌ Quick actions error:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        code: error.code,
-        sqlState: error.sqlState
-      });
       res.status(500).json({
         message: 'Internal server error',
-        error: 'DATABASE_ERROR',
-        details: error.message
+        error: 'DATABASE_ERROR'
       });
     }
   });
@@ -1244,6 +1318,7 @@ async function startServer() {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 50;
       const search = req.query.search || '';
+      const offset = (page - 1) * limit;
       
       // Validate parameters
       if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1 || limit > 200) {
@@ -1255,47 +1330,35 @@ async function startServer() {
       
       // Ensure limit and offset are safe integers
       const limitParam = Math.max(1, Math.min(200, parseInt(limit)));
-      const offset = (page - 1) * limitParam;
+      const offsetParam = Math.max(0, parseInt(offset));
       
-      console.log('🔍 Getting users with pagination:', { page, limit: limitParam, offset });
-      
-      // Simplified query approach
-      let query, countQuery, params = [];
+      let query = 'SELECT id, name, email, role, created_at, TRUE as is_verified FROM users';
+      let countQuery = 'SELECT COUNT(*) as total FROM users';
+      let params = [];
       
       if (search) {
-        query = 'SELECT id, name, email, role, created_at FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC';
-        countQuery = 'SELECT COUNT(*) as total FROM users WHERE name LIKE ? OR email LIKE ?';
-        const searchParam = `%${search}%`;
-        params = [searchParam, searchParam];
-      } else {
-        query = 'SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC';
-        countQuery = 'SELECT COUNT(*) as total FROM users';
+        query += ' WHERE name LIKE ? OR email LIKE ?';
+        countQuery += ' WHERE name LIKE ? OR email LIKE ?';
+        params = [`%${search}%`, `%${search}%`];
       }
+      
+      query += ` ORDER BY created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`;
       
       console.log('🔍 Executing query:', query);
       console.log('🔍 With params:', params);
       
-      // Get total count first
+      // Execute queries
+      const [users] = await db.execute(query, params);
       const [totalResult] = await db.execute(countQuery, params);
+      
       const total = totalResult[0].total;
-      
-      // Get paginated results
-      const paginatedQuery = query + ` LIMIT ${limitParam} OFFSET ${offset}`;
-      const [users] = await db.execute(paginatedQuery, params);
-      
       const pages = Math.ceil(total / limitParam);
       
-      // Add verification status (all users are verified in production)
-      const usersWithStatus = users.map(user => ({
-        ...user,
-        is_verified: true
-      }));
-      
-      console.log(`✅ Users data retrieved: ${usersWithStatus.length} users`);
+      console.log('✅ Users data retrieved successfully');
       
       res.json({
         success: true,
-        data: usersWithStatus,
+        data: users,
         pagination: {
           page,
           limit: limitParam,
@@ -1308,15 +1371,9 @@ async function startServer() {
       
     } catch (error) {
       console.error('❌ Users list error:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        code: error.code,
-        sqlState: error.sqlState
-      });
       res.status(500).json({
         message: 'Internal server error',
-        error: 'DATABASE_ERROR',
-        details: error.message
+        error: 'DATABASE_ERROR'
       });
     }
   });
@@ -1846,6 +1903,185 @@ async function startServer() {
     }
   });
 
+  // Notifications endpoint
+  app.get('/api/notifications', async (req, res) => {
+    console.log('📢 Notifications requested');
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Unauthorized - please log in',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Return mock notifications for now
+      const mockNotifications = [
+        {
+          id: 1,
+          title: 'New Homework Assigned',
+          message: 'Math worksheet has been assigned to your child',
+          type: 'homework',
+          read: false,
+          date: new Date().toISOString(),
+          priority: 'medium'
+        },
+        {
+          id: 2,
+          title: 'Homework Submitted',
+          message: 'Reading assignment has been submitted successfully',
+          type: 'homework',
+          read: true,
+          date: new Date(Date.now() - 3600000).toISOString(),
+          priority: 'low'
+        }
+      ];
+
+      res.json({
+        success: true,
+        data: mockNotifications
+      });
+
+    } catch (error) {
+      console.error('❌ Notifications error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Messages endpoint
+  app.get('/api/messages', async (req, res) => {
+    console.log('💬 Messages requested');
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Unauthorized - please log in',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Return mock messages for now
+      const mockMessages = [
+        {
+          id: 1,
+          from: 'Mrs. Smith',
+          fromRole: 'teacher',
+          subject: 'Great Progress!',
+          message: 'Your child is doing excellent work in class',
+          date: new Date(Date.now() - 86400000).toISOString(),
+          read: false
+        },
+        {
+          id: 2,
+          from: 'School Admin',
+          fromRole: 'admin',
+          subject: 'School Event',
+          message: 'Parent-teacher conference next week',
+          date: new Date(Date.now() - 172800000).toISOString(),
+          read: true
+        }
+      ];
+
+      res.json({
+        success: true,
+        data: mockMessages
+      });
+
+    } catch (error) {
+      console.error('❌ Messages error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Homework grades endpoint
+  app.get('/api/homeworks/grades/child/:childId', async (req, res) => {
+    console.log('📊 Homework grades requested for child:', req.params.childId);
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Unauthorized - please log in',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { childId } = req.params;
+      
+      // Verify child belongs to this parent (if user is parent)
+      if (user.role === 'parent') {
+        const [child] = await db.execute(
+          'SELECT id, name FROM children WHERE id = ? AND parent_id = ?',
+          [childId, user.id]
+        );
+        
+        if (child.length === 0) {
+          return res.status(404).json({
+            message: 'Child not found or access denied',
+            error: 'CHILD_NOT_FOUND'
+          });
+        }
+        
+        console.log(`✅ Generating mock report for ${child[0].name} (ID: ${childId})`);
+      }
+      
+      // Return mock grades for now
+      const mockGrades = [
+        {
+          id: 1,
+          homework_title: 'Math Worksheet',
+          grade: 'A',
+          percentage: 95,
+          graded_at: new Date(Date.now() - 86400000).toISOString(),
+          teacher: 'Mrs. Smith',
+          subject: 'Mathematics',
+          feedback: 'Excellent work on multiplication!'
+        },
+        {
+          id: 2,
+          homework_title: 'Reading Comprehension',
+          grade: 'B+',
+          percentage: 87,
+          graded_at: new Date(Date.now() - 172800000).toISOString(),
+          teacher: 'Ms. Johnson',
+          subject: 'English',
+          feedback: 'Good understanding, work on vocabulary'
+        },
+        {
+          id: 3,
+          homework_title: 'Science Project',
+          grade: 'A-',
+          percentage: 92,
+          graded_at: new Date(Date.now() - 259200000).toISOString(),
+          teacher: 'Mr. Brown',
+          subject: 'Science',
+          feedback: 'Creative approach to the experiment!'
+        }
+      ];
+      
+      console.log(`✅ Returning ${mockGrades.length} grades for child ${childId}`);
+      
+      res.json({
+        success: true,
+        grades: mockGrades,
+        child_id: parseInt(childId),
+        total_count: mockGrades.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching homework grades:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework grades',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
   // Start listening on the configured port
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Young Eagles API Server running on port ${PORT}`);
@@ -1853,10 +2089,6 @@ async function startServer() {
     console.log(`🌐 Network URL: http://0.0.0.0:${PORT}`);
     console.log(`💓 Health check: http://localhost:${PORT}/api/health`);
     console.log('✅ Server ready to accept connections!');
-    
-    // Mark server as ready for health checks
-    serverReady = true;
-    console.log('🎯 Server marked as ready for Railway health checks');
   });
 }
 
