@@ -1480,8 +1480,8 @@ async function startServer() {
       // Insert user into appropriate table
       if (role === 'parent') {
         await db.execute(
-          'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
-          [name, email, role, hashedPassword]
+          'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+          [name, email, role, hashedPassword, '']
         );
       } else if (role === 'teacher') {
         await db.execute(
@@ -2260,8 +2260,8 @@ async function startServer() {
         
         try {
           await db.execute(
-            'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
-            [name || email.split('@')[0], email, 'parent', hashedPassword]
+            'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+            [name || email.split('@')[0], email, 'parent', hashedPassword, '']
           );
           
           // Fetch the newly created user
@@ -2340,8 +2340,8 @@ async function startServer() {
       
       // Insert new parent user
       const [result] = await db.execute(
-        'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
-        [name, email, 'parent', hashedPassword]
+        'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        [name, email, 'parent', hashedPassword, '']
       );
       
       // Fetch the newly created user
