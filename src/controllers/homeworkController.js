@@ -318,6 +318,22 @@ export const getHomeworksForTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
     console.log('🔍 Fetching homeworks for teacher ID:', teacherId);
+    
+    // First get teacher's class to filter homework appropriately
+    const teacherRows = await query(
+      'SELECT className, name FROM staff WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'skydek_DB'
+    );
+    
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+    
+    const teacher = teacherRows[0];
+    console.log('👨‍🏫 Teacher info:', teacher);
+    
+    // Get homeworks uploaded by this teacher
     const homeworks = await query(
       'SELECT * FROM homeworks WHERE uploaded_by_teacher_id = ? ORDER BY created_at DESC',
       [teacherId],
@@ -325,33 +341,61 @@ export const getHomeworksForTeacher = async (req, res) => {
     );
     console.log('📚 Found homeworks:', homeworks.length);
     
-    // Parse items JSON and fetch teacher names for each homework
-    for (let hw of homeworks) {
+    // Enhance homework data with additional info
+    const enhancedHomeworks = await Promise.all(homeworks.map(async (hw) => {
+      // Parse items JSON if exists
       if (hw.items && typeof hw.items === 'string') {
-        try { hw.items = JSON.parse(hw.items); } catch (e) { hw.items = null; }
+        try { 
+          hw.items = JSON.parse(hw.items); 
+        } catch (e) { 
+          hw.items = null; 
+        }
       }
       
-      // Fetch teacher name from railway database
-      if (hw.uploaded_by_teacher_id) {
-        try {
-          const [teacher] = await query(
-            'SELECT name FROM users WHERE id = ?',
-            [hw.uploaded_by_teacher_id],
-            'railway'
-          );
-          hw.uploaded_by_teacher_name = teacher ? teacher.name : `Teacher ID: ${hw.uploaded_by_teacher_id}`;
-        } catch (err) {
-          console.error('Error fetching teacher name:', err);
-          hw.uploaded_by_teacher_name = `Teacher ID: ${hw.uploaded_by_teacher_id}`;
-        }
-      } else {
-        hw.uploaded_by_teacher_name = 'Unknown Teacher';
-      }
-    }
-    res.json({ homeworks });
+      // Add teacher name
+      hw.uploaded_by_teacher_name = teacher.name;
+      
+      // Get submission count for this homework
+      const submissionCount = await query(
+        'SELECT COUNT(*) as count FROM homework_submissions WHERE homework_id = ?',
+        [hw.id],
+        'skydek_DB'
+      );
+      
+      hw.submissionCount = submissionCount[0]?.count || 0;
+      
+      // Get student count in teacher's class for calculating completion rate
+      const studentCount = await query(
+        'SELECT COUNT(*) as count FROM children WHERE className = ?',
+        [teacher.className || ''],
+        'skydek_DB'
+      );
+      
+      hw.totalStudents = studentCount[0]?.count || 0;
+      hw.completionRate = hw.totalStudents > 0 ? 
+        Math.round((hw.submissionCount / hw.totalStudents) * 100) : 0;
+      
+      return hw;
+    }));
+    
+    res.json({ 
+      success: true,
+      homeworks: enhancedHomeworks,
+      teacher: {
+        id: teacherId,
+        name: teacher.name,
+        className: teacher.className
+      },
+      totalHomeworks: enhancedHomeworks.length
+    });
+    
   } catch (err) {
     console.error('Error fetching homeworks for teacher:', err);
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error.',
+      error: err.message 
+    });
   }
 };
 
