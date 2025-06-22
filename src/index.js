@@ -2238,9 +2238,10 @@ async function startServer() {
   app.post('/api/auth/firebase-login', async (req, res) => {
     console.log('🔥 Firebase login requested');
     try {
-      const { idToken, email, name, photoURL } = req.body;
+      const { idToken, email, name, photoURL, uid, displayName } = req.body;
       
       if (!idToken || !email) {
+        console.log('❌ Missing credentials:', { hasIdToken: !!idToken, hasEmail: !!email });
         return res.status(400).json({
           message: 'Firebase ID token and email are required',
           error: 'MISSING_CREDENTIALS'
@@ -2261,7 +2262,7 @@ async function startServer() {
         try {
           await db.execute(
             'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-            [name || email.split('@')[0], email, 'parent', hashedPassword, '']
+            [name || displayName || email.split('@')[0], email, 'parent', hashedPassword, '']
           );
           
           // Fetch the newly created user
@@ -2284,6 +2285,7 @@ async function startServer() {
       res.json({
         message: 'Firebase login successful',
         accessToken,
+        token: accessToken, // Also include 'token' for frontend compatibility
         user: {
           id: user.id,
           email: user.email,

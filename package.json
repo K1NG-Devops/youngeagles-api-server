@@ -1,6 +1,6 @@
 {
   "name": "young-eagles-api",
-  "version": "3.1.3",
+  "version": "3.1.4",
   "description": "Young Eagles PWA API Server - Production Ready with Full Features",
   "main": "src/index.js",
   "type": "module",
