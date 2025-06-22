@@ -20,7 +20,13 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3002", "http://localhost:3003", "http://localhost:5173"],
+    origin: [
+      "http://localhost:3002", 
+      "http://localhost:3003", 
+      "http://localhost:5173",
+      "https://youngeagles.org.za",
+      "https://youngeagles-app.vercel.app"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
   }
@@ -278,7 +284,7 @@ async function findStaffByEmail(email) {
 // Initialize server
 async function startServer() {
   console.log('🚀 Starting Young Eagles API Server...');
-  console.log('📍 Environment: LOCAL DEVELOPMENT');
+  console.log('📍 Environment: PRODUCTION');
   console.log('🔧 Phase: PRODUCTION READY');
   
   const dbConnected = await initDatabase();
@@ -291,6 +297,42 @@ async function startServer() {
   console.log('🛡️ Password requirements: 8+ chars, uppercase, lowercase, numbers, special chars');
   console.log('🚫 All mock data removed - using real database');
   
+  // Root endpoint for API info
+  app.get('/', (req, res) => {
+    console.log('📋 API info requested');
+    res.json({ 
+      message: 'Young Eagles API Server is running',
+      status: 'healthy',
+      version: '2.0.0',
+      environment: 'production',
+      endpoints: {
+        health: '/api/health',
+        auth: '/api/auth/*',
+        admin: '/api/admin/*',
+        parent: '/api/parent/*',
+        teacher: '/api/teacher/*',
+        homework: '/api/homework/*'
+      }
+    });
+  });
+
+  // API info endpoint
+  app.get('/api', (req, res) => {
+    console.log('📋 API endpoints info requested');
+    res.json({ 
+      message: 'Young Eagles API Server',
+      version: '2.0.0',
+      environment: 'production',
+      endpoints: {
+        auth: '/api/auth/*',
+        admin: '/api/admin/*',
+        parent: '/api/parent/*',
+        teacher: '/api/teacher/*',
+        homework: '/api/homework/*'
+      }
+    });
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     console.log('💓 Health check requested');
