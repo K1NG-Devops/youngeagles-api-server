@@ -343,11 +343,15 @@ async function startServer() {
       version: '3.0.0',
       environment: isProduction ? 'production' : 'development',
       timestamp: new Date().toISOString(),
+      deployment_id: 'railway-deploy-v3.0.0-' + Date.now(),
       endpoints: {
         health: '/api/health',
         api: '/api',
         auth: '/api/auth/*',
-        admin: '/api/admin/*'
+        admin: '/api/admin/*',
+        parent: '/api/parent/*',
+        children: '/api/children/*',
+        homework: '/api/homework/*'
       }
     });
   });
@@ -359,12 +363,16 @@ async function startServer() {
       message: 'Young Eagles API Server',
       version: '3.0.0',
       environment: isProduction ? 'production' : 'development',
+      deployment_id: 'railway-deploy-v3.0.0-' + Date.now(),
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',
         parent: '/api/parent/*',
         teacher: '/api/teacher/*',
-        homework: '/api/homework/*'
+        homework: '/api/homework/*',
+        children: '/api/children/*',
+        notifications: '/api/notifications',
+        messages: '/api/messages'
       }
     });
   });
