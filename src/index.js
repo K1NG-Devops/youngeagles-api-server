@@ -340,10 +340,10 @@ async function startServer() {
     res.json({ 
       message: 'Young Eagles API Server is running',
       status: 'healthy',
-      version: '3.0.0',
+      version: '3.1.0',
       environment: isProduction ? 'production' : 'development',
       timestamp: new Date().toISOString(),
-      deployment_id: 'railway-deploy-v3.0.0-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.0-' + Date.now(),
       endpoints: {
         health: '/api/health',
         api: '/api',
@@ -361,9 +361,9 @@ async function startServer() {
     console.log('📋 API endpoints info requested');
     res.json({ 
       message: 'Young Eagles API Server',
-      version: '3.0.0',
+      version: '3.1.0',
       environment: isProduction ? 'production' : 'development',
-      deployment_id: 'railway-deploy-v3.0.0-' + Date.now(),
+      deployment_id: 'railway-deploy-v3.1.0-' + Date.now(),
       endpoints: {
         auth: '/api/auth/*',
         admin: '/api/admin/*',

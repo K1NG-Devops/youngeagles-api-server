@@ -1,11 +1,12 @@
 {
   "name": "young-eagles-api",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Young Eagles PWA API Server - Production Ready with Full Features",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
+    "railway": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "echo \"No tests specified\" && exit 0"
   },
