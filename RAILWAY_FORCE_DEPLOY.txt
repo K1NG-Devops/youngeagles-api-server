@@ -1,0 +1,17 @@
+RAILWAY DEPLOYMENT TRIGGER
+=========================
+
+This file forces Railway to recognize a new deployment.
+
+Deployment Version: 3.1.0
+Timestamp: 2025-06-22T16:10:00Z
+Trigger: Manual deployment force
+
+Issues Fixed:
+- Clean railway.toml configuration
+- Removed problematic environment variables
+- Updated health check path to /api/health
+- Reduced health check timeout to 300s
+- Version bump to 3.1.0
+
+Expected Result: Railway should deploy version 3.1.0 with all endpoints working 
