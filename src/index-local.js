@@ -147,44 +147,37 @@ class TokenManager {
   }
 }
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:3002',
-      'http://localhost:3003', 
-      'http://localhost:5173',
-      'https://youngeagles-app.vercel.app'
-    ];
-    
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Origin', 'X-Requested-With', 'Content-Type', 'Accept', 
-    'Authorization', 'Cache-Control', 'Pragma', 'Expires',
-    'x-request-source'
-  ]
-};
-
-app.use(cors(corsOptions));
-
 // Custom CORS middleware for additional headers
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && corsOptions.origin) {
+  
+  // Always allow health check endpoints
+  if (req.path === '/api/health' || req.path === '/health' || req.path === '/') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    if (req.method === 'OPTIONS') {
+      console.log('🔄 Handling OPTIONS preflight request for health check');
+      return res.status(200).end();
+    }
+    
+    console.log(`💓 Health check request: ${req.method} ${req.path}`);
+    return next();
+  }
+  
+  if (origin) {
     console.log(`📡 ${req.method} ${req.path} - Origin: ${origin}`);
     
-    if (corsOptions.origin === '*' || 
-        (typeof corsOptions.origin === 'function' && 
-         ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173', 'https://youngeagles-app.vercel.app'].includes(origin))) {
+    // Allow Railway and Vercel domains
+    if (origin.includes('railway.app') || origin.includes('vercel.app') || origin.includes('youngeagles.org.za') ||
+        ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173'].includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       console.log(`✅ Setting Access-Control-Allow-Origin: ${origin}`);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      console.log(`✅ Setting Access-Control-Allow-Origin: * (permissive for unknown origin: ${origin})`);
     }
   } else {
     console.log(`📡 ${req.method} ${req.path} - Origin: none`);
