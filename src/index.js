@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { AdminWebSocketEvents } from './websocket-admin-events.js';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -3275,6 +3276,18 @@ async function startServer() {
         child_id,
         filesCount: fileUrls.length
       });
+
+      // Emit real-time event to admin dashboard
+      if (req.app.locals.adminEvents) {
+        req.app.locals.adminEvents.emitNewSubmission({
+          submissionId: result.insertId,
+          studentName: child[0].name,
+          childName: child[0].name,
+          homeworkTitle: homework[0].title,
+          className: child[0].className,
+          filesCount: fileUrls.length
+        });
+      }
       
       res.json({
         success: true,
@@ -3291,6 +3304,9 @@ async function startServer() {
       });
     }
   });
+
+  // Initialize Admin WebSocket Events Handler
+  const adminEvents = new AdminWebSocketEvents(io);
 
   // Socket.IO connection handling
   io.on('connection', (socket) => {
@@ -3312,34 +3328,72 @@ async function startServer() {
         role,
         timestamp: new Date().toISOString()
       });
+
+      // If admin user, send current stats
+      if (role === 'admin') {
+        console.log('🔑 Admin user connected, sending initial data');
+        socket.emit('notification', {
+          type: 'success',
+          message: 'Admin dashboard connected to real-time updates',
+          urgent: false
+        });
+      }
     }
     
     // Handle messaging
     socket.on('send_message', async (data) => {
+      console.log('💬 Received message via WebSocket:', data);
+      
+      const { conversationId, message, timestamp, senderId } = data; // Assuming senderId is sent from client
+      
+      if (!conversationId || !message || !senderId) {
+        console.error('❌ Invalid message data received:', data);
+        // Optional: send an error back to the sender
+        socket.emit('message_error', { error: 'Missing conversationId, message, or senderId' });
+        return;
+      }
+      
       try {
-        console.log('📨 Message received:', data);
+        // Step 1: Save the message to the database
+        console.log(`💾 Saving message to conversation ${conversationId}`);
+        const [result] = await db.execute(
+          'INSERT INTO messages (conversation_id, sender_id, message_text, created_at) VALUES (?, ?, ?, ?)',
+          [conversationId, senderId, message, new Date(timestamp)]
+        );
+        const newMessageId = result.insertId;
+        console.log(`✅ Message saved with ID: ${newMessageId}`);
         
-        // Store message in database (if needed)
-        // Emit to recipient
-        if (data.recipientId) {
-          io.to(`user_${data.recipientId}`).emit('new_message', {
-            ...data,
-            timestamp: new Date().toISOString()
-          });
-        }
+        // Step 2: Broadcast the message to the conversation room
+        const messageToSend = {
+          id: newMessageId,
+          conversationId,
+          senderId,
+          message,
+          timestamp: new Date(timestamp).toISOString(),
+          status: 'delivered'
+          // You can also join and send sender's name if needed
+        };
         
-        // Confirm to sender
-        socket.emit('message_sent', {
-          success: true,
-          timestamp: new Date().toISOString()
-        });
+        io.to(conversationId).emit('new_message', messageToSend);
+        console.log(`📢 Broadcasted message to room: ${conversationId}`);
         
       } catch (error) {
-        console.error('❌ Message handling error:', error);
-        socket.emit('message_error', {
-          error: 'Failed to send message'
-        });
+        console.error('❌ Failed to process message:', error);
+        // Optional: Inform sender of the failure
+        socket.emit('message_error', { error: 'Failed to save or send message', details: error.message });
       }
+    });
+
+    // Handle typing indicator
+    socket.on('typing', (data) => {
+      console.log('💬 Typing indicator received:', data);
+      // Implement typing indicator logic
+    });
+
+    // Handle test admin events (for development)
+    socket.on('test_admin_event', (data) => {
+      console.log('🧪 Test admin event received:', data);
+      adminEvents.emitTestEvent(data);
     });
     
     // Handle disconnect
@@ -3347,6 +3401,9 @@ async function startServer() {
       console.log('🔌 User disconnected:', socket.id);
     });
   });
+
+  // Make adminEvents available globally for API endpoints
+  app.locals.adminEvents = adminEvents;
 
   // Start listening on the configured port
   server.listen(PORT, '0.0.0.0', () => {
