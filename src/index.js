@@ -23,10 +23,17 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3002", "http://localhost:3003", "http://localhost:5173"],
+    origin: [
+      // "http://localhost:3002", 
+      // "http://localhost:3003", 
+      // "http://localhost:5173",
+      "https://youngeagles.org.za",
+      "https://youngeagles-api-server.up.railway.app"
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
-  }
+  },
+  path: "/socket.io/"
 });
 
 const PORT = process.env.PORT || 3001;
@@ -366,6 +373,43 @@ async function startServer() {
     });
   });
 
+  // Database health check endpoint
+  app.get('/api/health/db', async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(503).json({
+          status: 'unhealthy',
+          message: 'Database not initialized',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const connection = await Promise.race([
+        db.getConnection(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 5000))
+      ]);
+      
+      // Test a simple query
+      const [result] = await connection.execute('SELECT 1 as test');
+      connection.release();
+
+      res.json({
+        status: 'healthy',
+        message: 'Database connection successful',
+        timestamp: new Date().toISOString(),
+        test_query_result: result[0].test
+      });
+    } catch (error) {
+      console.error('❌ Database health check failed:', error);
+      res.status(503).json({
+        status: 'unhealthy',
+        message: 'Database connection failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Root endpoint for API info
   app.get('/', (req, res) => {
     console.log('📋 API info requested');
@@ -473,8 +517,8 @@ async function startServer() {
     }
   });
 
-  // Teacher login endpoint
-  app.post('/api/auth/teacher-login', async (req, res) => {
+  // Teacher login endpoint (with both paths for compatibility)
+  app.post('/api/auth/teacher/login', async (req, res) => {
     console.log('🔐 Teacher login requested');
     try {
       const { email, password } = req.body;
@@ -1504,6 +1548,325 @@ async function startServer() {
       res.status(500).json({
         message: 'Failed to fetch homework',
         error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Teacher homework stats endpoint
+  app.get('/api/homework/teacher/stats', async (req, res) => {
+    console.log('📊 Teacher homework stats requested');
+    
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired token',
+        error: 'INVALID_TOKEN'
+      });
+    }
+
+    if (user.role !== 'teacher' && user.role !== 'admin') {
+      return res.status(403).json({
+        message: 'Forbidden - teacher or admin access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    try {
+      // Get teacher's class(es) if they're a teacher
+      let teacherClasses = [];
+      if (user.role === 'teacher') {
+        const [classes] = await db.execute(
+          'SELECT DISTINCT class_name FROM staff WHERE email = ? AND role = "teacher"',
+          [user.email]
+        );
+        teacherClasses = classes.map(c => c.class_name);
+      }
+
+      // Build query based on role
+      let homeworkQuery = `
+        SELECT 
+          h.id,
+          h.title,
+          h.class_name,
+          h.type,
+          h.due_date,
+          h.created_at,
+          COUNT(DISTINCT c.id) as total_students,
+          COUNT(DISTINCT s.id) as submitted_count,
+          (COUNT(DISTINCT s.id) / COUNT(DISTINCT c.id) * 100) as completion_rate
+        FROM homeworks h
+        LEFT JOIN children c ON c.className = h.class_name
+        LEFT JOIN submissions s ON s.homework_id = h.id
+      `;
+      
+      let queryParams = [];
+      
+      if (user.role === 'teacher' && teacherClasses.length > 0) {
+        homeworkQuery += ` WHERE h.class_name IN (${teacherClasses.map(() => '?').join(',')})`;
+        queryParams = teacherClasses;
+      }
+      
+      homeworkQuery += `
+        GROUP BY h.id, h.title, h.class_name, h.type, h.due_date, h.created_at
+        ORDER BY h.created_at DESC
+      `;
+
+      const [homeworkStats] = await db.execute(homeworkQuery, queryParams);
+
+      // Get total counts
+      let totalHomeworkQuery = 'SELECT COUNT(*) as total FROM homeworks';
+      let totalSubmissionQuery = 'SELECT COUNT(*) as total FROM submissions';
+      let totalStudentsQuery = 'SELECT COUNT(DISTINCT id) as total FROM children';
+
+      if (user.role === 'teacher' && teacherClasses.length > 0) {
+        const classFilter = ` WHERE class_name IN (${teacherClasses.map(() => '?').join(',')})`;
+        totalHomeworkQuery += classFilter;
+        totalStudentsQuery += classFilter;
+        
+        totalSubmissionQuery += ` WHERE homework_id IN (SELECT id FROM homeworks${classFilter})`;
+        queryParams = [...teacherClasses, ...teacherClasses];
+      } else {
+        queryParams = [];
+      }
+
+      const [totalHomework] = await db.execute(totalHomeworkQuery, 
+        user.role === 'teacher' ? teacherClasses : []);
+      const [totalSubmissions] = await db.execute(totalSubmissionQuery, 
+        user.role === 'teacher' ? teacherClasses : []);
+      const [totalStudents] = await db.execute(totalStudentsQuery, 
+        user.role === 'teacher' ? teacherClasses : []);
+
+      // Recent homework activity
+      let recentQuery = `
+        SELECT h.title, h.created_at, h.class_name, COUNT(s.id) as submissions
+        FROM homeworks h
+        LEFT JOIN submissions s ON h.id = s.homework_id
+      `;
+      
+      if (user.role === 'teacher' && teacherClasses.length > 0) {
+        recentQuery += ` WHERE h.class_name IN (${teacherClasses.map(() => '?').join(',')})`;
+      }
+      
+      recentQuery += `
+        GROUP BY h.id, h.title, h.created_at, h.class_name
+        ORDER BY h.created_at DESC
+        LIMIT 5
+      `;
+
+      const [recentHomework] = await db.execute(recentQuery, 
+        user.role === 'teacher' ? teacherClasses : []);
+
+      console.log('✅ Teacher homework stats retrieved successfully');
+      
+      res.json({
+        success: true,
+        stats: {
+          totalHomework: totalHomework[0].total,
+          totalSubmissions: totalSubmissions[0].total,
+          totalStudents: totalStudents[0].total,
+          averageCompletionRate: homeworkStats.length > 0 
+            ? Math.round(homeworkStats.reduce((sum, hw) => sum + parseFloat(hw.completion_rate || 0), 0) / homeworkStats.length)
+            : 0
+        },
+        homeworkList: homeworkStats.map(hw => ({
+          id: hw.id,
+          title: hw.title,
+          className: hw.class_name,
+          type: hw.type,
+          dueDate: hw.due_date,
+          createdAt: hw.created_at,
+          totalStudents: hw.total_students,
+          submittedCount: hw.submitted_count,
+          completionRate: Math.round(parseFloat(hw.completion_rate || 0))
+        })),
+        recentActivity: recentHomework.map(hw => ({
+          title: hw.title,
+          className: hw.class_name,
+          createdAt: hw.created_at,
+          submissions: hw.submissions
+        })),
+        teacherClasses: user.role === 'teacher' ? teacherClasses : null
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching teacher homework stats:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework statistics',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Classes endpoint
+  app.get('/api/classes', async (req, res) => {
+    console.log('📚 Classes list requested');
+    try {
+      // Get all distinct classes with counts
+      const [classes] = await db.execute(`
+        SELECT 
+          className as name,
+          grade,
+          COUNT(*) as studentCount
+        FROM children 
+        GROUP BY className, grade
+        ORDER BY className
+      `);
+      
+      console.log(`✅ Found ${classes.length} classes`);
+      
+      res.json({
+        success: true,
+        classes: classes.map(cls => ({
+          id: cls.name.toLowerCase().replace(/\s+/g, '-'),
+          name: cls.name,
+          grade: cls.grade,
+          studentCount: cls.studentCount
+        }))
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching classes:', error);
+      res.status(500).json({
+        message: 'Failed to fetch classes',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Parent registration endpoint
+  app.post('/api/auth/parent/register', async (req, res) => {
+    console.log('👨‍👩‍👧‍👦 Parent registration requested');
+    try {
+      const { name, email, password } = req.body;
+      
+      if (!name || !email || !password) {
+        return res.status(400).json({
+          message: 'Name, email and password are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+      
+      // Validate password
+      const passwordValidation = PasswordSecurity.validatePassword(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: passwordValidation.message,
+          error: 'INVALID_PASSWORD'
+        });
+      }
+      
+      console.log(`👤 Registering parent: ${email}`);
+      
+      // Check if user already exists
+      const existingUser = await findUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      }
+      
+      // Hash password
+      const hashedPassword = PasswordSecurity.hashPassword(password);
+      
+      // Insert new parent user
+      const [result] = await db.execute(
+        'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+        [name, email, 'parent', hashedPassword, '']
+      );
+      
+      // Fetch the newly created user
+      const newUser = await findUserByEmail(email);
+      
+      // Generate access token
+      const accessToken = TokenManager.generateToken(newUser);
+      
+      console.log('✅ Parent registered successfully:', email);
+      
+      res.status(201).json({
+        message: 'Registration successful',
+        accessToken,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Parent registration error:', error);
+      
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      } else {
+        res.status(500).json({
+          message: 'Internal server error',
+          error: 'INTERNAL_ERROR'
+        });
+      }
+    }
+  });
+
+  // Parent login endpoint
+  app.post('/api/auth/parent/login', async (req, res) => {
+    console.log('🔐 Parent login requested');
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({
+          message: 'Email and password are required',
+          error: 'MISSING_CREDENTIALS'
+        });
+      }
+      
+      console.log(`👤 Attempting parent login: ${email}`);
+      
+      // Find user in database
+      const user = await findUserByEmail(email, 'parent');
+      
+      if (!user) {
+        console.log('❌ Parent not found');
+        return res.status(401).json({
+          message: 'Invalid email or password',
+          error: 'INVALID_CREDENTIALS'
+        });
+      }
+      
+      // Verify password
+      if (!PasswordSecurity.verifyPassword(password, user.password)) {
+        console.log('❌ Invalid password');
+        return res.status(401).json({
+          message: 'Invalid email or password',
+          error: 'INVALID_CREDENTIALS'
+        });
+      }
+      
+      // Generate token
+      const accessToken = TokenManager.generateToken(user);
+      
+      console.log('✅ Parent login successful:', user.email);
+      
+      res.json({
+        message: 'Login successful',
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Parent login error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
       });
     }
   });
@@ -2878,11 +3241,68 @@ async function startServer() {
     }
   });
 
+  // Socket.IO connection handling
+  io.on('connection', (socket) => {
+    console.log('🔌 User connected:', socket.id);
+    
+    // Extract user info from query params
+    const userId = socket.handshake.query.userId;
+    const role = socket.handshake.query.role;
+    
+    if (userId && role) {
+      console.log(`👤 User authenticated: ${userId} (${role})`);
+      socket.join(`user_${userId}`);
+      socket.join(`role_${role}`);
+      
+      // Send welcome message
+      socket.emit('connected', {
+        message: 'Connected to Young Eagles messaging system',
+        userId,
+        role,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Handle messaging
+    socket.on('send_message', async (data) => {
+      try {
+        console.log('📨 Message received:', data);
+        
+        // Store message in database (if needed)
+        // Emit to recipient
+        if (data.recipientId) {
+          io.to(`user_${data.recipientId}`).emit('new_message', {
+            ...data,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // Confirm to sender
+        socket.emit('message_sent', {
+          success: true,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error('❌ Message handling error:', error);
+        socket.emit('message_error', {
+          error: 'Failed to send message'
+        });
+      }
+    });
+    
+    // Handle disconnect
+    socket.on('disconnect', () => {
+      console.log('🔌 User disconnected:', socket.id);
+    });
+  });
+
   // Start listening on the configured port
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Young Eagles API Server running on port ${PORT}`);
     console.log(`📍 Local URL: http://localhost:${PORT}`);
     console.log(`🌐 Network URL: http://0.0.0.0:${PORT}`);
+    console.log(`🔌 Socket.IO enabled on path: /socket.io/`);
     console.log('✅ Server ready to accept connections!');
   });
 }
