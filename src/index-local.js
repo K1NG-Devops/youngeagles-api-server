@@ -1916,6 +1916,221 @@ async function startServer() {
     }
   });
 
+  // Classes endpoints
+  app.get('/api/classes', async (req, res) => {
+    console.log('🏫 Classes requested');
+    const user = verifyToken(req);
+    if (!user || (user.role !== 'admin' && user.role !== 'teacher')) {
+      return res.status(401).json({
+        message: 'Unauthorized - admin or teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Return mock classes data for now
+      const mockClasses = [
+        {
+          id: 1,
+          name: 'Little Eagles (3-4 years)',
+          description: 'Our youngest learners exploring through play',
+          teacher_name: 'Mrs. Smith',
+          teacher_id: 1,
+          age_group: '3-4',
+          max_students: 15,
+          student_count: 12,
+          schedule: 'Mon-Fri 8:00-12:00',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: 2,
+          name: 'Growing Eagles (4-5 years)',
+          description: 'Building foundation skills for school readiness',
+          teacher_name: 'Ms. Johnson',
+          teacher_id: 2,
+          age_group: '4-5',
+          max_students: 18,
+          student_count: 16,
+          schedule: 'Mon-Fri 8:00-13:00',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        {
+          id: 3,
+          name: 'Soaring Eagles (5-6 years)',
+          description: 'Pre-school graduation preparation',
+          teacher_name: null,
+          teacher_id: null,
+          age_group: '5-6',
+          max_students: 20,
+          student_count: 0,
+          schedule: 'Mon-Fri 8:00-14:00',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+
+      res.json(mockClasses);
+
+    } catch (error) {
+      console.error('❌ Classes error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get available teachers for class assignment
+  app.get('/api/classes/teachers/available', async (req, res) => {
+    console.log('👩‍🏫 Available teachers requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Return mock teachers data
+      const mockTeachers = [
+        { id: 1, name: 'Mrs. Smith', email: 'smith@youngeagles.org.za' },
+        { id: 2, name: 'Ms. Johnson', email: 'johnson@youngeagles.org.za' },
+        { id: 3, name: 'Mr. Brown', email: 'brown@youngeagles.org.za' },
+        { id: 4, name: 'Mrs. Wilson', email: 'wilson@youngeagles.org.za' }
+      ];
+
+      res.json(mockTeachers);
+
+    } catch (error) {
+      console.error('❌ Teachers error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Create new class
+  app.post('/api/classes', async (req, res) => {
+    console.log('➕ Create class requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { name, description, teacher_id, age_group, max_students, schedule } = req.body;
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Class name is required' });
+      }
+
+      // Create mock class for now
+      const newClass = {
+        id: Math.floor(Math.random() * 1000) + 100,
+        name: name.trim(),
+        description: description || '',
+        teacher_id: teacher_id || null,
+        teacher_name: teacher_id ? 'Assigned Teacher' : null,
+        age_group: age_group || '',
+        max_students: max_students || 20,
+        student_count: 0,
+        schedule: schedule || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('✅ Mock class created:', newClass.name);
+      res.status(201).json(newClass);
+
+    } catch (error) {
+      console.error('❌ Create class error:', error);
+      res.status(500).json({
+        message: 'Failed to create class',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Update class
+  app.put('/api/classes/:id', async (req, res) => {
+    console.log('✏️ Update class requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+      const { name, description, teacher_id, age_group, max_students, schedule } = req.body;
+
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Class name is required' });
+      }
+
+      // Mock update for now
+      const updatedClass = {
+        id: parseInt(id),
+        name: name.trim(),
+        description: description || '',
+        teacher_id: teacher_id || null,
+        teacher_name: teacher_id ? 'Updated Teacher' : null,
+        age_group: age_group || '',
+        max_students: max_students || 20,
+        student_count: 0,
+        schedule: schedule || '',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('✅ Mock class updated:', updatedClass.name);
+      res.json(updatedClass);
+
+    } catch (error) {
+      console.error('❌ Update class error:', error);
+      res.status(500).json({
+        message: 'Failed to update class',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Delete class
+  app.delete('/api/classes/:id', async (req, res) => {
+    console.log('🗑️ Delete class requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+
+      // Mock deletion for now
+      console.log('✅ Mock class deleted with ID:', id);
+      res.json({ message: 'Class deleted successfully' });
+
+    } catch (error) {
+      console.error('❌ Delete class error:', error);
+      res.status(500).json({
+        message: 'Failed to delete class',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
   // Messages endpoint
   app.get('/api/messages', async (req, res) => {
     console.log('💬 Messages requested');
