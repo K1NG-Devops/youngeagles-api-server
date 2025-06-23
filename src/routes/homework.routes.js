@@ -12,6 +12,11 @@ import {
   updateHomework,
   getSubmissionsForHomework,
   getAllSubmissionsForTeacher,
+  createAdvancedHomework,
+  getAdvancedHomeworkDetails,
+  updateSkillProgress,
+  getStudentSkillProgress,
+  generateWeeklyReport
 } from '../controllers/homeworkController.js';
 
 import {authMiddleware} from '../middleware/authMiddleware.js';
@@ -31,6 +36,24 @@ router.put('/:homeworkId', authMiddleware, updateHomework);
 // Teacher submission viewing routes
 router.get('/:homeworkId/submissions', authMiddleware, getSubmissionsForHomework);
 router.get('/teacher/all-submissions', authMiddleware, getAllSubmissionsForTeacher);
+
+// **NEW ADVANCED HOMEWORK ROUTES**
+// Advanced homework creation with skills tracking
+router.post('/advanced/create', authMiddleware, upload.fields([
+  { name: 'audioInstructions', maxCount: 1 },
+  { name: 'visualAids', maxCount: 10 }
+]), createAdvancedHomework);
+
+// Get detailed homework with skills and assessment data
+router.get('/advanced/:homeworkId', authMiddleware, getAdvancedHomeworkDetails);
+
+// Skill progress tracking
+router.post('/skills/progress', authMiddleware, updateSkillProgress);
+router.get('/skills/progress/:studentId', authMiddleware, getStudentSkillProgress);
+
+// Weekly report generation
+router.get('/reports/weekly/:studentId', authMiddleware, generateWeeklyReport);
+router.post('/reports/weekly/generate', authMiddleware, generateWeeklyReport);
 
 router.get('/submissions', authMiddleware, async (req, res) => {
   try {

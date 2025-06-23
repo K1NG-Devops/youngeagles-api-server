@@ -1028,10 +1028,10 @@ async function startServer() {
         error: 'INVALID_TOKEN'
       });
     }
-    
+
     const { parentId, childId } = req.params;
     console.log(`📚 Parent ID: ${parentId}, Child ID: ${childId}`);
-    
+
     try {
       // Verify the child belongs to the parent
       const [child] = await db.execute(
@@ -1077,8 +1077,8 @@ async function startServer() {
         status: hw.submitted ? 'submitted' : 'pending',
         priority: 'medium', // Can be enhanced based on due date
         teacher: hw.uploaded_by_teacher_name || 'Teacher',
-        childId: parseInt(childId),
-        childName: childInfo.name,
+          childId: parseInt(childId),
+          childName: childInfo.name,
         className: childInfo.className,
         attachments: hw.file_url ? [{ url: hw.file_url, type: 'file' }] : [],
         instructions: hw.instructions || '',

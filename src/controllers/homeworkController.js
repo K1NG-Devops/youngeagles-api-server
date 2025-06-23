@@ -631,3 +631,647 @@ export const debugHomeworkSubmission = async (req, res) => {
     res.status(500).json({ error: 'Debug endpoint error', message: err.message });
   }
 };
+
+// **NEW ADVANCED HOMEWORK FUNCTIONS**
+
+// Create advanced homework with skills tracking and multi-modal instructions
+export const createAdvancedHomework = async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const {
+      title,
+      subject,
+      estimatedTime,
+      difficultyLevel,
+      selectedSkills,
+      customObjectives,
+      description,
+      parentGuidance,
+      childInstructions,
+      assessmentCriteria,
+      dueDate,
+      assignedClasses
+    } = req.body;
+
+    // Handle file uploads
+    const audioInstructions = req.files?.audioInstructions?.[0];
+    const visualAids = req.files?.visualAids || [];
+
+    // Validate required fields
+    if (!title || !subject || !dueDate || !assignedClasses?.length) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['title', 'subject', 'dueDate', 'assignedClasses']
+      });
+    }
+
+    // Verify teacher is authorized for assigned classes
+    const teacherClass = await query(
+      'SELECT className, grade FROM users WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'railway'
+    );
+
+    if (teacherClass.length === 0) {
+      return res.status(403).json({ error: 'Teacher not found or not authorized' });
+    }
+
+    const teacher = teacherClass[0];
+    const unauthorizedClasses = assignedClasses.filter(cls => cls !== teacher.className);
+    
+    if (unauthorizedClasses.length > 0) {
+      return res.status(403).json({
+        error: `Not authorized to assign homework to: ${unauthorizedClasses.join(', ')}`,
+        authorizedClass: teacher.className
+      });
+    }
+
+    // Upload audio file if provided
+    let audioUrl = null;
+    if (audioInstructions) {
+      // Handle audio file upload (implement your file upload logic here)
+      audioUrl = `/uploads/audio/${audioInstructions.filename}`;
+    }
+
+    // Process visual aids
+    const visualAidsData = visualAids.map(file => ({
+      filename: file.filename,
+      originalname: file.originalname,
+      url: `/uploads/visual-aids/${file.filename}`,
+      mimetype: file.mimetype
+    }));
+
+    // Format due date
+    const formattedDueDate = new Date(dueDate).toISOString().split('T')[0];
+
+    // Create homework record
+    const homeworkSql = `
+      INSERT INTO homeworks (
+        title, subject, difficulty_level, estimated_duration, selected_skills,
+        custom_objectives, instructions, parent_guidance, child_instructions,
+        audio_instructions_url, visual_aids, assessment_criteria, due_date,
+        status, uploaded_by_teacher_id, class_name, grade, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, NOW())
+    `;
+
+    const homeworkParams = [
+      title,
+      subject,
+      difficultyLevel || 1,
+      estimatedTime || 15,
+      JSON.stringify(selectedSkills || []),
+      JSON.stringify(customObjectives || []),
+      description || null,
+      parentGuidance || null,
+      childInstructions || null,
+      audioUrl,
+      JSON.stringify(visualAidsData),
+      JSON.stringify(assessmentCriteria || {}),
+      formattedDueDate,
+      teacherId,
+      teacher.className,
+      teacher.grade
+    ];
+
+    const result = await execute(homeworkSql, homeworkParams, 'skydek_DB');
+    const homeworkId = result.insertId;
+
+    // Get all students in the assigned classes to create skill progress tracking
+    const students = await query(
+      'SELECT id FROM children WHERE className IN (?)',
+      [assignedClasses],
+      'skydek_DB'
+    );
+
+    // Initialize skill progress tracking for each student
+    if (selectedSkills && selectedSkills.length > 0 && students.length > 0) {
+      const skillProgressInserts = [];
+      
+      for (const student of students) {
+        for (const skillKey of selectedSkills) {
+          // Get skill ID from skill key
+          const [skillData] = await query(
+            `SELECT s.id FROM skills s 
+             JOIN skill_categories sc ON s.category_id = sc.id 
+             WHERE CONCAT(sc.name, '_', s.skill_key) = ?`,
+            [skillKey],
+            'skydek_DB'
+          );
+          
+          if (skillData) {
+            skillProgressInserts.push([
+              student.id,
+              skillData.id,
+              homeworkId,
+              1, // initial proficiency level
+              new Date().toISOString().split('T')[0],
+              'emerging'
+            ]);
+          }
+        }
+      }
+
+      if (skillProgressInserts.length > 0) {
+        const skillProgressSql = `
+          INSERT INTO student_skill_progress 
+          (student_id, skill_id, homework_id, proficiency_level, demonstration_date, mastery_status)
+          VALUES ${skillProgressInserts.map(() => '(?, ?, ?, ?, ?, ?)').join(', ')}
+        `;
+        
+        await execute(skillProgressSql, skillProgressInserts.flat(), 'skydek_DB');
+      }
+    }
+
+    // Send notifications to parents (reuse existing notification system)
+    const teacherName = teacher.name || 'Your teacher';
+    // await sendHomeworkNotification(teacher.className, title, teacherName, homeworkId);
+
+    res.status(201).json({
+      success: true,
+      message: 'Advanced homework created successfully',
+      homework: {
+        id: homeworkId,
+        title,
+        subject,
+        difficultyLevel,
+        estimatedTime,
+        selectedSkills,
+        dueDate: formattedDueDate,
+        audioUrl,
+        visualAids: visualAidsData,
+        studentsAffected: students.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating advanced homework:', error);
+    res.status(500).json({
+      error: 'Failed to create advanced homework',
+      message: error.message
+    });
+  }
+};
+
+// Get detailed homework with skills and assessment data
+export const getAdvancedHomeworkDetails = async (req, res) => {
+  try {
+    const { homeworkId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Get homework details
+    const [homework] = await query(
+      `SELECT h.*, u.name as teacher_name 
+       FROM homeworks h 
+       LEFT JOIN users u ON h.uploaded_by_teacher_id = u.id 
+       WHERE h.id = ?`,
+      [homeworkId],
+      'skydek_DB'
+    );
+
+    if (!homework) {
+      return res.status(404).json({ error: 'Homework not found' });
+    }
+
+    // Parse JSON fields
+    homework.selected_skills = homework.selected_skills ? JSON.parse(homework.selected_skills) : [];
+    homework.custom_objectives = homework.custom_objectives ? JSON.parse(homework.custom_objectives) : [];
+    homework.visual_aids = homework.visual_aids ? JSON.parse(homework.visual_aids) : [];
+    homework.assessment_criteria = homework.assessment_criteria ? JSON.parse(homework.assessment_criteria) : {};
+
+    // Get skill details for selected skills
+    if (homework.selected_skills.length > 0) {
+      const skillDetails = await query(
+        `SELECT s.*, sc.name as category_name, sc.title as category_title, sc.icon as category_icon
+         FROM skills s
+         JOIN skill_categories sc ON s.category_id = sc.id
+         WHERE CONCAT(sc.name, '_', s.skill_key) IN (${homework.selected_skills.map(() => '?').join(',')})`,
+        homework.selected_skills,
+        'skydek_DB'
+      );
+      homework.skill_details = skillDetails;
+    }
+
+    // Get student progress data if user is teacher
+    if (userRole === 'teacher' && userId == homework.uploaded_by_teacher_id) {
+      const progressData = await query(
+        `SELECT ssp.*, s.name as skill_name, sc.title as category_title, c.name as student_name
+         FROM student_skill_progress ssp
+         JOIN skills s ON ssp.skill_id = s.id
+         JOIN skill_categories sc ON s.category_id = sc.id
+         JOIN children c ON ssp.student_id = c.id
+         WHERE ssp.homework_id = ?
+         ORDER BY c.name, sc.title, s.name`,
+        [homeworkId],
+        'skydek_DB'
+      );
+      homework.student_progress = progressData;
+    }
+
+    // Get submissions count
+    const [submissionStats] = await query(
+      `SELECT 
+         COUNT(*) as total_submissions,
+         COUNT(CASE WHEN submitted_at IS NOT NULL THEN 1 END) as completed_submissions
+       FROM submissions 
+       WHERE homework_id = ?`,
+      [homeworkId],
+      'skydek_DB'
+    );
+    homework.submission_stats = submissionStats;
+
+    res.json({
+      success: true,
+      homework
+    });
+
+  } catch (error) {
+    console.error('Error fetching advanced homework details:', error);
+    res.status(500).json({
+      error: 'Failed to fetch homework details',
+      message: error.message
+    });
+  }
+};
+
+// Update skill progress for a student
+export const updateSkillProgress = async (req, res) => {
+  try {
+    const {
+      studentId,
+      skillId,
+      homeworkId,
+      proficiencyLevel,
+      masteryStatus,
+      teacherNotes,
+      parentNotes,
+      evidenceUrls
+    } = req.body;
+
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Validate required fields
+    if (!studentId || !skillId) {
+      return res.status(400).json({
+        error: 'Missing required fields: studentId, skillId'
+      });
+    }
+
+    // Check authorization
+    if (userRole === 'teacher') {
+      // Verify teacher is authorized for this student's class
+      const [student] = await query(
+        'SELECT className FROM children WHERE id = ?',
+        [studentId],
+        'skydek_DB'
+      );
+      
+      const [teacher] = await query(
+        'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+        [userId],
+        'railway'
+      );
+
+      if (!student || !teacher || student.className !== teacher.className) {
+        return res.status(403).json({ error: 'Not authorized to update this student\'s progress' });
+      }
+    } else if (userRole === 'parent') {
+      // Verify parent owns this child
+      const [child] = await query(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [studentId, userId],
+        'skydek_DB'
+      );
+
+      if (!child) {
+        return res.status(403).json({ error: 'Not authorized to update this child\'s progress' });
+      }
+    }
+
+    // Update or insert skill progress
+    const updateSql = `
+      INSERT INTO student_skill_progress 
+      (student_id, skill_id, homework_id, proficiency_level, mastery_status, 
+       teacher_notes, parent_notes, evidence_urls, demonstration_date, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
+      ON DUPLICATE KEY UPDATE
+        proficiency_level = VALUES(proficiency_level),
+        mastery_status = VALUES(mastery_status),
+        teacher_notes = CASE WHEN ? = 'teacher' THEN VALUES(teacher_notes) ELSE teacher_notes END,
+        parent_notes = CASE WHEN ? = 'parent' THEN VALUES(parent_notes) ELSE parent_notes END,
+        evidence_urls = VALUES(evidence_urls),
+        demonstration_date = CURDATE(),
+        updated_at = NOW()
+    `;
+
+    await execute(updateSql, [
+      studentId,
+      skillId,
+      homeworkId,
+      proficiencyLevel || 1,
+      masteryStatus || 'emerging',
+      userRole === 'teacher' ? teacherNotes : null,
+      userRole === 'parent' ? parentNotes : null,
+      JSON.stringify(evidenceUrls || []),
+      userRole,
+      userRole
+    ], 'skydek_DB');
+
+    res.json({
+      success: true,
+      message: 'Skill progress updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating skill progress:', error);
+    res.status(500).json({
+      error: 'Failed to update skill progress',
+      message: error.message
+    });
+  }
+};
+
+// Get student skill progress
+export const getStudentSkillProgress = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Check authorization
+    if (userRole === 'parent') {
+      const [child] = await query(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [studentId, userId],
+        'skydek_DB'
+      );
+      if (!child) {
+        return res.status(403).json({ error: 'Not authorized to view this child\'s progress' });
+      }
+    } else if (userRole === 'teacher') {
+      const [student] = await query(
+        'SELECT className FROM children WHERE id = ?',
+        [studentId],
+        'skydek_DB'
+      );
+      const [teacher] = await query(
+        'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+        [userId],
+        'railway'
+      );
+      if (!student || !teacher || student.className !== teacher.className) {
+        return res.status(403).json({ error: 'Not authorized to view this student\'s progress' });
+      }
+    }
+
+    // Get comprehensive skill progress
+    const skillProgress = await query(
+      `SELECT 
+         ssp.*,
+         s.name as skill_name,
+         s.description as skill_description,
+         s.difficulty_level as skill_difficulty,
+         sc.name as category_name,
+         sc.title as category_title,
+         sc.icon as category_icon,
+         sc.color as category_color,
+         h.title as homework_title,
+         h.due_date as homework_due_date
+       FROM student_skill_progress ssp
+       JOIN skills s ON ssp.skill_id = s.id
+       JOIN skill_categories sc ON s.category_id = sc.id
+       LEFT JOIN homeworks h ON ssp.homework_id = h.id
+       WHERE ssp.student_id = ?
+       ORDER BY ssp.updated_at DESC, sc.name, s.name`,
+      [studentId],
+      'skydek_DB'
+    );
+
+    // Group by category
+    const progressByCategory = {};
+    skillProgress.forEach(progress => {
+      if (!progressByCategory[progress.category_name]) {
+        progressByCategory[progress.category_name] = {
+          title: progress.category_title,
+          icon: progress.category_icon,
+          color: progress.category_color,
+          skills: []
+        };
+      }
+      
+      // Parse JSON fields
+      progress.evidence_urls = progress.evidence_urls ? JSON.parse(progress.evidence_urls) : [];
+      
+      progressByCategory[progress.category_name].skills.push(progress);
+    });
+
+    // Calculate overall statistics
+    const totalSkills = skillProgress.length;
+    const masteredSkills = skillProgress.filter(p => p.mastery_status === 'mastery').length;
+    const proficientSkills = skillProgress.filter(p => ['proficient', 'advanced', 'mastery'].includes(p.mastery_status)).length;
+    const averageProficiency = totalSkills > 0 ? 
+      skillProgress.reduce((sum, p) => sum + p.proficiency_level, 0) / totalSkills : 0;
+
+    res.json({
+      success: true,
+      studentId,
+      totalSkills,
+      masteredSkills,
+      proficientSkills,
+      averageProficiency: Math.round(averageProficiency * 100) / 100,
+      progressByCategory,
+      allProgress: skillProgress
+    });
+
+  } catch (error) {
+    console.error('Error fetching student skill progress:', error);
+    res.status(500).json({
+      error: 'Failed to fetch skill progress',
+      message: error.message
+    });
+  }
+};
+
+// Generate weekly report for a student
+export const generateWeeklyReport = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { weekStart, weekEnd } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Set default week if not provided
+    const defaultWeekStart = weekStart || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const defaultWeekEnd = weekEnd || new Date().toISOString().split('T')[0];
+
+    // Check authorization
+    if (userRole === 'parent') {
+      const [child] = await query(
+        'SELECT id, name FROM children WHERE id = ? AND parent_id = ?',
+        [studentId, userId],
+        'skydek_DB'
+      );
+      if (!child) {
+        return res.status(403).json({ error: 'Not authorized to view this child\'s report' });
+      }
+    }
+
+    // Get homework data for the week
+    const homeworkData = await query(
+      `SELECT h.*, s.submitted_at, s.file_url as submission_file,
+              ha.completion_score, ha.accuracy_score, ha.creativity_score, 
+              ha.effort_score, ha.overall_score, ha.time_spent
+       FROM homeworks h
+       LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+       LEFT JOIN homework_assessments ha ON h.id = ha.homework_id AND ha.student_id = ?
+       WHERE h.due_date BETWEEN ? AND ?
+       ORDER BY h.due_date`,
+      [studentId, studentId, defaultWeekStart, defaultWeekEnd],
+      'skydek_DB'
+    );
+
+    // Get skill progress for the week
+    const skillProgress = await query(
+      `SELECT ssp.*, s.name as skill_name, sc.title as category_title
+       FROM student_skill_progress ssp
+       JOIN skills s ON ssp.skill_id = s.id
+       JOIN skill_categories sc ON s.category_id = sc.id
+       WHERE ssp.student_id = ? 
+         AND ssp.demonstration_date BETWEEN ? AND ?
+       ORDER BY ssp.updated_at DESC`,
+      [studentId, defaultWeekStart, defaultWeekEnd],
+      'skydek_DB'
+    );
+
+    // Calculate statistics
+    const totalHomeworks = homeworkData.length;
+    const completedHomeworks = homeworkData.filter(h => h.submitted_at).length;
+    const averageAccuracy = homeworkData.length > 0 ? 
+      homeworkData.reduce((sum, h) => sum + (h.accuracy_score || 0), 0) / homeworkData.length : 0;
+    const totalTimeSpent = homeworkData.reduce((sum, h) => sum + (h.time_spent || 0), 0);
+
+    // Group skills by category
+    const skillsByCategory = {};
+    skillProgress.forEach(skill => {
+      if (!skillsByCategory[skill.category_title]) {
+        skillsByCategory[skill.category_title] = [];
+      }
+      skillsByCategory[skill.category_title].push(skill);
+    });
+
+    // Identify strengths and areas for improvement
+    const strengths = skillProgress.filter(s => s.proficiency_level >= 4).map(s => s.skill_name);
+    const improvements = skillProgress.filter(s => s.proficiency_level <= 2).map(s => s.skill_name);
+
+    // Generate recommendations
+    const recommendations = [];
+    if (completedHomeworks < totalHomeworks) {
+      recommendations.push("Encourage consistent homework completion");
+    }
+    if (averageAccuracy < 70) {
+      recommendations.push("Focus on accuracy and attention to detail");
+    }
+    if (improvements.length > 0) {
+      recommendations.push(`Extra practice needed in: ${improvements.slice(0, 3).join(', ')}`);
+    }
+
+    // Check if report already exists
+    const [existingReport] = await query(
+      'SELECT * FROM weekly_reports WHERE student_id = ? AND week_start = ?',
+      [studentId, defaultWeekStart],
+      'skydek_DB'
+    );
+
+    const reportData = {
+      student_id: studentId,
+      week_start: defaultWeekStart,
+      week_end: defaultWeekEnd,
+      homeworks_assigned: totalHomeworks,
+      homeworks_completed: completedHomeworks,
+      average_accuracy: averageAccuracy,
+      total_time_spent: totalTimeSpent,
+      skills_practiced: JSON.stringify(skillProgress.map(s => s.skill_name)),
+      skills_mastered: JSON.stringify(skillProgress.filter(s => s.mastery_status === 'mastery').map(s => s.skill_name)),
+      areas_for_improvement: JSON.stringify(improvements),
+      strengths_identified: JSON.stringify(strengths),
+      teacher_recommendations: JSON.stringify(recommendations),
+      academic_growth_metrics: JSON.stringify({
+        completion_rate: totalHomeworks > 0 ? (completedHomeworks / totalHomeworks) * 100 : 0,
+        accuracy_trend: averageAccuracy,
+        skill_development: skillsByCategory
+      })
+    };
+
+    if (existingReport) {
+      // Update existing report
+      await execute(
+        `UPDATE weekly_reports SET 
+         homeworks_assigned = ?, homeworks_completed = ?, average_accuracy = ?,
+         total_time_spent = ?, skills_practiced = ?, skills_mastered = ?,
+         areas_for_improvement = ?, strengths_identified = ?, teacher_recommendations = ?,
+         academic_growth_metrics = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          reportData.homeworks_assigned, reportData.homeworks_completed, reportData.average_accuracy,
+          reportData.total_time_spent, reportData.skills_practiced, reportData.skills_mastered,
+          reportData.areas_for_improvement, reportData.strengths_identified, reportData.teacher_recommendations,
+          reportData.academic_growth_metrics, existingReport.id
+        ],
+        'skydek_DB'
+      );
+    } else {
+      // Create new report
+      await execute(
+        `INSERT INTO weekly_reports 
+         (student_id, week_start, week_end, homeworks_assigned, homeworks_completed, 
+          average_accuracy, total_time_spent, skills_practiced, skills_mastered,
+          areas_for_improvement, strengths_identified, teacher_recommendations, 
+          academic_growth_metrics, generated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          reportData.student_id, reportData.week_start, reportData.week_end,
+          reportData.homeworks_assigned, reportData.homeworks_completed, reportData.average_accuracy,
+          reportData.total_time_spent, reportData.skills_practiced, reportData.skills_mastered,
+          reportData.areas_for_improvement, reportData.strengths_identified, reportData.teacher_recommendations,
+          reportData.academic_growth_metrics
+        ],
+        'skydek_DB'
+      );
+    }
+
+    res.json({
+      success: true,
+      report: {
+        weekStart: defaultWeekStart,
+        weekEnd: defaultWeekEnd,
+        summary: {
+          totalHomeworks,
+          completedHomeworks,
+          completionRate: totalHomeworks > 0 ? Math.round((completedHomeworks / totalHomeworks) * 100) : 0,
+          averageAccuracy: Math.round(averageAccuracy),
+          totalTimeSpent
+        },
+        skillsDevelopment: {
+          skillsByCategory,
+          totalSkillsPracticed: skillProgress.length,
+          skillsMastered: skillProgress.filter(s => s.mastery_status === 'mastery').length
+        },
+        insights: {
+          strengths,
+          improvements,
+          recommendations
+        },
+        homeworkData,
+        skillProgress
+      }
+    });
+
+  } catch (error) {
+    console.error('Error generating weekly report:', error);
+    res.status(500).json({
+      error: 'Failed to generate weekly report',
+      message: error.message
+    });
+  }
+};
