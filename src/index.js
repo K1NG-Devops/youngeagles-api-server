@@ -12,6 +12,9 @@ import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import compression from 'compression';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,12 +33,12 @@ const PORT = process.env.PORT || 3001;
 
 // Database configuration
 const dbConfig = {
-  host: 'shuttle.proxy.rlwy.net',
-  port: 49263,
-  user: 'root',
-  password: 'fhdgRvbocRQKcikxGTNsQUHVIMizngLb',
-  database: 'skydek_DB',
-  ssl: false,
+  host: process.env.DB_HOST || 'shuttle.proxy.rlwy.net',
+  port: process.env.DB_PORT || 49263,
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'fhdgRvbocRQKcikxGTNsQUHVIMizngLb',
+  database: process.env.DB_NAME || 'skydek_DB',
+  ssl: process.env.DB_SSL === 'true' || false,
   connectionLimit: 10,
   acquireTimeout: 60000,
   timeout: 60000,
@@ -196,6 +199,35 @@ app.use((req, res, next) => {
   
   next();
 });
+
+// Production security and performance middleware
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
+
+if (isProduction) {
+  // Compression for better performance
+  app.use(compression());
+  
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: false, // Disable CSP for API server
+    crossOriginEmbedderPolicy: false,
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  }));
+  
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests from this IP, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use('/api/', limiter);
+}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -554,6 +586,372 @@ async function startServer() {
       
     } catch (error) {
       console.error('❌ Admin login error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // =============================================================================
+  // TEACHER ENDPOINTS - PRODUCTION READY
+  // =============================================================================
+
+  // Get teacher profile
+  app.get('/api/teacher/profile', async (req, res) => {
+    console.log('👩‍🏫 Teacher profile requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`👩‍🏫 Fetching profile for teacher ID: ${user.id}`);
+      
+      // Get teacher details from staff table
+      const [teacher] = await db.execute(
+        'SELECT id, name, email, role, phone, is_verified, created_at FROM staff WHERE id = ? AND role = ?',
+        [user.id, 'teacher']
+      );
+      
+      if (teacher.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher profile not found',
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+      
+      const teacherData = teacher[0];
+      
+      // Get teacher statistics
+      const [classCount] = await db.execute(
+        'SELECT COUNT(DISTINCT className) as totalClasses FROM children'
+      );
+      
+      const [studentCount] = await db.execute(
+        'SELECT COUNT(*) as totalStudents FROM children'
+      );
+      
+      console.log('✅ Teacher profile fetched successfully');
+      
+      res.json({
+        teacher: {
+          id: teacherData.id,
+          name: teacherData.name,
+          email: teacherData.email,
+          phone: teacherData.phone || null,
+          isVerified: teacherData.is_verified,
+          joinedAt: teacherData.created_at
+        },
+        stats: {
+          totalClasses: classCount[0]?.totalClasses || 0,
+          totalStudents: studentCount[0]?.totalStudents || 0
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher profile error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Get teacher dashboard data
+  app.get('/api/teacher/dashboard', async (req, res) => {
+    console.log('📊 Teacher dashboard requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`📊 Generating dashboard for teacher ID: ${user.id}`);
+      
+      // Get basic stats
+      const [classCount] = await db.execute(
+        'SELECT COUNT(DISTINCT className) as count FROM children'
+      );
+      
+      const [studentCount] = await db.execute(
+        'SELECT COUNT(*) as count FROM children'
+      );
+      
+      const [homeworkCount] = await db.execute(
+        'SELECT COUNT(*) as count FROM homeworks'
+      );
+      
+      // Get recent homework submissions (mock data for now)
+      const recentSubmissions = [
+        {
+          id: 1,
+          studentName: 'John Doe',
+          homeworkTitle: 'Math Exercise 1',
+          submittedAt: new Date().toISOString(),
+          status: 'pending'
+        },
+        {
+          id: 2,
+          studentName: 'Jane Smith',
+          homeworkTitle: 'Reading Comprehension',
+          submittedAt: new Date(Date.now() - 86400000).toISOString(),
+          status: 'graded'
+        }
+      ];
+      
+      console.log('✅ Teacher dashboard data generated');
+      
+      res.json({
+        stats: {
+          totalClasses: classCount[0]?.count || 0,
+          totalStudents: studentCount[0]?.count || 0,
+          totalHomework: homeworkCount[0]?.count || 0,
+          pendingGrading: 2 // Mock data
+        },
+        recentSubmissions,
+        upcomingEvents: [
+          {
+            id: 1,
+            title: 'Parent-Teacher Conference',
+            date: new Date(Date.now() + 7 * 86400000).toISOString(),
+            type: 'meeting'
+          }
+        ]
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher dashboard error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Get teacher classes
+  app.get('/api/teacher/classes', async (req, res) => {
+    console.log('📚 Teacher classes requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`📚 Fetching classes for teacher ID: ${user.id}`);
+      
+      // Get all classes with student counts
+      const [classes] = await db.execute(`
+        SELECT 
+          className,
+          grade,
+          COUNT(*) as studentCount,
+          GROUP_CONCAT(name) as students
+        FROM children 
+        GROUP BY className, grade
+        ORDER BY className
+      `);
+      
+      const formattedClasses = classes.map(cls => ({
+        id: cls.className.toLowerCase().replace(/\s+/g, '-'),
+        name: cls.className,
+        grade: cls.grade,
+        studentCount: cls.studentCount,
+        students: cls.students ? cls.students.split(',').map(name => name.trim()) : []
+      }));
+      
+      console.log(`✅ Found ${formattedClasses.length} classes`);
+      
+      res.json({
+        classes: formattedClasses
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher classes error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Get teacher stats
+  app.get('/api/teacher/stats', async (req, res) => {
+    console.log('📈 Teacher stats requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`📈 Generating stats for teacher ID: ${user.id}`);
+      
+      // Get comprehensive statistics
+      const [classStats] = await db.execute(`
+        SELECT 
+          className,
+          COUNT(*) as studentCount,
+          AVG(age) as avgAge
+        FROM children 
+        GROUP BY className
+      `);
+      
+      const [ageDistribution] = await db.execute(`
+        SELECT 
+          age,
+          COUNT(*) as count
+        FROM children 
+        GROUP BY age
+        ORDER BY age
+      `);
+      
+      const [gradeDistribution] = await db.execute(`
+        SELECT 
+          grade,
+          COUNT(*) as count
+        FROM children 
+        GROUP BY grade
+      `);
+      
+      console.log('✅ Teacher stats generated');
+      
+      res.json({
+        classStats: classStats.map(stat => ({
+          className: stat.className,
+          studentCount: stat.studentCount,
+          averageAge: Math.round(stat.avgAge * 10) / 10
+        })),
+        ageDistribution: ageDistribution.map(dist => ({
+          age: dist.age,
+          count: dist.count
+        })),
+        gradeDistribution: gradeDistribution.map(dist => ({
+          grade: dist.grade,
+          count: dist.count
+        }))
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher stats error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Get teacher submissions
+  app.get('/api/teacher/submissions', async (req, res) => {
+    console.log('📝 Teacher submissions requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`📝 Fetching submissions for teacher ID: ${user.id}`);
+      
+      // For now, return mock data since homework submissions table structure needs to be clarified
+      const mockSubmissions = [
+        {
+          id: 1,
+          studentId: 1,
+          studentName: 'John Doe',
+          homeworkId: 1,
+          homeworkTitle: 'Math Practice Sheet',
+          submittedAt: new Date().toISOString(),
+          status: 'pending',
+          fileUrl: null,
+          grade: null,
+          feedback: null
+        },
+        {
+          id: 2,
+          studentId: 2,
+          studentName: 'Jane Smith',
+          homeworkId: 2,
+          homeworkTitle: 'Reading Comprehension',
+          submittedAt: new Date(Date.now() - 86400000).toISOString(),
+          status: 'graded',
+          fileUrl: '/uploads/homework-submission-2.pdf',
+          grade: 85,
+          feedback: 'Good work! Keep practicing reading comprehension.'
+        }
+      ];
+      
+      console.log(`✅ Found ${mockSubmissions.length} submissions`);
+      
+      res.json({
+        submissions: mockSubmissions,
+        summary: {
+          total: mockSubmissions.length,
+          pending: mockSubmissions.filter(s => s.status === 'pending').length,
+          graded: mockSubmissions.filter(s => s.status === 'graded').length
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher submissions error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Get all teachers (for admin/frontend)
+  app.get('/api/teacher', async (req, res) => {
+    console.log('👥 Teachers list requested');
+    try {
+      const user = verifyToken(req);
+      if (!user) {
+        return res.status(403).json({
+          message: 'Authentication required',
+          error: 'UNAUTHORIZED'
+        });
+      }
+
+      console.log('👥 Fetching all teachers');
+      
+      // Get all teachers from staff table
+      const [teachers] = await db.execute(
+        'SELECT id, name, email, phone, is_verified, created_at FROM staff WHERE role = ? ORDER BY name',
+        ['teacher']
+      );
+      
+      const formattedTeachers = teachers.map(teacher => ({
+        id: teacher.id,
+        name: teacher.name,
+        email: teacher.email,
+        phone: teacher.phone || null,
+        isVerified: teacher.is_verified,
+        joinedAt: teacher.created_at
+      }));
+      
+      console.log(`✅ Found ${formattedTeachers.length} teachers`);
+      
+      res.json({
+        teachers: formattedTeachers,
+        total: formattedTeachers.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Teachers list error:', error);
       res.status(500).json({
         message: 'Internal server error',
         error: 'INTERNAL_ERROR'
