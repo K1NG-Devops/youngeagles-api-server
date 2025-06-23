@@ -613,7 +613,7 @@ async function startServer() {
       
       // Get teacher details from staff table
       const [teacher] = await db.execute(
-        'SELECT id, name, email, role, phone, is_verified, created_at FROM staff WHERE id = ? AND role = ?',
+        'SELECT id, name, email, role, is_verified, created_at FROM staff WHERE id = ? AND role = ?',
         [user.id, 'teacher']
       );
       
@@ -642,7 +642,7 @@ async function startServer() {
           id: teacherData.id,
           name: teacherData.name,
           email: teacherData.email,
-          phone: teacherData.phone || null,
+          phone: null, // Phone not available in current schema
           isVerified: teacherData.is_verified,
           joinedAt: teacherData.created_at
         },
@@ -930,7 +930,7 @@ async function startServer() {
       
       // Get all teachers from staff table
       const [teachers] = await db.execute(
-        'SELECT id, name, email, phone, is_verified, created_at FROM staff WHERE role = ? ORDER BY name',
+        'SELECT id, name, email, is_verified, created_at FROM staff WHERE role = ? ORDER BY name',
         ['teacher']
       );
       
@@ -938,7 +938,7 @@ async function startServer() {
         id: teacher.id,
         name: teacher.name,
         email: teacher.email,
-        phone: teacher.phone || null,
+        phone: null, // Phone not available in current schema
         isVerified: teacher.is_verified,
         joinedAt: teacher.created_at
       }));
