@@ -38,34 +38,55 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Database configuration
+// Database configuration - SECURE FOR PRODUCTION
 const dbConfig = {
-  host: process.env.DB_HOST || 'shuttle.proxy.rlwy.net',
-  port: process.env.DB_PORT || 49263,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'fhdgRvbocRQKcikxGTNsQUHVIMizngLb',
-  database: process.env.DB_NAME || 'skydek_DB',
-  ssl: process.env.DB_SSL === 'true' || false,
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: process.env.DB_SSL === 'true',
+  connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
+  acquireTimeout: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || 60000,
+  timeout: parseInt(process.env.DB_TIMEOUT) || 60000,
   reconnect: true
 };
+
+// Validate required database environment variables
+const requiredDbVars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
+const missingDbVars = requiredDbVars.filter(varName => !process.env[varName]);
+
+if (missingDbVars.length > 0) {
+  console.error('❌ Missing required database environment variables:', missingDbVars);
+  console.error('🚨 Please set the following environment variables:');
+  missingDbVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error('🚨 For production, ensure all credentials are set via environment variables');
+  process.exit(1);
+}
 
 let db;
 
 // Initialize database connection
 async function initDatabase() {
   try {
-    console.log('🔌 Connecting to Railway MySQL database...');
+    console.log('🔌 Connecting to database...');
     db = mysql.createPool(dbConfig);
     
     // Test connection
     const connection = await db.getConnection();
     console.log('✅ Database connected successfully!');
-    console.log(`📊 Connected to: ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
-    connection.release();
     
+    // Secure logging - don't expose sensitive details in production
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
+    if (isProduction) {
+      console.log(`📊 Connected to database: ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
+    } else {
+      console.log(`📊 Connected to: ${dbConfig.host}:${dbConfig.port}/${dbConfig.database}`);
+    }
+    
+    connection.release();
     return true;
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
@@ -2974,37 +2995,67 @@ async function startServer() {
   // Firebase login endpoint
   app.post('/api/auth/firebase-login', async (req, res) => {
     console.log('🔥 Firebase login requested');
+    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+    
     try {
-      const { idToken, email, name, photoURL, uid, displayName } = req.body;
+      // Try multiple possible field names for flexibility
+      const { 
+        idToken, 
+        email, 
+        name, 
+        photoURL, 
+        uid, 
+        displayName,
+        // Alternative field names
+        token,
+        firebaseToken,
+        user_email,
+        user_name,
+        firebase_uid
+      } = req.body;
       
-      if (!idToken || !email) {
-        console.log('❌ Missing credentials:', { hasIdToken: !!idToken, hasEmail: !!email });
+      // Use flexible field extraction
+      const finalToken = idToken || token || firebaseToken;
+      const userEmail = email || user_email;
+      const userName = name || displayName || user_name;
+      const userUID = uid || firebase_uid;
+      
+      if (!finalToken || !userEmail) {
+        console.log('❌ Missing credentials:', { 
+          hasToken: !!finalToken, 
+          hasEmail: !!userEmail,
+          receivedFields: Object.keys(req.body) 
+        });
         return res.status(400).json({
           message: 'Firebase ID token and email are required',
-          error: 'MISSING_CREDENTIALS'
+          error: 'MISSING_CREDENTIALS',
+          debug: {
+            receivedFields: Object.keys(req.body),
+            expectedFields: ['idToken', 'email'] 
+          }
         });
       }
       
-      console.log(`🔥 Firebase login attempt: ${email}`);
+      console.log(`🔥 Firebase login attempt: ${userEmail}`);
       
       // Check if user exists in database
-      let user = await findUserByEmail(email);
+      let user = await findUserByEmail(userEmail);
       
       if (!user) {
         // Create new user from Firebase data
         console.log('👤 Creating new user from Firebase data');
         
-        const hashedPassword = PasswordSecurity.hashPassword(idToken); // Use token as password
+        const hashedPassword = PasswordSecurity.hashPassword(finalToken); // Use token as password
         
         try {
           await db.execute(
             'INSERT INTO users (name, email, role, password, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
-            [name || displayName || email.split('@')[0], email, 'parent', hashedPassword, '']
+            [userName || userEmail.split('@')[0], userEmail, 'parent', hashedPassword, '']
           );
           
           // Fetch the newly created user
-          user = await findUserByEmail(email);
-          console.log('✅ New Firebase user created:', email);
+          user = await findUserByEmail(userEmail);
+          console.log('✅ New Firebase user created:', userEmail);
         } catch (dbError) {
           console.error('❌ Failed to create Firebase user:', dbError);
           return res.status(500).json({

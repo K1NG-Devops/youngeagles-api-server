@@ -26,7 +26,7 @@ const io = new Server(server, {
   }
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
 // Database configuration
 const dbConfig = {

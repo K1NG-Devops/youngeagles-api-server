@@ -8,6 +8,14 @@ const setupParentPasswords = async () => {
   try {
     console.log('🔧 Setting up parent passwords...');
     
+    // Get default password from environment variable
+    const defaultPassword = process.env.DEFAULT_PARENT_PASSWORD || 'parent123';
+    
+    if (!process.env.DEFAULT_PARENT_PASSWORD) {
+      console.log('⚠️  WARNING: Using default password "parent123"');
+      console.log('💡 Set DEFAULT_PARENT_PASSWORD environment variable for better security');
+    }
+    
     // Get all parents from skydek_DB database
     const parents = await query(
       'SELECT id, name, email FROM users WHERE role = "parent"',
@@ -20,11 +28,9 @@ const setupParentPasswords = async () => {
       console.log(`- ${parent.name} (${parent.email})`);
     });
     
-    // Default password for all parents
-    const defaultPassword = 'parent123';
     const hashedPassword = await bcrypt.hash(defaultPassword, 12);
     
-    console.log('\n🔑 Setting default password: parent123');
+    console.log(`\n🔑 Setting default password: ${defaultPassword}`);
     
     // Update password for each parent
     for (const parent of parents) {
@@ -38,7 +44,7 @@ const setupParentPasswords = async () => {
     
     console.log('\n✨ All parent passwords have been set!');
     console.log('Parents can now log in with:');
-    console.log('Password: parent123');
+    console.log(`Password: ${defaultPassword}`);
     
     console.log('\n🎉 Setup complete!');
     process.exit(0);
