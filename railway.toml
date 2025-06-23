@@ -1,14 +1,13 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install"
-watchPatterns = ["src/**", "package.json"]
 
 [deploy]
 startCommand = "npm start"
 healthcheckPath = "/health"
-healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
+
+[variables]
+NODE_ENV = "production"
 
 [environments]
 NODE_ENV = "production"
