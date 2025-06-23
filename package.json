@@ -2,14 +2,10 @@
   "name": "young-eagles-preschool-platform",
   "version": "2.0.0",
   "description": "Young Eagles Preschool Platform - Secure, scalable API for multi-tenant preschool management",
-  "main": "src/index.production.js",
+  "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=production node src/index.production.js",
-    "start:prod": "NODE_ENV=production node src/index.production.js",
-    "start:dev": "NODE_ENV=development node --watch src/index.js",
-    "start:local": "NODE_ENV=development node src/index-local.js",
-    "railway": "NODE_ENV=production node src/index.production.js",
+    "start": "node src/index.js",
     "dev": "NODE_ENV=development node --watch src/index.js",
     "test": "NODE_ENV=test jest --detectOpenHandles",
     "test:watch": "NODE_ENV=test jest --watch --detectOpenHandles",
@@ -19,7 +15,8 @@
     "logs:error": "tail -f logs/error.log",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
-    "check-config": "node scripts/check-config.js"
+    "check-config": "node scripts/check-config.js",
+    "postinstall": "npm run check-config"
   },
   "keywords": [
     "young-eagles",
@@ -62,10 +59,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/youngeagles/preschool-platform.git"
+    "url": "https://github.com/K1NG-Devops/youngeagles-api-server.git"
   },
   "bugs": {
-    "url": "https://github.com/youngeagles/preschool-platform/issues"
+    "url": "https://github.com/K1NG-Devops/youngeagles-api-server/issues"
   },
   "homepage": "https://youngeagles.com"
 }
