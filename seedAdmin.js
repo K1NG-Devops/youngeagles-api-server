@@ -27,9 +27,9 @@ const seedAdmin = async () => {
     console.log('✅ Staff table ready!');
     
     const adminData = {
-      name: 'School Administrator',
-      email: 'admin@youngeagles.org.za',
-      password: '#Admin@2012',
+      name: 'King Admin',
+      email: 'king@youngeagles.org.za',
+      password: '#Olivia@16!',
       role: 'admin'
     };
 
