@@ -12,6 +12,7 @@ import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { AdminWebSocketEvents } from './websocket-admin-events.js';
+import { MessageWebSocketEvents } from './websocket-message-events.js';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -25,11 +26,12 @@ const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      // "http://localhost:3002", 
-      // "http://localhost:3003", 
-      // "http://localhost:5173",
+      "http://localhost:3002", 
+      "http://localhost:3003", 
+      "http://localhost:5173",
       "https://youngeagles.org.za",
-      "https://youngeagles-api-server.up.railway.app"
+      "https://youngeagles-api-server.up.railway.app",
+      "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app"
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true
@@ -3308,97 +3310,19 @@ async function startServer() {
   // Initialize Admin WebSocket Events Handler
   const adminEvents = new AdminWebSocketEvents(io);
 
+  // Initialize WebSocket event handlers
+  const messageEvents = new MessageWebSocketEvents(io, db);
+
   // Socket.IO connection handling
   io.on('connection', (socket) => {
-    console.log('🔌 User connected:', socket.id);
+    console.log('🔌 New socket connection:', socket.id);
     
-    // Extract user info from query params
-    const userId = socket.handshake.query.userId;
-    const role = socket.handshake.query.role;
+    // Handle connection
+    messageEvents.handleConnection(socket);
     
-    if (userId && role) {
-      console.log(`👤 User authenticated: ${userId} (${role})`);
-      socket.join(`user_${userId}`);
-      socket.join(`role_${role}`);
-      
-      // Send welcome message
-      socket.emit('connected', {
-        message: 'Connected to Young Eagles messaging system',
-        userId,
-        role,
-        timestamp: new Date().toISOString()
-      });
-
-      // If admin user, send current stats
-      if (role === 'admin') {
-        console.log('🔑 Admin user connected, sending initial data');
-        socket.emit('notification', {
-          type: 'success',
-          message: 'Admin dashboard connected to real-time updates',
-          urgent: false
-        });
-      }
-    }
-    
-    // Handle messaging
-    socket.on('send_message', async (data) => {
-      console.log('💬 Received message via WebSocket:', data);
-      
-      const { conversationId, message, timestamp, senderId } = data; // Assuming senderId is sent from client
-      
-      if (!conversationId || !message || !senderId) {
-        console.error('❌ Invalid message data received:', data);
-        // Optional: send an error back to the sender
-        socket.emit('message_error', { error: 'Missing conversationId, message, or senderId' });
-        return;
-      }
-      
-      try {
-        // Step 1: Save the message to the database
-        console.log(`💾 Saving message to conversation ${conversationId}`);
-        const [result] = await db.execute(
-          'INSERT INTO messages (conversation_id, sender_id, message_text, created_at) VALUES (?, ?, ?, ?)',
-          [conversationId, senderId, message, new Date(timestamp)]
-        );
-        const newMessageId = result.insertId;
-        console.log(`✅ Message saved with ID: ${newMessageId}`);
-        
-        // Step 2: Broadcast the message to the conversation room
-        const messageToSend = {
-          id: newMessageId,
-          conversationId,
-          senderId,
-          message,
-          timestamp: new Date(timestamp).toISOString(),
-          status: 'delivered'
-          // You can also join and send sender's name if needed
-        };
-        
-        io.to(conversationId).emit('new_message', messageToSend);
-        console.log(`📢 Broadcasted message to room: ${conversationId}`);
-        
-      } catch (error) {
-        console.error('❌ Failed to process message:', error);
-        // Optional: Inform sender of the failure
-        socket.emit('message_error', { error: 'Failed to save or send message', details: error.message });
-      }
-    });
-
-    // Handle typing indicator
-    socket.on('typing', (data) => {
-      console.log('💬 Typing indicator received:', data);
-      // Implement typing indicator logic
-    });
-
-    // Handle test admin events (for development)
-    socket.on('test_admin_event', (data) => {
-      console.log('🧪 Test admin event received:', data);
-      adminEvents.emitTestEvent(data);
-    });
-    
-    // Handle disconnect
+    // Handle disconnection
     socket.on('disconnect', () => {
-      console.log('🔌 User disconnected:', socket.id);
+      messageEvents.handleDisconnection(socket);
     });
   });
 
