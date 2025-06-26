@@ -1418,9 +1418,33 @@ async function startServer() {
   // PARENT ENDPOINTS - NEW ADDITIONS
   // =============================================================================
 
+  // Get homework for a specific child
+  app.get('/api/parent/:parentId/child/:childId/homework', async (req, res) => {
+    console.log('📚 Parent requesting homework for child');
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    // ... existing code ...
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get reports for a specific child
+  app.get('/api/parent/:parentId/child/:childId/reports', async (req, res) => {
+    console.log('📊 Parent requesting reports for child');
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    // ... existing code ...
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
   // Parent dashboard endpoint
   app.get('/api/parent/dashboard', async (req, res) => {
-    console.log('📊 Parent dashboard requested');
+    console.log('👨‍👩‍👧‍👦 Parent dashboard requested');
     const user = verifyToken(req);
     if (!user || user.role !== 'parent') {
       return res.status(403).json({
