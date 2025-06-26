@@ -13,6 +13,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { AdminWebSocketEvents } from './websocket-admin-events.js';
 import { MessageWebSocketEvents } from './websocket-message-events.js';
+import setupMessagingEndpoints from './messaging-endpoints.js';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -3712,6 +3713,9 @@ async function startServer() {
 
   // Initialize WebSocket event handlers
   const messageEvents = new MessageWebSocketEvents(io, db);
+
+  // Setup comprehensive messaging endpoints
+  setupMessagingEndpoints(app, db, io, verifyToken);
 
   // Socket.IO connection handling
   io.on('connection', (socket) => {
