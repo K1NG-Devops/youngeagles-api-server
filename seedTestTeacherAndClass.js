@@ -1,8 +1,15 @@
-import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query, execute } from './src/db.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Use the same password hashing method as the API (PBKDF2)
+function hashPassword(password) {
+  const salt = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
 
 const seedTestTeacherAndClass = async () => {
   try {
@@ -19,8 +26,8 @@ const seedTestTeacherAndClass = async () => {
 
     console.log('1️⃣ Creating test teacher...');
     
-    // Hash password
-    const hashedPassword = await bcrypt.hash(teacherData.password, 12);
+    // Hash password using PBKDF2 (same as API)
+    const hashedPassword = hashPassword(teacherData.password);
 
     // Check if teacher exists in staff table
     const existingTeacher = await query(
@@ -66,7 +73,7 @@ const seedTestTeacherAndClass = async () => {
     };
 
     // Hash parent password
-    const parentHashedPassword = await bcrypt.hash(parentData.password, 12);
+    const parentHashedPassword = hashPassword(parentData.password);
 
     // Check if parent exists
     const existingParent = await query(
