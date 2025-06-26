@@ -21,6 +21,7 @@
   "author": "Young Eagles Team",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.10.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "compression": "^1.8.0",
