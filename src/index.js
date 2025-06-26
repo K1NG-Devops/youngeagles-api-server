@@ -1421,10 +1421,42 @@ async function startServer() {
   // Get homework for a specific child
   app.get('/api/parent/:parentId/child/:childId/homework', async (req, res) => {
     console.log('📚 Parent requesting homework for child');
-    const user = verifyToken(req);
-    const { parentId, childId } = req.params;
-    
-    // ... existing code ...
+    try {
+      const user = verifyToken(req);
+      const { parentId, childId } = req.params;
+      
+      if (!user || user.role !== 'parent') {
+        return res.status(403).json({
+          message: 'Forbidden - parent access required',
+          error: 'FORBIDDEN'
+        });
+      }
+      
+      // Verify parent owns this child
+      const [childCheck] = await db.execute(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (childCheck.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Get homework for the child (placeholder implementation)
+      const homework = [];
+      
+      res.json({
+        success: true,
+        data: homework
+      });
+      
+    } catch (error) {
+      console.error('❌ Get child homework error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
         error: 'DATABASE_ERROR'
       });
     }
@@ -1433,10 +1465,42 @@ async function startServer() {
   // Get reports for a specific child
   app.get('/api/parent/:parentId/child/:childId/reports', async (req, res) => {
     console.log('📊 Parent requesting reports for child');
-    const user = verifyToken(req);
-    const { parentId, childId } = req.params;
-    
-    // ... existing code ...
+    try {
+      const user = verifyToken(req);
+      const { parentId, childId } = req.params;
+      
+      if (!user || user.role !== 'parent') {
+        return res.status(403).json({
+          message: 'Forbidden - parent access required',
+          error: 'FORBIDDEN'
+        });
+      }
+      
+      // Verify parent owns this child
+      const [childCheck] = await db.execute(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (childCheck.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Get reports for the child (placeholder implementation)
+      const reports = [];
+      
+      res.json({
+        success: true,
+        data: reports
+      });
+      
+    } catch (error) {
+      console.error('❌ Get child reports error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
         error: 'DATABASE_ERROR'
       });
     }
