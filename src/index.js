@@ -2247,7 +2247,7 @@ async function startServer() {
           COUNT(*) as count
         FROM children 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%M %Y')
         ORDER BY month ASC
       `);
       
@@ -2259,7 +2259,7 @@ async function startServer() {
           COUNT(*) as count
         FROM children 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 8 WEEK)
-        GROUP BY YEARWEEK(created_at)
+        GROUP BY YEARWEEK(created_at), DATE_FORMAT(created_at, '%M %d')
         ORDER BY week ASC
       `);
       
