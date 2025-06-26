@@ -13,6 +13,49 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Get all teachers (for messaging contacts)
+router.get('/', async (req, res) => {
+  try {
+    console.log('📚 GET /teacher - Fetching all teachers for messaging contacts');
+    
+    // Get all active teachers and administrators
+    const teachers = await query(
+      `SELECT id, name, email, role, className 
+       FROM staff 
+       WHERE role IN ('teacher', 'admin', 'administrator') 
+       AND status = 'active'
+       ORDER BY role, name`,
+      [],
+      'skydek_DB'
+    );
+
+    console.log(`✅ Found ${teachers.length} teachers/admins:`, teachers.map(t => ({ name: t.name, role: t.role })));
+
+    res.json({
+      success: true,
+      teachers: teachers.map(teacher => ({
+        id: teacher.id,
+        name: teacher.name,
+        email: teacher.email,
+        role: teacher.role === 'admin' || teacher.role === 'administrator' ? 'Administrator' : 'Teacher',
+        className: teacher.className || 'All Classes',
+        isOnline: Math.random() > 0.3 // Random online status for demo
+      })),
+      total: teachers.length,
+      message: 'Teachers fetched successfully'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching teachers:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching teachers',
+      error: error.message,
+      teachers: [] // Return empty array on error
+    });
+  }
+});
+
 // Get teacher's classes and info
 router.get('/classes', authMiddleware, async (req, res) => {
   try {

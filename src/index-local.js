@@ -7,23 +7,64 @@ import mysql from 'mysql2/promise';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Multer storage configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '..', 'uploads');
+    // Ensure the upload directory exists
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    // Create a unique filename to prevent overwrites
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
 const app = express();
 const server = createServer(app);
+
+const allowedOrigins = [
+  "http://localhost:3002", 
+  "http://localhost:3003", 
+  "http://localhost:5173"
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source'
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+
+// Add JSON body parsing middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:3002", "http://localhost:3003", "http://localhost:5173"],
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true
-  }
+  cors: corsOptions
 });
 
 const PORT = 3001;
@@ -92,15 +133,11 @@ class PasswordSecurity {
   }
   
   static hashPassword(password) {
-    const salt = crypto.randomBytes(32).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-    return `${salt}:${hash}`;
+    return bcrypt.hashSync(password, 12);
   }
   
   static verifyPassword(password, hashedPassword) {
-    const [salt, hash] = hashedPassword.split(':');
-    const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-    return hash === verifyHash;
+    return bcrypt.compareSync(password, hashedPassword);
   }
 }
 
@@ -126,19 +163,41 @@ class TokenManager {
   
   static verifyToken(tokenString) {
     try {
-      if (!tokenString) return null;
+      console.log('🔐 TokenManager.verifyToken called with token:', tokenString ? `${tokenString.substring(0, 20)}...` : 'null');
       
-      const parts = tokenString.split('.');
-      if (parts.length !== 3) return null;
-      
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-      
-      // Check expiration
-      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-        console.log('❌ Token expired');
+      if (!tokenString) {
+        console.log('❌ No token provided');
         return null;
       }
       
+      const parts = tokenString.split('.');
+      console.log('🔐 Token parts count:', parts.length);
+      
+      if (parts.length !== 3) {
+        console.log('❌ Invalid token format - not 3 parts');
+        return null;
+      }
+      
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      console.log('🔐 Decoded payload:', {
+        id: payload.id,
+        email: payload.email,
+        role: payload.role,
+        exp: payload.exp,
+        expReadable: payload.exp ? new Date(payload.exp * 1000).toISOString() : 'none'
+      });
+      
+      // Check expiration
+      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+        console.log('❌ Token expired:', {
+          tokenExp: payload.exp,
+          currentTime: Math.floor(Date.now() / 1000),
+          expired: payload.exp < Math.floor(Date.now() / 1000)
+        });
+        return null;
+      }
+      
+      console.log('✅ Token verification successful');
       return payload;
     } catch (error) {
       console.log('❌ Token verification failed:', error.message);
@@ -147,96 +206,29 @@ class TokenManager {
   }
 }
 
-// Custom CORS middleware for additional headers
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Always allow health check endpoints
-  if (req.path === '/api/health' || req.path === '/health' || req.path === '/') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
-    if (req.method === 'OPTIONS') {
-      console.log('🔄 Handling OPTIONS preflight request for health check');
-      return res.status(200).end();
-    }
-    
-    console.log(`💓 Health check request: ${req.method} ${req.path}`);
-    return next();
-  }
-  
-  if (origin) {
-    console.log(`📡 ${req.method} ${req.path} - Origin: ${origin}`);
-    
-    // Allow Railway and Vercel domains
-    if (origin.includes('railway.app') || origin.includes('vercel.app') || origin.includes('youngeagles.org.za') ||
-        ['http://localhost:3002', 'http://localhost:3003', 'http://localhost:5173'].includes(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      console.log(`✅ Setting Access-Control-Allow-Origin: ${origin}`);
-    } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      console.log(`✅ Setting Access-Control-Allow-Origin: * (permissive for unknown origin: ${origin})`);
-    }
-  } else {
-    console.log(`📡 ${req.method} ${req.path} - Origin: none`);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    console.log('✅ Setting Access-Control-Allow-Origin: * (for no origin)');
-  }
-  
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
-    console.log('🔄 Handling OPTIONS preflight request');
-    return res.status(200).end();
-  }
-  
-  next();
-});
-
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-
-// File upload configuration
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only images (JPG, PNG, GIF) and documents (PDF, DOC, DOCX) are allowed.'));
-    }
-  }
-});
-
 // Authentication middleware
 function verifyToken(req) {
+  console.log('🔐 verifyToken called for endpoint:', req.path);
   const authHeader = req.headers.authorization;
+  console.log('🔐 Authorization header:', authHeader ? `Bearer ${authHeader.substring(7, 20)}...` : 'null');
+  
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('❌ No valid Authorization header found');
     return null;
   }
   
   const token = authHeader.substring(7);
-  return TokenManager.verifyToken(token);
+  console.log('🔐 Extracted token:', `${token.substring(0, 20)}...`);
+  
+  const result = TokenManager.verifyToken(token);
+  console.log('🔐 Token verification result:', result ? {
+    id: result.id,
+    email: result.email,
+    role: result.role,
+    exp: result.exp
+  } : 'null');
+  
+  return result;
 }
 
 // Database helper functions
@@ -285,7 +277,7 @@ async function startServer() {
   console.log('🚫 All mock data removed - using real database');
   
   // Health check endpoint
-  app.get('/api/health', (req, res) => {
+  app.get('/health', (req, res) => {
     console.log('💓 Health check requested');
     res.json({ 
       status: 'healthy', 
@@ -301,7 +293,7 @@ async function startServer() {
   // =============================================================================
 
   // Parent login endpoint
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/auth/login', async (req, res) => {
     console.log('🔐 Parent login requested');
     try {
       const { email, password } = req.body;
@@ -361,7 +353,7 @@ async function startServer() {
   });
 
   // Teacher login endpoint
-  app.post('/api/auth/teacher-login', async (req, res) => {
+  app.post('/auth/teacher-login', async (req, res) => {
     console.log('🔐 Teacher login requested');
     try {
       const { email, password } = req.body;
@@ -421,7 +413,7 @@ async function startServer() {
   });
 
   // Admin login endpoint
-  app.post('/api/auth/admin-login', async (req, res) => {
+  app.post('/auth/admin-login', async (req, res) => {
     console.log('🔐 Admin login requested');
     try {
       const { email, password } = req.body;
@@ -480,16 +472,85 @@ async function startServer() {
     }
   });
 
+  // Get children for teacher (for assignment creation)
+  app.get('/auth/children', async (req, res) => {
+    console.log('👶 Teacher children endpoint requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`👶 Fetching children for teacher ID: ${user.id}`);
+      
+      // Step 1: Get teacher's class info from staff table
+      const [teacherRows] = await db.execute(
+        "SELECT className FROM staff WHERE id = ?",
+        [user.id]
+      );
+
+      if (teacherRows.length === 0) {
+        return res.status(404).json({ 
+          message: "Teacher not found.",
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      const className = teacherRows[0].className;
+      console.log(`👶 Teacher assigned to class: ${className}`);
+
+      if (!className) {
+        return res.status(200).json({ 
+          children: [],
+          message: "Teacher not assigned to any class"
+        });
+      }
+
+      // Step 2: Fetch all children in that class
+      const [children] = await db.execute(
+        "SELECT id, name, age, className, parent_id FROM children WHERE className = ?",
+        [className]
+      );
+
+      console.log(`✅ Found ${children.length} children in class ${className}`);
+
+      res.status(200).json({ 
+        children: children.map(child => ({
+          id: child.id,
+          name: child.name,
+          age: child.age,
+          className: child.className,
+          parent_id: child.parent_id
+        }))
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching children for teacher:', error);
+      res.status(500).json({ 
+        message: "Server error", 
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
   // =============================================================================
   // CHILD MANAGEMENT ENDPOINTS - PRODUCTION READY
   // =============================================================================
 
   // Age-based class assignment function
   function getClassByAge(age) {
-    if (age < 2) return 'Little Explorers';  // Under 2 years - Nursery
-    if (age >= 2 && age <= 3) return 'Curious Cubs';  // Ages 2-3 - Elementary
-    if (age >= 4 && age <= 6) return 'Panda';   // Ages 4-6 - Grade RR/R
-    return 'General Class';  // Fallback for older children
+    if (age < 2) {
+      return 'Little Explorers';
+    } else if (age >= 2 && age <= 3) {
+      return 'Curious Cubs';
+    } else if (age >= 4 && age <= 6) {
+      return 'Panda'; // Corrected from 'Panda Class' to 'Panda'
+    } else {
+      return 'General Class';
+    }
   }
 
   function getGradeByAge(age) {
@@ -501,7 +562,7 @@ async function startServer() {
   }
 
   // Child registration endpoint
-  app.post('/api/auth/register-child', async (req, res) => {
+  app.post('/auth/register-child', async (req, res) => {
     console.log('👶 Child registration requested');
     try {
       const { name, parent_id, gender, dob, age, grade, className } = req.body;
@@ -579,7 +640,7 @@ async function startServer() {
   });
 
   // Get children for a parent
-  app.get('/api/auth/parents/:id/children', async (req, res) => {
+  app.get('/auth/parents/:id/children', async (req, res) => {
     console.log('👨‍👩‍👧‍👦 Fetching children for parent');
     try {
       const { id: parentId } = req.params;
@@ -600,9 +661,9 @@ async function startServer() {
         });
       }
       
-      // Fetch children for this parent
+      // Fetch children for this parent (including profile_data)
       const children = await db.execute(
-        'SELECT id, name, gender, dob, age, grade, className, parent_id FROM children WHERE parent_id = ?',
+        'SELECT id, name, gender, dob, age, grade, className, parent_id, profile_data FROM children WHERE parent_id = ?',
         [parentId]
       );
       
@@ -612,10 +673,17 @@ async function startServer() {
       const formattedChildren = children[0].map(child => ({
         ...child,
         first_name: child.name ? child.name.split(' ')[0] : '',
-        last_name: child.name ? child.name.split(' ').slice(1).join(' ') : ''
+        last_name: child.name ? child.name.split(' ').slice(1).join(' ') : '',
+        // Parse profile_data if it exists
+        profile_data: child.profile_data ? JSON.parse(child.profile_data) : null
       }));
       
-      res.json(formattedChildren);
+      res.json({
+        success: true,
+        data: formattedChildren,
+        total: formattedChildren.length,
+        message: 'Children fetched successfully'
+      });
       
     } catch (error) {
       console.error('❌ Error fetching children:', error);
@@ -697,6 +765,142 @@ async function startServer() {
       res.status(500).json({
         message: 'Internal server error',
         error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Update child (parent can update their own child)
+  app.put('/auth/parents/:parentId/children/:childId', async (req, res) => {
+    console.log('👶 Parent updating child:', req.params.childId);
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    if (!user || (user.role !== 'parent' && user.role !== 'admin') || 
+        (user.role === 'parent' && user.id.toString() !== parentId)) {
+      return res.status(403).json({
+        message: 'Forbidden - you can only update your own children',
+        error: 'FORBIDDEN'
+      });
+    }
+    
+    try {
+      const { name, dob, age, gender, grade, className, profile_data } = req.body;
+      
+      // Validate required fields
+      if (!name || !dob || !gender) {
+        return res.status(400).json({
+          message: 'Name, date of birth, and gender are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+      
+      // Verify child belongs to this parent
+      const [existingChild] = await db.execute(
+        'SELECT id, name FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (existingChild.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Update child
+      const [result] = await db.execute(
+        `UPDATE children SET 
+          name = ?, dob = ?, age = ?, gender = ?, grade = ?, className = ?, profile_data = ?
+        WHERE id = ? AND parent_id = ?`,
+        [name, dob, age, gender, grade, className, JSON.stringify(profile_data), childId, parentId]
+      );
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          message: 'Child not found or update failed',
+          error: 'UPDATE_FAILED'
+        });
+      }
+      
+      console.log(`✅ Child updated successfully: ${name}`);
+      
+      res.json({
+        success: true,
+        message: 'Child profile updated successfully',
+        child: {
+          id: parseInt(childId),
+          name,
+          dob,
+          age,
+          gender,
+          grade,
+          className,
+          profile_data
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Update child error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Delete child (parent can delete their own child)
+  app.delete('/auth/parents/:parentId/children/:childId', async (req, res) => {
+    console.log('👶 Parent deleting child:', req.params.childId);
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    if (!user || (user.role !== 'parent' && user.role !== 'admin') || 
+        (user.role === 'parent' && user.id.toString() !== parentId)) {
+      return res.status(403).json({
+        message: 'Forbidden - you can only delete your own children',
+        error: 'FORBIDDEN'
+      });
+    }
+    
+    try {
+      // Verify child belongs to this parent
+      const [existingChild] = await db.execute(
+        'SELECT id, name FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (existingChild.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Delete child
+      const [result] = await db.execute(
+        'DELETE FROM children WHERE id = ? AND parent_id = ?', 
+        [childId, parentId]
+      );
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          message: 'Child not found or delete failed',
+          error: 'DELETE_FAILED'
+        });
+      }
+      
+      console.log(`✅ Child deleted successfully: ${existingChild[0].name}`);
+      
+      res.json({
+        success: true,
+        message: 'Child profile deleted successfully'
+      });
+      
+    } catch (error) {
+      console.error('❌ Delete child error:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
       });
     }
   });
@@ -784,14 +988,181 @@ async function startServer() {
   // PARENT ENDPOINTS - NEW ADDITIONS
   // =============================================================================
 
+  // Get homework for a specific child
+  app.get('/parent/:parentId/child/:childId/homework', async (req, res) => {
+    console.log('📚 Parent requesting homework for child');
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    if (!user || (user.role !== 'parent' && user.role !== 'admin') || 
+        (user.role === 'parent' && user.id.toString() !== parentId)) {
+      return res.status(403).json({
+        message: 'Forbidden - you can only view homework for your own children',
+        error: 'FORBIDDEN'
+      });
+    }
+    
+    try {
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Get homework assigned to child's class using the correct 'homeworks' table
+      const [homeworks] = await db.execute(
+        `SELECT 
+          h.id, 
+          h.title, 
+          h.due_date, 
+          h.status, 
+          h.class_name, 
+          h.file_url,
+          h.instructions,
+          t.name as teacher_name 
+        FROM homeworks h 
+        LEFT JOIN staff t ON h.uploaded_by_teacher_id = t.id 
+        WHERE h.class_name = ?
+        ORDER BY h.due_date DESC`,
+        [child[0].className]
+      );
+      
+      console.log(`✅ Found ${homeworks.length} homework assignments for ${child[0].name}`);
+      
+      // Format homework data for frontend compatibility
+      const formattedHomework = homeworks.map(hw => ({
+        id: hw.id,
+        title: hw.title,
+        description: '', // 'description' column does not exist, keeping placeholder
+        dueDate: hw.due_date,
+        status: hw.status || 'pending',
+        teacherName: hw.teacher_name || 'N/A',
+        className: hw.class_name,
+        instructions: hw.instructions || '',
+        attachments: hw.file_url ? [hw.file_url] : []
+      }));
+      
+      res.json({
+        success: true,
+        homework: formattedHomework,
+        child: {
+          id: child[0].id,
+          name: child[0].name,
+          className: child[0].className
+        },
+        total: formattedHomework.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching homework:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get reports for a specific child
+  app.get('/parent/:parentId/child/:childId/reports', async (req, res) => {
+    console.log('📊 Parent requesting reports for child');
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+    
+    if (!user || (user.role !== 'parent' && user.role !== 'admin') || 
+        (user.role === 'parent' && user.id.toString() !== parentId)) {
+      return res.status(403).json({
+        message: 'Forbidden - you can only view reports for your own children',
+        error: 'FORBIDDEN'
+      });
+    }
+    
+    try {
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      // Get homework statistics
+      const [homeworkStats] = await db.execute(
+        `SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+          SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END) as graded
+        FROM homework 
+        WHERE class_name = ?`,
+        [child[0].className]
+      );
+      
+      // Get recent homework (last 5)
+      const [recentHomework] = await db.execute(
+        `SELECT h.*, t.name as teacher_name 
+        FROM homework h 
+        LEFT JOIN staff t ON h.teacher_id = t.id 
+        WHERE h.class_name = ? 
+        ORDER BY h.created_at DESC 
+        LIMIT 5`,
+        [child[0].className]
+      );
+      
+      console.log(`✅ Generated report for ${child[0].name}`);
+      
+      res.json({
+        success: true,
+        child: {
+          id: child[0].id,
+          name: child[0].name,
+          className: child[0].className
+        },
+        homework_summary: {
+          total: homeworkStats[0].total,
+          submitted: homeworkStats[0].submitted,
+          graded: homeworkStats[0].graded,
+          completion_rate: homeworkStats[0].total > 0 
+            ? ((homeworkStats[0].submitted / homeworkStats[0].total) * 100).toFixed(1) 
+            : 0
+        },
+        recent_homework: recentHomework.map(hw => ({
+          id: hw.id,
+          title: hw.title,
+          status: hw.status || 'pending',
+          dueDate: hw.due_date,
+          teacherName: hw.teacher_name
+        })),
+        generated_at: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ Error generating report:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
   // Parent dashboard endpoint
   app.get('/api/parent/dashboard', async (req, res) => {
-    console.log('📊 Parent dashboard requested');
+    console.log('👨‍👩‍👧‍👦 Parent dashboard requested');
     const user = verifyToken(req);
     if (!user || user.role !== 'parent') {
-      return res.status(403).json({
-        message: 'Forbidden - parent access required',
-        error: 'FORBIDDEN'
+      return res.status(401).json({
+        message: 'Unauthorized - parent access required',
+        error: 'UNAUTHORIZED'
       });
     }
 
@@ -980,17 +1351,11 @@ async function startServer() {
           subject: 'Mathematics',
           description: 'Complete pages 12-15 in your math workbook. Focus on multiplication tables.',
           due_date: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
-          assigned_date: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-          submitted: false,
-          submitted_at: null,
           status: 'pending',
-          priority: 'medium',
-          teacher: 'Mrs. Smith',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Show all your work and double-check your answers.'
+          teacherName: 'Test Teacher',
+          className: childInfo.className,
+          instructions: 'Show all your work and double-check your answers.',
+          attachments: []
         },
         {
           id: 2,
@@ -998,56 +1363,31 @@ async function startServer() {
           subject: 'English',
           description: 'Read Chapter 3 of "The Magic Garden" and answer the questions.',
           due_date: new Date(Date.now() + 172800000).toISOString(), // Day after tomorrow
-          assigned_date: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-          submitted: true,
-          submitted_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
           status: 'submitted',
-          priority: 'high',
-          teacher: 'Ms. Johnson',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Write complete sentences and use examples from the text.'
-        },
-        {
-          id: 3,
-          title: 'Science Observation',
-          subject: 'Science',
-          description: 'Observe and draw 3 different types of leaves from your garden.',
-          due_date: new Date(Date.now() + 259200000).toISOString(), // 3 days from now
-          assigned_date: new Date().toISOString(), // Today
-          submitted: false,
-          submitted_at: null,
-          status: 'pending',
-          priority: 'low',
-          teacher: 'Mr. Brown',
-          childId: parseInt(childId),
-          childName: childInfo.name,
-          className: childInfo.className || 'Little Explorers',
-          attachments: [],
-          instructions: 'Label each leaf with its name and note any interesting features.'
+          teacherName: 'Test Teacher',
+          className: childInfo.className,
+          instructions: 'Write complete sentences and use examples from the text.',
+          attachments: []
         }
       ];
       
-      console.log(`✅ Returning ${mockHomework.length} homework items for child ${childId}`);
+      console.log(`✅ Returning ${mockHomework.length} mock homework items for child ${childId}`);
       
       res.json({
         success: true,
-        data: mockHomework,
+        homework: mockHomework,
         child: {
-          id: parseInt(childId),
+          id: childInfo.id,
           name: childInfo.name,
-          grade: childInfo.grade,
           className: childInfo.className
         },
-        total_count: mockHomework.length
+        total: mockHomework.length
       });
       
     } catch (error) {
-      console.error('❌ Error fetching homework:', error);
+      console.error('❌ Error in homework endpoint (now mock):', error);
       res.status(500).json({
-        message: 'Failed to fetch homework',
+        message: 'Internal server error',
         error: 'DATABASE_ERROR'
       });
     }
@@ -1268,175 +1608,7 @@ async function startServer() {
     }
   });
 
-  // Admin users management
-  app.get('/api/admin/users', async (req, res) => {
-    console.log('👥 Admin users list requested');
-    const user = verifyToken(req);
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({
-        message: 'Forbidden - admin access required',
-        error: 'FORBIDDEN'
-      });
-    }
-    
-    try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 50;
-      const search = req.query.search || '';
-      const offset = (page - 1) * limit;
-      
-      // Validate parameters
-      if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1 || limit > 200) {
-        return res.status(400).json({
-          message: 'Invalid pagination parameters',
-          error: 'INVALID_PARAMS'
-        });
-      }
-      
-      // Ensure limit and offset are safe integers
-      const limitParam = Math.max(1, Math.min(200, parseInt(limit)));
-      const offsetParam = Math.max(0, parseInt(offset));
-      
-      let query = 'SELECT id, name, email, role, created_at, TRUE as is_verified FROM users';
-      let countQuery = 'SELECT COUNT(*) as total FROM users';
-      let params = [];
-      
-      if (search) {
-        query += ' WHERE name LIKE ? OR email LIKE ?';
-        countQuery += ' WHERE name LIKE ? OR email LIKE ?';
-        params = [`%${search}%`, `%${search}%`];
-      }
-      
-      query += ` ORDER BY created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`;
-      
-      console.log('🔍 Executing query:', query);
-      console.log('🔍 With params:', params);
-      
-      // Execute queries
-      const [users] = await db.execute(query, params);
-      const [totalResult] = await db.execute(countQuery, params);
-      
-      const total = totalResult[0].total;
-      const pages = Math.ceil(total / limitParam);
-      
-      console.log('✅ Users data retrieved successfully');
-      
-      res.json({
-        success: true,
-        data: users,
-        pagination: {
-          page,
-          limit: limitParam,
-          total,
-          pages,
-          hasNext: page < pages,
-          hasPrev: page > 1
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Users list error:', error);
-      res.status(500).json({
-        message: 'Internal server error',
-        error: 'DATABASE_ERROR'
-      });
-    }
-  });
-
-  // Admin create user endpoint
-  app.post('/api/admin/users', async (req, res) => {
-    console.log('👤 Admin create user requested');
-    const user = verifyToken(req);
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({
-        message: 'Forbidden - admin access required',
-        error: 'FORBIDDEN'
-      });
-    }
-    
-    try {
-      const { name, email, role, password } = req.body;
-      
-      // Validate required fields
-      if (!name || !email || !role || !password) {
-        return res.status(400).json({
-          message: 'Name, email, role, and password are required',
-          error: 'MISSING_REQUIRED_FIELDS'
-        });
-      }
-      
-      // Validate role
-      if (!['parent', 'teacher'].includes(role)) {
-        return res.status(400).json({
-          message: 'Role must be either "parent" or "teacher"',
-          error: 'INVALID_ROLE'
-        });
-      }
-      
-      // Validate password
-      const passwordValidation = PasswordSecurity.validatePassword(password);
-      if (!passwordValidation.valid) {
-        return res.status(400).json({
-          message: passwordValidation.message,
-          error: 'INVALID_PASSWORD'
-        });
-      }
-      
-      console.log(`👤 Creating ${role}: ${email}`);
-      
-      // Check if user already exists
-      const existingUser = await findUserByEmail(email);
-      if (existingUser) {
-        return res.status(409).json({
-          message: 'User with this email already exists',
-          error: 'USER_EXISTS'
-        });
-      }
-      
-      // Hash password
-      const hashedPassword = PasswordSecurity.hashPassword(password);
-      
-      // Insert user into appropriate table
-      if (role === 'parent') {
-        await db.execute(
-          'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
-          [name, email, role, hashedPassword]
-        );
-      } else if (role === 'teacher') {
-        await db.execute(
-          'INSERT INTO staff (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
-          [name, email, role, hashedPassword]
-        );
-      }
-      
-      console.log(`✅ ${role} created successfully: ${email}`);
-      
-      res.status(201).json({
-        success: true,
-        message: `${role.charAt(0).toUpperCase() + role.slice(1)} created successfully`,
-        user: {
-          name,
-          email,
-          role
-        }
-      });
-      
-    } catch (error) {
-      console.error('❌ Create user error:', error);
-      
-      if (error.code === 'ER_DUP_ENTRY') {
-        res.status(409).json({
-          message: 'User with this email already exists',
-          error: 'USER_EXISTS'
-        });
-      } else {
-        res.status(500).json({
-          message: 'Internal server error',
-          error: 'DATABASE_ERROR'
-        });
-      }
-    }
-  });
+  // Old /api/admin/users endpoints removed - now using /admin/users with staff table support
 
   // Debug endpoint for children
   app.get('/api/admin/children-debug', async (req, res) => {
@@ -2262,6 +2434,1617 @@ async function startServer() {
     }
   });
 
+  // =============================================================================
+  // ADMIN DASHBOARD ENDPOINTS - PRODUCTION READY
+  // =============================================================================
+
+  // Admin dashboard stats
+  app.get('/admin/dashboard', async (req, res) => {
+    console.log('📊 Admin dashboard stats requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get real statistics from database
+      const [userStats] = await db.execute('SELECT COUNT(*) as total_users FROM users WHERE role = "parent"');
+      const [teacherStats] = await db.execute('SELECT COUNT(*) as total_teachers FROM staff WHERE role = "teacher"');
+      const [childrenStats] = await db.execute('SELECT COUNT(*) as total_children FROM children');
+      
+      // Mock homework stats for now (would be real in production)
+      const dashboardStats = {
+        totalUsers: userStats[0]?.total_users || 0,
+        totalTeachers: teacherStats[0]?.total_teachers || 0,
+        totalChildren: childrenStats[0]?.total_children || 0,
+        totalHomework: 15, // Mock data
+        pendingSubmissions: 8, // Mock data
+        gradedSubmissions: 42, // Mock data
+        systemHealth: 'healthy',
+        activeUsers: 12, // Mock data
+        newRegistrations: 3, // Mock data
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ Dashboard stats generated:', dashboardStats);
+      res.json(dashboardStats);
+
+    } catch (error) {
+      console.error('❌ Dashboard stats error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch dashboard statistics',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin quick actions
+  app.get('/admin/quick-actions', async (req, res) => {
+    console.log('⚡ Admin quick actions requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const quickActions = [
+        {
+          id: 'add-teacher',
+          title: 'Add New Teacher',
+          description: 'Register a new teacher account',
+          icon: 'UserPlus',
+          color: 'blue',
+          count: null
+        },
+        {
+          id: 'view-users',
+          title: 'Manage Users',
+          description: 'View and manage all users',
+          icon: 'Users',
+          color: 'green',
+          count: await db.execute('SELECT COUNT(*) as count FROM users').then(([rows]) => rows[0]?.count || 0)
+        },
+        {
+          id: 'system-settings',
+          title: 'System Settings',
+          description: 'Configure system preferences',
+          icon: 'Settings',
+          color: 'purple',
+          count: null
+        },
+        {
+          id: 'reports',
+          title: 'Generate Reports',
+          description: 'Create detailed system reports',
+          icon: 'FileText',
+          color: 'orange',
+          count: null
+        },
+        {
+          id: 'announcements',
+          title: 'Send Announcements',
+          description: 'Broadcast messages to all users',
+          icon: 'Megaphone',
+          color: 'red',
+          count: null
+        }
+      ];
+
+      console.log('✅ Quick actions generated');
+      res.json(quickActions);
+
+    } catch (error) {
+      console.error('❌ Quick actions error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch quick actions',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin analytics
+  app.get('/admin/analytics', async (req, res) => {
+    console.log('📈 Admin analytics requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Generate analytics data (mix of real and mock data)
+      const analytics = {
+        userGrowth: [
+          { month: 'Jan', users: 45, teachers: 5 },
+          { month: 'Feb', users: 52, teachers: 6 },
+          { month: 'Mar', users: 61, teachers: 7 },
+          { month: 'Apr', users: 68, teachers: 8 },
+          { month: 'May', users: 75, teachers: 9 },
+          { month: 'Jun', users: 82, teachers: 10 }
+        ],
+        homeworkStats: {
+          totalAssigned: 156,
+          completed: 142,
+          pending: 14,
+          averageGrade: 87.5,
+          completionRate: 91.0
+        },
+        activityMetrics: {
+          dailyActiveUsers: 34,
+          weeklyActiveUsers: 78,
+          monthlyActiveUsers: 95,
+          averageSessionTime: '12 minutes'
+        },
+        performanceMetrics: {
+          averageResponseTime: '245ms',
+          uptime: '99.8%',
+          errorRate: '0.2%',
+          satisfaction: 4.7
+        },
+        topPerformingClasses: [
+          { name: 'Panda Class', students: 15, averageGrade: 92.3 },
+          { name: 'Curious Cubs', students: 12, averageGrade: 89.7 },
+          { name: 'Little Explorers', students: 8, averageGrade: 87.4 }
+        ],
+        recentActivities: [
+          { action: 'New user registration', user: 'parent@example.com', timestamp: new Date(Date.now() - 3600000).toISOString() },
+          { action: 'Homework submitted', user: 'student123', timestamp: new Date(Date.now() - 7200000).toISOString() },
+          { action: 'Teacher login', user: 'teacher@youngeagles.org.za', timestamp: new Date(Date.now() - 10800000).toISOString() }
+        ],
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ Analytics data generated');
+      res.json(analytics);
+
+    } catch (error) {
+      console.error('❌ Analytics error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch analytics data',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin users management
+  app.get('/admin/users', async (req, res) => {
+    console.log('👥 Admin users list requested - UPDATED VERSION');
+    console.log('📋 Raw query:', req.query);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { page = 1, limit = 10, role, search, includeStaff } = req.query;
+      console.log('📋 Query params:', { page, limit, role, search, includeStaff });
+
+      let allUsers = [];
+
+      // If requesting teachers or including staff
+      if (role === 'teacher' || includeStaff === 'true') {
+        console.log('📚 Fetching teachers from staff table...');
+        
+        // Get all teacher fields from staff table
+        let staffQuery = `
+          SELECT id, email, name, role, created_at, 
+                 '' as phone,
+                 '' as qualification,
+                 0 as experience_years,
+                 '' as specialization,
+                 '' as emergency_contact_name,
+                 '' as emergency_contact_phone,
+                 '' as profile_picture,
+                 '' as bio,
+                 'staff_table' as source
+          FROM staff 
+          WHERE role = 'teacher'
+        `;
+        
+        if (search && search.trim()) {
+          staffQuery += ` AND (name LIKE ? OR email LIKE ? OR qualification LIKE ?)`;
+          const searchTerm = `%${search.trim()}%`;
+          const [teachers] = await db.execute(staffQuery, [searchTerm, searchTerm, searchTerm]);
+          allUsers.push(...teachers);
+        } else {
+          const [teachers] = await db.execute(staffQuery);
+          allUsers.push(...teachers);
+        }
+        
+        console.log(`📚 Found ${allUsers.length} teachers`);
+      }
+
+      // If requesting parents or all users (not just teachers)
+      if (role === 'parent' || role === 'all' || (!role && includeStaff !== 'true')) {
+        console.log('👥 Fetching parents from users table...');
+        
+        let usersQuery = 'SELECT id, email, name, role, created_at, "users_table" as source FROM users WHERE role = "parent"';
+        
+        if (search && search.trim()) {
+          usersQuery += ' AND (name LIKE ? OR email LIKE ?)';
+          const searchTerm = `%${search.trim()}%`;
+          const [parents] = await db.execute(usersQuery, [searchTerm, searchTerm]);
+          allUsers.push(...parents);
+        } else {
+          const [parents] = await db.execute(usersQuery);
+          allUsers.push(...parents);
+        }
+        
+        console.log(`👥 Found ${allUsers.filter(u => u.role === 'parent').length} parents`);
+      }
+
+      // Sort by creation date
+      allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      // Apply pagination
+      const offset = (page - 1) * limit;
+      const total = allUsers.length;
+      const paginatedUsers = allUsers.slice(offset, offset + parseInt(limit));
+
+      console.log(`✅ Retrieved ${paginatedUsers.length}/${total} users`);
+      res.json({
+        success: true,
+        data: paginatedUsers,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: total,
+          totalPages: Math.ceil(total / limit)
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Admin users error:', error);
+      console.error('❌ Error stack:', error.stack);
+      res.status(500).json({
+        message: 'Failed to fetch users',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin teachers management
+  app.get('/admin/teachers', async (req, res) => {
+    console.log('👩‍🏫 Admin teachers list requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const [teachers] = await db.execute(
+        'SELECT id, email, name, role, created_at FROM staff WHERE role = "teacher" ORDER BY created_at DESC'
+      );
+
+      console.log(`✅ Retrieved ${teachers.length} teachers`);
+      res.json({
+        success: true,
+        data: teachers,
+        total: teachers.length
+      });
+
+    } catch (error) {
+      console.error('❌ Admin teachers error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch teachers',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin parents management
+  app.get('/admin/parents', async (req, res) => {
+    console.log('👨‍👩‍👧‍👦 Admin parents list requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const [parents] = await db.execute(
+        'SELECT id, email, name, role, created_at FROM users WHERE role = "parent" ORDER BY created_at DESC'
+      );
+
+      console.log(`✅ Retrieved ${parents.length} parents`);
+      res.json({
+        success: true,
+        data: parents,
+        total: parents.length
+      });
+
+    } catch (error) {
+      console.error('❌ Admin parents error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch parents',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin children management
+  app.get('/admin/children', async (req, res) => {
+    console.log('👶 Admin children list requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { page = 1, limit = 10, search, className, grade } = req.query;
+      const offset = (page - 1) * limit;
+
+      console.log('📋 Children query params:', { page, limit, search, className, grade });
+
+      // Build the main query
+      let query = `
+        SELECT c.id, c.name, c.age, c.gender, c.grade, c.className, c.dob, c.created_at,
+               u.email as parent_email, u.name as parent_name
+        FROM children c
+        LEFT JOIN users u ON c.parent_id = u.id
+      `;
+      
+      let params = [];
+      let conditions = [];
+
+      if (search && search.trim()) {
+        conditions.push('(c.name LIKE ? OR u.email LIKE ?)');
+        params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+      }
+
+      if (className && className.trim()) {
+        conditions.push('c.className = ?');
+        params.push(className.trim());
+      }
+
+      if (grade && grade.trim()) {
+        conditions.push('c.grade = ?');
+        params.push(grade.trim());
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?';
+      params.push(parseInt(limit), parseInt(offset));
+
+      console.log('📋 Executing query with params:', params);
+      const [children] = await db.execute(query, params);
+
+      // Build count query with same conditions
+      let countQuery = 'SELECT COUNT(*) as total FROM children c LEFT JOIN users u ON c.parent_id = u.id';
+      let countParams = [];
+
+      if (search && search.trim()) {
+        countParams.push(`%${search.trim()}%`, `%${search.trim()}%`);
+      }
+      if (className && className.trim()) {
+        countParams.push(className.trim());
+      }
+      if (grade && grade.trim()) {
+        countParams.push(grade.trim());
+      }
+
+      if (conditions.length > 0) {
+        countQuery += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      console.log('📋 Executing count query with params:', countParams);
+      const [countResult] = await db.execute(countQuery, countParams);
+
+      console.log(`✅ Retrieved ${children.length} children out of ${countResult[0].total} total`);
+      res.json({
+        success: true,
+        data: children,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: countResult[0].total,
+          totalPages: Math.ceil(countResult[0].total / limit)
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Admin children error:', error);
+      console.error('❌ Error details:', error.message);
+      res.status(500).json({
+        message: 'Failed to fetch children',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+    // Create user endpoint (handles both parents and teachers)
+  app.post('/admin/users', async (req, res) => {
+    console.log('👤 Admin create user requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+    
+    try {
+      const { name, email, role, password, phone, qualification, experience_years, 
+              specialization, emergency_contact_name, emergency_contact_phone, bio } = req.body;
+      
+      console.log('📝 Creating new user:', { name, email, role });
+      
+      // Validate required fields
+      if (!name || !email || !role || !password) {
+        return res.status(400).json({
+          message: 'Name, email, role, and password are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+      
+      // Validate role
+      if (!['parent', 'teacher'].includes(role)) {
+        return res.status(400).json({
+          message: 'Role must be either "parent" or "teacher"',
+          error: 'INVALID_ROLE'
+        });
+      }
+      
+      // Check if user already exists in either table
+      const [existingParent] = await db.execute('SELECT email FROM users WHERE email = ?', [email]);
+      const [existingStaff] = await db.execute('SELECT email FROM staff WHERE email = ?', [email]);
+      
+      if (existingParent[0]?.length > 0 || existingStaff[0]?.length > 0) {
+        return res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      }
+      
+      // Hash password
+      const hashedPassword = PasswordSecurity.hashPassword(password);
+      
+      if (role === 'teacher') {
+        // Create teacher in staff table with basic fields
+        const [result] = await db.execute(
+          `INSERT INTO staff (
+            name, email, role, password, created_at
+          ) VALUES (?, ?, ?, ?, NOW())`,
+          [name, email, role, hashedPassword]
+        );
+        
+        console.log(`✅ Teacher created successfully with ID ${result.insertId}`);
+        
+        // Fetch the created teacher
+        const [newTeacher] = await db.execute(
+          `SELECT id, name, email, role, created_at, phone, qualification,
+                  experience_years, specialization, emergency_contact_name,
+                  emergency_contact_phone, bio
+           FROM staff WHERE id = ?`,
+          [result.insertId]
+        );
+        
+        res.status(201).json({
+          success: true,
+          message: 'Teacher created successfully',
+          user: newTeacher[0]
+        });
+        
+      } else {
+        // Create parent in users table
+        const [result] = await db.execute(
+          'INSERT INTO users (name, email, role, password, created_at) VALUES (?, ?, ?, ?, NOW())',
+          [name, email, role, hashedPassword]
+        );
+        
+        console.log(`✅ Parent created successfully with ID ${result.insertId}`);
+        
+        // Fetch the created parent
+        const [newParent] = await db.execute(
+          'SELECT id, name, email, role, created_at FROM users WHERE id = ?',
+          [result.insertId]
+        );
+        
+        res.status(201).json({
+          success: true,
+          message: 'Parent created successfully',
+          user: newParent[0]
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Create user error:', error);
+      
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(409).json({
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      } else {
+        res.status(500).json({
+          message: 'Failed to create user',
+          error: 'DATABASE_ERROR'
+        });
+      }
+    }
+  });
+
+  // Update user endpoint (handles both parents and teachers)
+  app.put('/admin/users/:id', async (req, res) => {
+    console.log('✏️ Admin update user requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+      const { name, email, role, source, ...extraFields } = req.body;
+
+      // Determine which table to update based on source or role
+      const isStaffUser = source === 'staff_table' || role === 'teacher' || role === 'admin';
+      
+      if (isStaffUser) {
+                // Update staff table
+        let updateQuery = 'UPDATE staff SET name = ?, email = ?, updated_at = NOW()';
+        let params = [name, email];
+
+        // Only add fields that exist in the request
+        if (extraFields.phone !== undefined) {
+          updateQuery += ', phone = ?';
+          params.push(extraFields.phone || '');
+        }
+        if (extraFields.qualification !== undefined) {
+          updateQuery += ', qualification = ?';
+          params.push(extraFields.qualification || '');
+        }
+        if (extraFields.experience_years !== undefined) {
+          updateQuery += ', experience_years = ?';
+          params.push(extraFields.experience_years ? parseInt(extraFields.experience_years) : 0);
+        }
+        if (extraFields.specialization !== undefined) {
+          updateQuery += ', specialization = ?';
+          params.push(extraFields.specialization || '');
+        }
+        if (extraFields.emergency_contact_name !== undefined) {
+          updateQuery += ', emergency_contact_name = ?';
+          params.push(extraFields.emergency_contact_name || '');
+        }
+        if (extraFields.emergency_contact_phone !== undefined) {
+          updateQuery += ', emergency_contact_phone = ?';
+          params.push(extraFields.emergency_contact_phone || '');
+        }
+        if (extraFields.bio !== undefined) {
+          updateQuery += ', bio = ?';
+          params.push(extraFields.bio || '');
+        }
+
+        if (extraFields.password) {
+          const hashedPassword = PasswordSecurity.hashPassword(extraFields.password);
+          updateQuery += ', password = ?';
+          params.push(hashedPassword);
+        }
+
+        updateQuery += ' WHERE id = ? AND role = "teacher"';
+        params.push(id);
+
+        await db.execute(updateQuery, params);
+      } else {
+        // Update users table (parents)
+        let updateQuery = 'UPDATE users SET name = ?, email = ?, updated_at = NOW()';
+        let params = [name, email];
+
+                 if (extraFields.password) {
+           const hashedPassword = PasswordSecurity.hashPassword(extraFields.password);
+           updateQuery += ', password = ?';
+           params.push(hashedPassword);
+         }
+
+        updateQuery += ' WHERE id = ?';
+        params.push(id);
+
+        await db.execute(updateQuery, params);
+      }
+
+      // Fetch updated teacher data
+      const [updatedTeacher] = await db.execute(
+        `SELECT id, name, email, role, created_at, 
+                COALESCE(phone, '') as phone,
+                COALESCE(qualification, '') as qualification,
+                COALESCE(experience_years, 0) as experience_years,
+                COALESCE(specialization, '') as specialization,
+                COALESCE(emergency_contact_name, '') as emergency_contact_name,
+                COALESCE(emergency_contact_phone, '') as emergency_contact_phone,
+                COALESCE(bio, '') as bio
+         FROM staff WHERE id = ? AND role = "teacher"`,
+        [id]
+      );
+
+      console.log(`✅ Teacher updated successfully: ${email}`);
+      res.json({
+        success: true,
+        message: 'Teacher updated successfully',
+        user: updatedTeacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Update user error:', error);
+      res.status(500).json({
+        message: 'Failed to update user',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Delete user endpoint (handles both parents and teachers)
+  app.delete('/admin/users/:id', async (req, res) => {
+    console.log('🗑️ Admin delete user requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+      const { source } = req.body;
+
+      // Determine which table to delete from
+      const isStaffUser = source === 'staff_table';
+      
+      if (isStaffUser) {
+        // Delete from staff table
+        const [result] = await db.execute('DELETE FROM staff WHERE id = ?', [id]);
+        if (result.affectedRows === 0) {
+          return res.status(404).json({
+            message: 'Staff member not found',
+            error: 'USER_NOT_FOUND'
+          });
+        }
+      } else {
+        // Delete from users table
+        const [result] = await db.execute('DELETE FROM users WHERE id = ?', [id]);
+        if (result.affectedRows === 0) {
+          return res.status(404).json({
+            message: 'User not found',
+            error: 'USER_NOT_FOUND'
+          });
+        }
+      }
+
+      console.log(`✅ User deleted successfully from ${isStaffUser ? 'staff' : 'users'} table`);
+      res.json({
+        success: true,
+        message: 'User deleted successfully'
+      });
+
+    } catch (error) {
+      console.error('❌ Delete user error:', error);
+      res.status(500).json({
+        message: 'Failed to delete user',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Update teacher endpoint
+  app.put('/admin/teachers/:id', async (req, res) => {
+    console.log('✏️ Update teacher requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+      const {
+        name,
+        email,
+        phone,
+        qualification,
+        experience_years,
+        specialization,
+        emergency_contact_name,
+        emergency_contact_phone,
+        bio,
+        profile_picture
+      } = req.body;
+
+      console.log('📝 Teacher update data:', {
+        id,
+        name,
+        email,
+        phone,
+        qualification,
+        experience_years,
+        specialization,
+        emergency_contact_name,
+        emergency_contact_phone,
+        bio: bio ? bio.substring(0, 50) + '...' : 'none'
+      });
+
+      // Check if teacher exists
+      const [existingTeacher] = await db.execute(
+        'SELECT id, email FROM staff WHERE id = ? AND role = "teacher"',
+        [id]
+      );
+
+      if (existingTeacher.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher not found',
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      // Update teacher in staff table
+      const updateQuery = `
+        UPDATE staff 
+        SET name = ?, email = ?, phone = ?, qualification = ?, 
+            experience_years = ?, specialization = ?, 
+            emergency_contact_name = ?, emergency_contact_phone = ?, 
+            bio = ?, profile_picture = ?, updated_at = NOW()
+        WHERE id = ? AND role = 'teacher'
+      `;
+
+      const updateParams = [
+        name,
+        email,
+        phone,
+        qualification,
+        experience_years ? parseInt(experience_years) : null,
+        specialization,
+        emergency_contact_name,
+        emergency_contact_phone,
+        bio,
+        profile_picture,
+        id
+      ];
+
+      await db.execute(updateQuery, updateParams);
+
+      // Fetch updated teacher data
+      const [updatedTeacher] = await db.execute(
+        `SELECT id, email, name, phone, qualification, experience_years, 
+                specialization, emergency_contact_name, emergency_contact_phone, 
+                bio, profile_picture, role, created_at, updated_at
+         FROM staff WHERE id = ?`,
+        [id]
+      );
+
+      console.log('✅ Teacher updated successfully:', updatedTeacher[0].email);
+      res.json({
+        success: true,
+        message: 'Teacher updated successfully',
+        teacher: updatedTeacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Update teacher error:', error);
+      res.status(500).json({
+        message: 'Failed to update teacher',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get individual teacher details
+  app.get('/admin/teachers/:id', async (req, res) => {
+    console.log('👩‍🏫 Get teacher details for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+
+      const [teacher] = await db.execute(
+        `SELECT id, email, name, phone, qualification, experience_years, 
+                specialization, emergency_contact_name, emergency_contact_phone, 
+                bio, profile_picture, role, created_at, updated_at
+         FROM staff WHERE id = ? AND role = 'teacher'`,
+        [id]
+      );
+
+      if (teacher.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher not found',
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      console.log('✅ Teacher details retrieved:', teacher[0].email);
+      res.json({
+        success: true,
+        teacher: teacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Get teacher error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch teacher details',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Delete teacher endpoint
+  app.delete('/admin/teachers/:id', async (req, res) => {
+    console.log('🗑️ Delete teacher requested for ID:', req.params.id);
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { id } = req.params;
+
+      // Check if teacher exists
+      const [existingTeacher] = await db.execute(
+        'SELECT id, email, name FROM staff WHERE id = ? AND role = "teacher"',
+        [id]
+      );
+
+      if (existingTeacher.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher not found',
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      // Delete teacher from staff table
+      await db.execute(
+        'DELETE FROM staff WHERE id = ? AND role = "teacher"',
+        [id]
+      );
+
+      console.log('✅ Teacher deleted successfully:', existingTeacher[0].email);
+      res.json({
+        success: true,
+        message: 'Teacher deleted successfully',
+        deletedTeacher: existingTeacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Delete teacher error:', error);
+      res.status(500).json({
+        message: 'Failed to delete teacher',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Teacher homework stats endpoint
+  app.get('/homework/teacher/stats', async (req, res) => {
+    console.log('📊 Teacher homework stats requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Step 1: Get teacher's class from staff table
+      const [teacherInfo] = await db.execute(
+        'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
+        [user.id]
+      );
+
+      const teacherClass = teacherInfo[0]?.className;
+      let totalStudents = 0;
+
+      // Step 2: Count students in teacher's class
+      if (teacherClass) {
+        const [studentCount] = await db.execute(
+          'SELECT COUNT(*) as count FROM children WHERE className = ?',
+          [teacherClass]
+        );
+        totalStudents = studentCount[0]?.count || 0;
+      }
+
+      console.log(`📊 Teacher ID ${user.id} assigned to class: ${teacherClass}, Students: ${totalStudents}`);
+
+      const stats = {
+        homework: { total: 0, active: 0, completed: 0, classes: 0 },
+        submissions: { total: 0, pending: 0, graded: 0, students: totalStudents },
+        recentActivity: []
+      };
+
+      // Step 3: Get homework stats
+      const [homeworkRows] = await db.execute(
+        `SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
+          COUNT(DISTINCT class_name) as classes
+         FROM homeworks WHERE uploaded_by_teacher_id = ?`,
+        [user.id]
+      );
+
+      if (homeworkRows.length > 0) {
+        stats.homework = {
+          total: homeworkRows[0].total || 0,
+          active: homeworkRows[0].active || 0,
+          completed: homeworkRows[0].completed || 0,
+          classes: homeworkRows[0].classes || 0
+        };
+      }
+
+      // Step 4: Get submission stats
+      const [submissionRows] = await db.execute(
+        `SELECT
+          COUNT(*) as total,
+          COUNT(*) as pending,
+          0 as graded
+         FROM submissions s
+         JOIN homeworks h ON h.id = s.homework_id
+         WHERE h.uploaded_by_teacher_id = ?`,
+        [user.id]
+      );
+      
+      if (submissionRows.length > 0) {
+        stats.submissions.total = submissionRows[0].total || 0;
+        stats.submissions.pending = submissionRows[0].pending || 0;
+        stats.submissions.graded = submissionRows[0].graded || 0;
+        // Keep the student count from teacher's class, not from submissions
+      }
+
+      // Step 5: Get recent activity
+      const [recentActivity] = await db.execute(
+        `SELECT h.id, h.title, h.status, h.due_date, COUNT(s.id) as submission_count
+         FROM homeworks h
+         LEFT JOIN submissions s ON h.id = s.homework_id
+         WHERE h.uploaded_by_teacher_id = ?
+         GROUP BY h.id
+         ORDER BY h.created_at DESC
+         LIMIT 5`,
+        [user.id]
+      );
+      stats.recentActivity = recentActivity || [];
+
+      // Transform stats to match frontend expectations
+      const transformedStats = {
+        totalHomework: stats.homework.total,
+        totalSubmissions: stats.submissions.total,
+        totalStudents: totalStudents, // Use the actual student count from teacher's class
+        submissionRate: stats.homework.total > 0 && totalStudents > 0 
+          ? Math.round((stats.submissions.total / (stats.homework.total * totalStudents)) * 100)
+          : 0,
+        homework: stats.homework,
+        submissions: stats.submissions,
+        recentActivity: stats.recentActivity
+      };
+
+      console.log('✅ Teacher homework stats retrieved:', {
+        teacherClass,
+        totalStudents,
+        homeworks: transformedStats.totalHomework,
+        submissions: transformedStats.totalSubmissions
+      });
+      res.json({ success: true, stats: transformedStats });
+
+    } catch (error) {
+      console.error('❌ Get teacher homework stats error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework stats',
+        error: error.code === 'ER_NO_SUCH_TABLE' ? 'TABLE_NOT_FOUND' : 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  // Teacher submissions endpoint - for getting all submissions for a teacher
+  app.get('/homework/teacher/submissions', async (req, res) => {
+    console.log('📋 Teacher submissions requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get all submissions for homework created by this teacher
+      const [submissions] = await db.execute(
+        `SELECT 
+          s.id,
+          s.homework_id,
+          s.parent_id,
+          s.child_id,
+          s.file_url,
+          s.comment,
+          s.submitted_at,
+          h.title as homework_title,
+          h.due_date,
+          h.class_name,
+          c.name as student_name,
+          u.name as parent_name
+         FROM submissions s
+         JOIN homeworks h ON h.id = s.homework_id
+         LEFT JOIN children c ON s.child_id = c.id
+         LEFT JOIN users u ON s.parent_id = u.id
+         WHERE h.uploaded_by_teacher_id = ?
+         ORDER BY s.submitted_at DESC`,
+        [user.id]
+      );
+
+      console.log(`✅ Found ${submissions.length} submissions for teacher`);
+      res.json({
+        success: true,
+        submissions: submissions || [],
+        count: submissions ? submissions.length : 0
+      });
+
+    } catch (error) {
+      console.error('❌ Get teacher submissions error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch teacher submissions',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  app.get('/homework/teacher/:teacherId', async (req, res) => {
+    console.log('📚 GET /homework/teacher/:teacherId - Fetching assignments for teacher');
+    const user = verifyToken(req);
+    const { teacherId } = req.params;
+
+    if (!user || (user.role !== 'admin' && user.id.toString() !== teacherId)) {
+      return res.status(401).json({
+        message: 'Unauthorized - You can only view your own assignments.',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const [homeworks] = await db.execute(
+        `SELECT
+          h.id, h.title, h.instructions as description, h.due_date, 0 as points,
+          h.status, h.created_at, h.class_name,
+          (SELECT COUNT(*) FROM submissions s WHERE s.homework_id = h.id) as submission_count,
+          (SELECT COUNT(c.id) FROM children c WHERE c.className = h.class_name) as total_students
+        FROM homeworks h
+        WHERE h.uploaded_by_teacher_id = ?
+        ORDER BY h.due_date DESC`,
+        [teacherId]
+      );
+
+      res.json({
+        success: true,
+        message: 'Assignments fetched successfully.',
+        homeworks: homeworks.map(hw => ({
+          ...hw,
+          completionRate: hw.total_students > 0 ? (hw.submission_count / hw.total_students) * 100 : 0
+        })),
+        totalHomeworks: homeworks.length,
+        teacher: { id: teacherId }
+      });
+
+    } catch (error) {
+      console.error('❌ Error fetching teacher assignments:', error);
+      res.status(500).json({
+        message: 'Failed to fetch assignments',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  // Get all teachers for messaging contacts - MUST come before parameterized routes
+  app.get('/teacher', async (req, res) => {
+    console.log('📚 GET /teacher - Fetching all teachers for messaging contacts');
+    
+    try {
+      // Get all teachers and administrators  
+      const [teachers] = await db.execute(
+        `SELECT id, name, email, role, className 
+         FROM staff 
+         WHERE role IN ('teacher', 'admin', 'administrator')
+         ORDER BY role, name`
+      );
+
+      console.log(`✅ Found ${teachers.length} teachers/admins:`, teachers.map(t => ({ name: t.name, role: t.role })));
+
+      res.json({
+        success: true,
+        teachers: teachers.map(teacher => ({
+          id: teacher.id,
+          name: teacher.name,
+          email: teacher.email,
+          role: teacher.role === 'admin' || teacher.role === 'administrator' ? 'Administrator' : 'Teacher',
+          className: teacher.className || 'All Classes',
+          isOnline: false // Real online status should come from WebSocket/server
+        })),
+        total: teachers.length,
+        message: 'Teachers fetched successfully'
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching teachers:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error fetching teachers',
+        error: error.message,
+        teachers: [] // Return empty array on error
+      });
+    }
+  });
+
+  // Teacher profile endpoints - MUST come before parameterized routes
+  app.get('/teacher/profile', async (req, res) => {
+    console.log('👩‍🏫 Teacher profile requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get teacher profile from staff table
+      const [teacher] = await db.execute(
+        `SELECT id, name, email, role, created_at, className,
+                '' as phone,
+                '' as qualification,
+                0 as experience_years,
+                '' as specialization,
+                '' as emergency_contact_name,
+                '' as emergency_contact_phone,
+                '' as bio,
+                'staff_table' as source
+         FROM staff 
+         WHERE id = ? AND role = 'teacher'`,
+        [user.id]
+      );
+
+      if (teacher.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher profile not found',
+          error: 'PROFILE_NOT_FOUND'
+        });
+      }
+
+      console.log('✅ Teacher profile retrieved:', teacher[0].email);
+      res.json({
+        success: true,
+        teacher: teacher[0],
+        profile: teacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Get teacher profile error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch teacher profile',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Individual teacher endpoint - get teacher's homeworks
+  app.get('/teacher/:teacherId', async (req, res) => {
+    console.log('📚 GET /teacher/:teacherId - Fetching homeworks for teacher');
+    const user = verifyToken(req);
+    const { teacherId } = req.params;
+
+    if (!user || (user.role !== 'admin' && user.id.toString() !== teacherId)) {
+      return res.status(401).json({
+        message: 'Unauthorized - You can only view your own assignments.',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const [homeworks] = await db.execute(
+        `SELECT
+          h.id, h.title, h.instructions as description, h.due_date, 0 as points,
+          h.status, h.created_at, h.class_name,
+          (SELECT COUNT(*) FROM submissions s WHERE s.homework_id = h.id) as submission_count,
+          (SELECT COUNT(c.id) FROM children c WHERE c.className = h.class_name) as total_students
+        FROM homeworks h
+        WHERE h.uploaded_by_teacher_id = ?
+        ORDER BY h.due_date DESC`,
+        [teacherId]
+      );
+
+      res.json({
+        success: true,
+        message: 'Teacher homeworks fetched successfully.',
+        homeworks: homeworks.map(hw => ({
+          ...hw,
+          submissionCount: hw.submission_count,
+          totalStudents: hw.total_students,
+          completionRate: hw.total_students > 0 ? (hw.submission_count / hw.total_students) * 100 : 0
+        })),
+        totalHomeworks: homeworks.length,
+        teacher: { id: teacherId }
+      });
+
+    } catch (error) {
+      console.error('❌ Error fetching teacher homeworks:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homeworks',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  // Update teacher's own profile
+  app.put('/teacher/profile', async (req, res) => {
+    console.log('✏️ Teacher profile update requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { name, email, phone, qualification, experience_years, 
+              specialization, emergency_contact_name, emergency_contact_phone, bio } = req.body;
+
+      // Build update query with only provided fields
+      let updateQuery = 'UPDATE staff SET updated_at = NOW()';
+      let params = [];
+
+      if (name !== undefined) {
+        updateQuery += ', name = ?';
+        params.push(name);
+      }
+      if (email !== undefined) {
+        updateQuery += ', email = ?';
+        params.push(email);
+      }
+      if (phone !== undefined) {
+        updateQuery += ', phone = ?';
+        params.push(phone || '');
+      }
+      if (qualification !== undefined) {
+        updateQuery += ', qualification = ?';
+        params.push(qualification || '');
+      }
+      if (experience_years !== undefined) {
+        updateQuery += ', experience_years = ?';
+        params.push(experience_years ? parseInt(experience_years) : 0);
+      }
+      if (specialization !== undefined) {
+        updateQuery += ', specialization = ?';
+        params.push(specialization || '');
+      }
+      if (emergency_contact_name !== undefined) {
+        updateQuery += ', emergency_contact_name = ?';
+        params.push(emergency_contact_name || '');
+      }
+      if (emergency_contact_phone !== undefined) {
+        updateQuery += ', emergency_contact_phone = ?';
+        params.push(emergency_contact_phone || '');
+      }
+      if (bio !== undefined) {
+        updateQuery += ', bio = ?';
+        params.push(bio || '');
+      }
+
+      // Add WHERE clause
+      updateQuery += ' WHERE id = ? AND role = "teacher"';
+      params.push(user.id);
+
+      // Execute update
+      await db.execute(updateQuery, params);
+
+      // Fetch updated profile
+      const [teacher] = await db.execute(
+        `SELECT id, name, email, role, created_at,
+                '' as phone,
+                '' as qualification,
+                0 as experience_years,
+                '' as specialization,
+                '' as emergency_contact_name,
+                '' as emergency_contact_phone,
+                '' as bio,
+                'staff_table' as source
+         FROM staff 
+         WHERE id = ? AND role = 'teacher'`,
+        [user.id]
+      );
+
+      console.log('✅ Teacher profile updated:', teacher[0].email);
+      res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        profile: teacher[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Update teacher profile error:', error);
+      res.status(500).json({
+        message: 'Failed to update profile',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Admin system health
+  app.get('/admin/system-health', async (req, res) => {
+    console.log('🏥 Admin system health requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'admin') {
+      return res.status(401).json({
+        message: 'Unauthorized - admin access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Test database connection
+      const [dbTest] = await db.execute('SELECT 1 as test');
+      
+      const healthData = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        services: {
+          database: {
+            status: dbTest[0].test === 1 ? 'healthy' : 'error',
+            responseTime: '< 100ms'
+          },
+          api: {
+            status: 'healthy',
+            uptime: process.uptime(),
+            memory: process.memoryUsage()
+          },
+          websocket: {
+            status: 'healthy',
+            connections: 0 // Would be real count in production
+          }
+        },
+        environment: 'local-development',
+        version: '1.0.0-dev'
+      };
+
+      console.log('✅ System health check completed');
+      res.json(healthData);
+
+    } catch (error) {
+      console.error('❌ System health error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'System health check failed',
+        error: 'HEALTH_CHECK_FAILED'
+      });
+    }
+  });
+
+  // =============================================================================
+  // PARENT HOMEWORK ENDPOINTS
+  // =============================================================================
+
+  // Get homework for a specific child (parent view)
+  app.get('/parent/:parentId/child/:childId/homework', async (req, res) => {
+    console.log('📚 GET /parent/:parentId/child/:childId/homework - Fetching homework for child');
+    const user = verifyToken(req);
+    const { parentId, childId } = req.params;
+
+    if (!user || (user.role !== 'parent' && user.role !== 'admin') || 
+        (user.role === 'parent' && user.id.toString() !== parentId)) {
+      return res.status(401).json({
+        message: 'Unauthorized - You can only view your own child\'s homework.',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [childId, parentId]
+      );
+
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found for this parent',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+
+      const childData = child[0];
+
+      // Get all homework for this child's class
+      const [homeworks] = await db.execute(
+        `SELECT 
+          h.id, h.title, h.instructions, h.due_date, h.class_name, h.status, h.created_at,
+          s.id as submission_id, s.submitted_at, s.comment as submission_comment, s.file_url,
+          CASE 
+            WHEN s.id IS NOT NULL THEN 'Submitted'
+            WHEN h.due_date < NOW() THEN 'Overdue'
+            ELSE 'Pending'
+          END as submission_status
+         FROM homeworks h
+         LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+         WHERE h.class_name = ?
+         ORDER BY h.due_date DESC`,
+        [childId, childData.className]
+      );
+
+      console.log(`✅ Found ${homeworks.length} homework assignments for ${childData.name} in ${childData.className}`);
+
+      const formattedHomeworks = homeworks.map(hw => ({
+        id: hw.id,
+        title: hw.title,
+        instructions: hw.instructions,
+        due_date: hw.due_date,
+        class_name: hw.class_name,
+        status: hw.status,
+        created_at: hw.created_at,
+        submission: hw.submission_id ? {
+          id: hw.submission_id,
+          submitted_at: hw.submitted_at,
+          comment: hw.submission_comment,
+          file_url: hw.file_url,
+          status: hw.submission_status
+        } : null,
+        submission_status: hw.submission_status
+      }));
+
+      res.json({
+        success: true,
+        homework: formattedHomeworks,
+        child: {
+          id: childData.id,
+          name: childData.name,
+          className: childData.className
+        },
+        total: formattedHomeworks.length
+      });
+
+    } catch (error) {
+      console.error('❌ Error fetching child homework:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  // Get parent reports for a child
+  app.get('/parent/reports', async (req, res) => {
+    console.log('📊 GET /parent/reports - Fetching parent report');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(401).json({
+        message: 'Unauthorized - parent access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { child_id } = req.query;
+      
+      if (!child_id) {
+        return res.status(400).json({
+          message: 'Child ID parameter is required',
+          error: 'MISSING_CHILD_ID'
+        });
+      }
+      
+      console.log(`📊 Generating report for child ID: ${child_id}`);
+      
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [child_id, user.id]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+          error: 'CHILD_NOT_FOUND'
+        });
+      }
+      
+      const childData = child[0];
+      
+      // Get homework statistics for this child
+      const [homeworkStats] = await db.execute(
+        `SELECT 
+          COUNT(h.id) as total_homework,
+          COUNT(s.id) as submitted_homework,
+          COUNT(CASE WHEN h.due_date < NOW() AND s.id IS NULL THEN 1 END) as overdue_homework
+         FROM homeworks h
+         LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+         WHERE h.class_name = ?`,
+        [child_id, childData.className]
+      );
+
+      // Get recent homework with submission status
+      const [recentHomework] = await db.execute(
+        `SELECT 
+          h.title, h.due_date, h.created_at,
+          CASE 
+            WHEN s.id IS NOT NULL THEN 'Submitted'
+            WHEN h.due_date < NOW() THEN 'Overdue'
+            ELSE 'Pending'
+          END as status
+         FROM homeworks h
+         LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+         WHERE h.class_name = ?
+         ORDER BY h.created_at DESC
+         LIMIT 5`,
+        [child_id, childData.className]
+      );
+
+      const stats = homeworkStats[0] || { total_homework: 0, submitted_homework: 0, overdue_homework: 0 };
+      
+      const report = {
+        child: {
+          id: childData.id,
+          name: childData.name,
+          className: childData.className
+        },
+        homework_summary: {
+          total: stats.total_homework,
+          submitted: stats.submitted_homework,
+          pending: stats.total_homework - stats.submitted_homework,
+          overdue: stats.overdue_homework,
+          completion_rate: stats.total_homework > 0 ? Math.round((stats.submitted_homework / stats.total_homework) * 100) : 0
+        },
+        recent_homework: recentHomework.map(hw => ({
+          title: hw.title,
+          due_date: hw.due_date,
+          created_at: hw.created_at,
+          status: hw.status
+        })),
+        generated_at: new Date().toISOString()
+      };
+      
+      console.log('✅ Parent report generated successfully');
+      res.json(report);
+
+    } catch (error) {
+      console.error('❌ Error generating parent report:', error);
+      res.status(500).json({
+        message: 'Failed to generate report',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
   // Start listening on the configured port
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Young Eagles API Server running on port ${PORT}`);
@@ -2269,6 +4052,644 @@ async function startServer() {
     console.log(`🌐 Network URL: http://0.0.0.0:${PORT}`);
     console.log(`💓 Health check: http://localhost:${PORT}/api/health`);
     console.log('✅ Server ready to accept connections!');
+  });
+
+  // =============================================================================
+  // HOMEWORK CREATION ENDPOINT
+  // =============================================================================
+
+  // Create homework assignment (individual assignments for each selected child)
+  app.post('/homework/create', async (req, res) => {
+    console.log('📝 POST /homework/create - Creating new homework assignment');
+    const user = verifyToken(req);
+    
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { title, description, class_name, due_date, child_ids } = req.body;
+
+      // Validate required fields
+      if (!title || !due_date || !child_ids || !Array.isArray(child_ids) || child_ids.length === 0) {
+        return res.status(400).json({
+          message: 'Title, due date, and at least one child are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+
+      console.log(`📝 Creating homework: "${title}" for ${child_ids.length} students`);
+      console.log(`📅 Due date: ${due_date}`);
+      console.log(`🎯 Class: ${class_name}`);
+      console.log(`👥 Child IDs: ${child_ids.join(', ')}`);
+
+      // Verify teacher's class assignment
+      const [teacherInfo] = await db.execute(
+        'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
+        [user.id]
+      );
+
+      const teacherClass = teacherInfo[0]?.className;
+      if (!teacherClass) {
+        return res.status(403).json({
+          message: 'Teacher is not assigned to any class',
+          error: 'NO_CLASS_ASSIGNED'
+        });
+      }
+
+      // Verify all children belong to teacher's class
+      const [classChildren] = await db.execute(
+        `SELECT id, name, className FROM children WHERE id IN (${child_ids.map(() => '?').join(',')}) AND className = ?`,
+        [...child_ids, teacherClass]
+      );
+
+      if (classChildren.length !== child_ids.length) {
+        return res.status(403).json({
+          message: 'Some children do not belong to your assigned class',
+          error: 'INVALID_CHILDREN'
+        });
+      }
+
+      // Create a single homework entry that applies to the entire class
+      // Individual assignment tracking will be handled by the submissions table
+      const [result] = await db.execute(
+        `INSERT INTO homeworks (title, instructions, due_date, class_name, uploaded_by_teacher_id, status, created_at) 
+         VALUES (?, ?, ?, ?, ?, 'Pending', NOW())`,
+        [title, description || '', due_date, teacherClass, user.id]
+      );
+
+      const homeworkId = result.insertId;
+      
+      // Create the response showing which children this homework applies to
+      const createdHomeworks = classChildren
+        .filter(child => child_ids.includes(child.id))
+        .map(child => ({
+          homework_id: homeworkId,
+          title,
+          instructions: description || '',
+          due_date,
+          class_name: teacherClass,
+          child_id: child.id,
+          child_name: child.name,
+          status: 'Pending',
+          teacher_id: user.id
+        }));
+
+      console.log(`✅ Created ${createdHomeworks.length} homework assignments successfully`);
+
+      res.status(201).json({
+        success: true,
+        message: `Homework "${title}" created for ${createdHomeworks.length} student${createdHomeworks.length === 1 ? '' : 's'}`,
+        homework: {
+          id: homeworkId,
+          title,
+          instructions: description || '',
+          due_date,
+          class_name: teacherClass,
+          status: 'Pending',
+          teacher_id: user.id
+        },
+        assigned_students: createdHomeworks,
+        count: createdHomeworks.length,
+        teacher: {
+          id: user.id,
+          name: user.name,
+          className: teacherClass
+        }
+      });
+
+    } catch (error) {
+      console.error('❌ Error creating homework:', error);
+      res.status(500).json({
+        message: 'Failed to create homework assignment',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage
+      });
+    }
+  });
+
+  // =============================================================================
+  // MESSAGING SYSTEM ENDPOINTS
+  // =============================================================================
+
+  // Get messages/conversations for current user
+  app.get('/messages', async (req, res) => {
+    console.log('💬 GET /messages - Fetching conversations for user');
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Unauthorized - please log in',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // For now, return empty conversations since we don't have a messages table yet
+      // TODO: Implement real messaging system with database tables
+      console.log(`📭 Fetching messages for user ${user.email} (${user.role})`);
+      
+      const mockMessages = [];
+      
+      res.json({
+        success: true,
+        conversations: mockMessages,
+        messages: mockMessages,
+        total: mockMessages.length,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching messages:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching messages',
+        error: error.message,
+        conversations: [],
+        messages: []
+      });
+    }
+  });
+
+  // Send a message
+  app.post('/messages/send', async (req, res) => {
+    console.log('📤 POST /messages/send - Sending message');
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Unauthorized - please log in',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      const { to, message, subject, conversationId } = req.body;
+      
+      if (!to || !message) {
+        return res.status(400).json({
+          message: 'Recipient and message are required',
+          error: 'MISSING_REQUIRED_FIELDS'
+        });
+      }
+      
+      console.log(`📨 ${user.email} sending message to ${to}: "${message.substring(0, 50)}..."`);
+      
+      // TODO: Store in database when messages table is created
+      // For now, return success response
+      
+      res.json({
+        success: true,
+        message: 'Message sent successfully',
+        messageId: `msg_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        from: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        },
+        to: to,
+        content: message,
+        subject: subject
+      });
+      
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error sending message',
+        error: error.message
+      });
+    }
+  });
+
+  // =============================================================================
+  // PARENT DASHBOARD & PROFILE ENDPOINTS - PRODUCTION READY
+  // =============================================================================
+
+  // Parent dashboard stats (without /api prefix to match frontend expectations)
+  app.get('/parent/dashboard', async (req, res) => {
+    console.log('👨‍👩‍👧‍👦 Parent dashboard requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(401).json({
+        message: 'Unauthorized - parent access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get parent's children
+      const [children] = await db.execute(
+        'SELECT id, name, age, className, grade FROM children WHERE parent_id = ?',
+        [user.id]
+      );
+
+      // Get recent homeworks for all children
+      let recentHomeworks = [];
+      if (children.length > 0) {
+        const childIds = children.map(c => c.id);
+        const [homeworks] = await db.execute(
+          `SELECT h.id, h.title, h.due_date, h.class_name, c.name as child_name,
+                  s.id as submission_id, s.submitted_at
+           FROM homeworks h
+           JOIN children c ON h.class_name = c.className
+           LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = c.id
+           WHERE c.id IN (${childIds.map(() => '?').join(',')})
+           ORDER BY h.due_date DESC
+           LIMIT 10`,
+          childIds
+        );
+        recentHomeworks = homeworks;
+      }
+
+      // Dashboard stats
+      const dashboardData = {
+        children: children,
+        totalChildren: children.length,
+        recentHomeworks: recentHomeworks,
+        pendingHomeworks: recentHomeworks.filter(h => !h.submission_id).length,
+        completedHomeworks: recentHomeworks.filter(h => h.submission_id).length,
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ Parent dashboard data generated for user:', user.email);
+      res.json(dashboardData);
+
+    } catch (error) {
+      console.error('❌ Parent dashboard error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch parent dashboard data',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Parent profile endpoint
+  app.get('/parent/profile', async (req, res) => {
+    console.log('👤 Parent profile requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'parent') {
+      return res.status(401).json({
+        message: 'Unauthorized - parent access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get parent profile from users table
+      const [parent] = await db.execute(
+        `SELECT id, name, email, role, created_at,
+                phone, address, emergency_contact_name, emergency_contact_phone
+         FROM users 
+         WHERE id = ? AND role = 'parent'`,
+        [user.id]
+      );
+
+      if (parent.length === 0) {
+        return res.status(404).json({
+          message: 'Parent profile not found',
+          error: 'PROFILE_NOT_FOUND'
+        });
+      }
+
+      console.log('✅ Parent profile retrieved:', parent[0].email);
+      res.json({
+        success: true,
+        parent: parent[0],
+        profile: parent[0]
+      });
+
+    } catch (error) {
+      console.error('❌ Get parent profile error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch parent profile',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // =============================================================================
+  // TEACHER DASHBOARD ENDPOINTS - PRODUCTION READY  
+  // =============================================================================
+
+  // Teacher dashboard stats (without /api prefix to match frontend expectations)
+  app.get('/teacher/dashboard', async (req, res) => {
+    console.log('🎓 Teacher dashboard requested');
+    const user = verifyToken(req);
+    if (!user || user.role !== 'teacher') {
+      return res.status(401).json({
+        message: 'Unauthorized - teacher access required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    try {
+      // Get teacher's homework assignments
+      const [homeworks] = await db.execute(
+        `SELECT 
+          COUNT(*) as total_homeworks,
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active_homeworks,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_homeworks
+         FROM homeworks 
+         WHERE uploaded_by_teacher_id = ?`,
+        [user.id]
+      );
+
+      // Get submission stats
+      const [submissions] = await db.execute(
+        `SELECT 
+          COUNT(*) as total_submissions,
+          COUNT(CASE WHEN submitted_at IS NOT NULL THEN 1 END) as completed_submissions
+         FROM submissions s
+         JOIN homeworks h ON s.homework_id = h.id
+         WHERE h.uploaded_by_teacher_id = ?`,
+        [user.id]
+      );
+
+      // Get recent submissions
+      const [recentSubmissions] = await db.execute(
+        `SELECT s.id, s.homework_id, s.submitted_at, s.comment,
+                h.title as homework_title, c.name as child_name
+         FROM submissions s
+         JOIN homeworks h ON s.homework_id = h.id
+         JOIN children c ON s.child_id = c.id
+         WHERE h.uploaded_by_teacher_id = ?
+         ORDER BY s.submitted_at DESC
+         LIMIT 5`,
+        [user.id]
+      );
+
+      const dashboardData = {
+        homeworkStats: homeworks[0] || { total_homeworks: 0, active_homeworks: 0, completed_homeworks: 0 },
+        submissionStats: submissions[0] || { total_submissions: 0, completed_submissions: 0 },
+        recentSubmissions: recentSubmissions,
+        teacher: {
+          id: user.id,
+          name: user.name,
+          email: user.email
+        },
+        lastUpdated: new Date().toISOString()
+      };
+
+      console.log('✅ Teacher dashboard data generated for:', user.email);
+      res.json(dashboardData);
+
+    } catch (error) {
+      console.error('❌ Teacher dashboard error:', error);
+      res.status(500).json({
+        message: 'Failed to fetch teacher dashboard data',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  // Get homework grades for a specific child
+  app.get('/homeworks/grades/child/:childId', async (req, res) => {
+    console.log('📊 Parent requesting real homework grades for child');
+    const user = verifyToken(req);
+    const { childId } = req.params;
+    
+    if (!user || user.role !== 'parent') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    try {
+      // Verify child belongs to this parent
+      const [child] = await db.execute(
+        'SELECT id, name, className FROM children WHERE id = ? AND parent_id = ?',
+        [childId, user.id]
+      );
+      
+      if (child.length === 0) {
+        return res.status(404).json({
+          message: 'Child not found or access denied',
+        });
+      }
+      
+      // Get graded homework for this child's class
+      const [gradedHomeworks] = await db.execute(
+        `SELECT 
+          h.id,
+          h.title as homework_title,
+          h.grades,
+          h.due_date as graded_at,
+          t.name as teacher_name
+        FROM homeworks h
+        LEFT JOIN staff t ON h.uploaded_by_teacher_id = t.id
+        WHERE h.class_name = ? AND h.status = 'graded'
+        ORDER BY h.due_date DESC`,
+        [child[0].className]
+      );
+      
+      console.log(`✅ Found ${gradedHomeworks.length} graded assignments for ${child[0].name}`);
+
+      // Map the 'grades' db column to 'grade' property for the frontend
+      const formattedGrades = gradedHomeworks.map(hw => ({
+        id: hw.id,
+        homework_title: hw.homework_title,
+        grade: hw.grades, // Mapping grades -> grade
+        graded_at: hw.graded_at,
+        teacher_name: hw.teacher_name
+      }));
+      
+      res.json({
+        success: true,
+        grades: formattedGrades,
+        child: {
+          id: child[0].id,
+          name: child[0].name,
+          className: child[0].className
+        },
+        total: formattedGrades.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching homework grades:', error);
+      res.status(500).json({
+        message: 'Internal server error',
+        error: 'DATABASE_ERROR'
+      });
+    }
+  });
+
+  const upload = multer({ storage: storage });
+
+  // Homework submission endpoint
+  app.post('/api/homework/submit/:homeworkId', upload.array('files', 5), async (req, res) => {
+    const { homeworkId } = req.params;
+    const { child_id, parent_id, comment } = req.body;
+    const user = verifyToken(req);
+
+    console.log(`📝 Homework submission for homeworkId: ${homeworkId}`);
+
+    if (!user || user.id.toString() !== parent_id) {
+      return res.status(403).json({ message: 'Forbidden: You can only submit for your own children.' });
+    }
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'No files were uploaded.' });
+    }
+
+    try {
+      // 1. Get required data from other tables
+      const [childRows] = await db.execute('SELECT name, className, grade FROM children WHERE id = ?', [child_id]);
+      if (childRows.length === 0) {
+        return res.status(404).json({ message: 'Child not found.' });
+      }
+      const child = childRows[0];
+
+      const [homeworkRows] = await db.execute('SELECT uploaded_by_teacher_id FROM homeworks WHERE id = ?', [homeworkId]);
+      if (homeworkRows.length === 0) {
+        return res.status(404).json({ message: 'Homework not found.' });
+      }
+      const homework = homeworkRows[0];
+
+      // 2. Insert into homework_submissions using the correct schema
+      const filePaths = req.files.map(file => file.path);
+      const [submissionResult] = await db.execute(
+        `INSERT INTO homework_submissions (homework_id, studentId, studentName, className, grade, teacherId, date, day, results, type, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          homeworkId, // **This is the new, critical piece of data**
+          child_id,
+          child.name,
+          child.className,
+          child.grade,
+          homework.uploaded_by_teacher_id,
+          new Date(),
+          new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+          JSON.stringify(filePaths), // Storing file paths in 'results'
+          'homework_submission',
+          'submitted'
+        ]
+      );
+
+      // 3. Update the status of the homework in the main 'homeworks' table
+      await db.execute(
+        "UPDATE homeworks SET status = 'submitted' WHERE id = ?",
+        [homeworkId]
+      );
+
+      console.log(`✅ Homework ${homeworkId} submitted successfully. Submission ID: ${submissionResult.insertId}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Homework submitted successfully!',
+        submissionId: submissionResult.insertId,
+        files: req.files.map(f => f.filename)
+      });
+
+    } catch (error) {
+      console.error('❌ Error during homework submission:', error);
+      res.status(500).json({ message: 'Internal server error during submission.' });
+    }
+  });
+
+  // Get a single homework submission's details
+  app.get('/api/submission/:submissionId', async (req, res) => {
+    const { submissionId } = req.params;
+    const user = verifyToken(req);
+
+    console.log(`📄 Requesting details for submissionId: ${submissionId}`);
+
+    if (!user) {
+      return res.status(401).json({ message: 'Unauthorized.' });
+    }
+
+    try {
+      // This query joins the submission with the original homework to get all relevant details
+      const [submissionRows] = await db.execute(
+        `SELECT 
+          s.id as submissionId,
+          s.studentId,
+          s.studentName,
+          s.results as submittedFiles,
+          s.status as submissionStatus,
+          s.createdAt as submissionDate,
+          h.title as homeworkTitle,
+          h.instructions,
+          h.grades as grade,
+          t.name as teacherName
+        FROM homework_submissions s
+        LEFT JOIN homeworks h ON s.homework_id = h.id
+        LEFT JOIN staff t ON h.uploaded_by_teacher_id = t.id
+        WHERE s.id = ?`,
+        [submissionId]
+      );
+
+      if (submissionRows.length === 0) {
+        return res.status(404).json({ message: 'Submission not found.' });
+      }
+
+      const submission = submissionRows[0];
+
+      // Security check: ensure the parent requesting is the one who submitted it
+      if (user.role === 'parent' && submission.studentId) {
+          const [childCheck] = await db.execute('SELECT parent_id FROM children WHERE id = ?', [submission.studentId]);
+          if(childCheck.length === 0 || childCheck[0].parent_id !== user.id) {
+              return res.status(403).json({ message: 'Forbidden: You can only view your own child\'s submissions.' });
+          }
+      }
+
+      // Parse the JSON array of file paths
+      submission.submittedFiles = JSON.parse(submission.submittedFiles || '[]');
+
+      console.log(`✅ Found submission:`, submission);
+      res.status(200).json({ success: true, submission });
+
+    } catch (error) {
+      console.error(`❌ Error fetching submission ${submissionId}:`, error);
+      res.status(500).json({ message: 'Internal server error while fetching submission.' });
+    }
+  });
+
+  // Get all submissions for a specific parent
+  app.get('/api/submissions/parent/:parentId', async (req, res) => {
+    const { parentId } = req.params;
+    const user = verifyToken(req);
+
+    console.log(`🧾 Requesting all submissions for parentId: ${parentId}`);
+
+    if (!user || user.id.toString() !== parentId) {
+      return res.status(403).json({ message: 'Forbidden: You can only view your own submissions.' });
+    }
+
+    try {
+      // 1. Get all children belonging to the parent
+      const [children] = await db.execute('SELECT id FROM children WHERE parent_id = ?', [parentId]);
+      
+      if (children.length === 0) {
+        // If the parent has no children, they have no submissions.
+        return res.status(200).json({ success: true, submissions: [] });
+      }
+      
+      const childIds = children.map(c => c.id);
+
+      // 2. Fetch all submissions made by any of those children
+      // Using a placeholder (?) for each child ID prevents SQL injection.
+      const placeholders = childIds.map(() => '?').join(',');
+      const [submissions] = await db.execute(
+        `SELECT id, homework_id, status 
+         FROM homework_submissions
+         WHERE studentId IN (${placeholders})
+         ORDER BY createdAt DESC`,
+        childIds
+      );
+
+      console.log(`✅ Found ${submissions.length} submissions for parent ${parentId}`);
+      res.status(200).json({ success: true, submissions });
+
+    } catch (error) {
+      console.error(`❌ Error fetching submissions for parent ${parentId}:`, error);
+      res.status(500).json({ message: 'Internal server error while fetching submissions.' });
+    }
   });
 }
 

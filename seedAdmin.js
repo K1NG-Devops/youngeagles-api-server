@@ -28,8 +28,8 @@ const seedAdmin = async () => {
     
     const adminData = {
       name: 'King Admin',
-      email: 'king@youngeagles.org.za',
-      password: '#Olivia@16!',
+      email: 'admin@youngeagles.org.za',
+      password: 'YoungEagles@123',
       role: 'admin'
     };
 

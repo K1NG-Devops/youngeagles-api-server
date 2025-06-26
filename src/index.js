@@ -23,19 +23,36 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: [
+
+const allowedOrigins = [
       "http://localhost:3002", 
       "http://localhost:3003", 
       "http://localhost:5173",
       "https://youngeagles.org.za",
       "https://youngeagles-api-server.up.railway.app",
       "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app"
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
   },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  credentials: true,
+  allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source'
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+
+const io = new Server(server, {
+  cors: corsOptions,
   path: "/socket.io/"
 });
 
@@ -659,6 +676,76 @@ async function startServer() {
         error: 'INTERNAL_ERROR'
       });
     }
+  });
+
+  // Get children for teacher (for assignment creation)
+  app.get('/api/auth/children', async (req, res) => {
+    console.log('👶 Teacher children endpoint requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      console.log(`👶 Fetching children for teacher ID: ${user.id}`);
+      
+      // Step 1: Get teacher's class info from staff table
+      const [teacherRows] = await db.execute(
+        "SELECT className FROM staff WHERE id = ?",
+        [user.id]
+      );
+
+      if (teacherRows.length === 0) {
+        return res.status(404).json({ 
+          message: "Teacher not found.",
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      const className = teacherRows[0].className;
+      console.log(`👶 Teacher assigned to class: ${className}`);
+
+      if (!className) {
+        return res.status(200).json({ 
+          children: [],
+          message: "Teacher not assigned to any class"
+        });
+      }
+
+      // Step 2: Fetch all children in that class
+      const [children] = await db.execute(
+        "SELECT id, name, age, className, parent_id FROM children WHERE className = ?",
+        [className]
+      );
+
+      console.log(`✅ Found ${children.length} children in class ${className}`);
+
+      res.status(200).json({ 
+        children: children.map(child => ({
+          id: child.id,
+          name: child.name,
+          age: child.age,
+          className: child.className,
+          parent_id: child.parent_id
+        }))
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching children for teacher:', error);
+      res.status(500).json({ 
+        message: "Server error", 
+        error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Alternative teacher login endpoint path for compatibility
+  app.post('/api/auth/teacher-login', (req, res) => {
+    // Redirect to the actual teacher login endpoint
+    res.redirect(307, '/api/auth/teacher/login');
   });
 
   // =============================================================================

@@ -14,11 +14,11 @@ export const getChildrenByTeacher = async (req, res) => {
   try {
     const teacherId = req.user.id;
 
-    // Step 1: Get teacher's class info
+    // Step 1: Get teacher's class info from staff table (not users table)
     const teacherRows = await query(
-      "SELECT className FROM users WHERE id = ?",
+      "SELECT className FROM staff WHERE id = ?",
       [teacherId],
-      'railway' // specify which db
+      'skydek_DB' // Teachers are in skydek_DB, not railway
     );
 
     if (teacherRows.length === 0) {

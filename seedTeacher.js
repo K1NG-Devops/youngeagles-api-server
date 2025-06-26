@@ -9,7 +9,7 @@ const seedTeacher = async () => {
     console.log('👩‍🏫 Setting up teacher account...');
     
     const teacherData = {
-      name: 'Test Teacher',
+      name: 'Teacher',
       email: 'teacher@youngeagles.org.za',
       password: 'Teacher@123',
       role: 'teacher'

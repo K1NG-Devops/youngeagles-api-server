@@ -61,37 +61,60 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// Register Child
+// Register Child with Extended Profile
 export const registerChild = async (req, res) => {
-  const { name, parent_id, gender, dob, age, grade, className } = req.body;
+  console.log('📝 Register Child - Full request body:', JSON.stringify(req.body, null, 2));
+  
+  const { name, parent_id, gender, dob, age, grade, className, profile_data } = req.body;
 
   try {
+    // Validate parent exists
     const parent = await query('SELECT id FROM users WHERE id = ? AND role = ?', [parent_id, 'parent'], 'skydek_DB');
     if (parent.length === 0) {
+      console.log('❌ Parent not found for ID:', parent_id);
       return res.status(400).json({ message: 'Parent not found or invalid role.' });
     }
 
+    console.log('✅ Parent validation passed for ID:', parent_id);
+
     // Convert undefined values to null to prevent MySQL2 errors
-    const params = [
+    const basicParams = [
       name || null,
       parent_id || null,
       gender || null,
       dob || null,
       age || null,
       grade || null,
-      className || null
+      className || null,
+      profile_data ? JSON.stringify(profile_data) : null  // Store extended profile as JSON
     ];
 
-    await execute(
-      'INSERT INTO children (name, parent_id, gender, dob, age, grade, className) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      params,
+    console.log('📊 Inserting child with params:', basicParams.map((p, i) => 
+      i === 7 ? '[JSON Profile Data]' : p));
+
+    const result = await execute(
+      'INSERT INTO children (name, parent_id, gender, dob, age, grade, className, profile_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      basicParams,
       'skydek_DB'
     );
 
-    res.status(201).json({ message: 'Child registered successfully!' });
+    console.log('✅ Child registered successfully with ID:', result.insertId);
+
+    res.status(201).json({ 
+      success: true,
+      message: 'Child profile created successfully!',
+      childId: result.insertId,
+      profileComplete: profile_data ? true : false
+    });
+    
   } catch (error) {
+    console.error('❌ Error registering child:', error);
     logger.error('Error registering child:', error);
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error creating child profile.',
+      error: error.message
+    });
   }
 };
 
