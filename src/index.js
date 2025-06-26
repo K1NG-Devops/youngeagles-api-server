@@ -22,6 +22,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+
+// Configure trust proxy for Railway
+if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy (Railway)
+  console.log('🔧 Trust proxy enabled for Railway deployment');
+}
+
 const server = createServer(app);
 
 const allowedOrigins = [
