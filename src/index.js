@@ -38,7 +38,11 @@ const allowedOrigins = [
       "https://youngeagles.org.za",
       "https://www.youngeagles.org.za",
       "https://youngeagles-api-server.up.railway.app",
-      "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app"
+      "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app",
+      // Add more comprehensive domain coverage
+      "https://app.youngeagles.org.za",
+      "https://admin.youngeagles.org.za",
+      "https://api.youngeagles.org.za"
 ];
 
 // More permissive CORS for production issues
