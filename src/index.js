@@ -29,23 +29,64 @@ const allowedOrigins = [
       "http://localhost:3003", 
       "http://localhost:5173",
       "https://youngeagles.org.za",
+      "https://www.youngeagles.org.za",
       "https://youngeagles-api-server.up.railway.app",
       "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app"
 ];
 
+// More permissive CORS for production issues
 const corsOptions = {
   origin: function (origin, callback) {
+    console.log(`🌐 CORS request from origin: ${origin || 'no origin'}`);
+    
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    if (!origin) {
+      console.log('✅ Allowing request with no origin');
+      return callback(null, true);
     }
-    return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log(`✅ Origin ${origin} is in allowed list`);
+      return callback(null, true);
+    }
+    
+    // Check for Vercel preview deployments (dynamic URLs)
+    if (origin.includes('vercel.app')) {
+      console.log(`✅ Allowing Vercel deployment: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Check for custom domains that might be configured
+    if (origin.includes('youngeagles')) {
+      console.log(`✅ Allowing youngeagles domain: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // In development, be more permissive
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`⚠️ Development mode: allowing ${origin}`);
+      return callback(null, true);
+    }
+    
+    console.log(`❌ CORS blocked origin: ${origin}`);
+    const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+    return callback(new Error(msg), false);
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
-  allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source'
+  allowedHeaders: [
+    'Origin', 
+    'X-Requested-With', 
+    'Content-Type', 
+    'Accept', 
+    'Authorization', 
+    'Cache-Control', 
+    'Pragma', 
+    'Expires', 
+    'x-request-source',
+    'Access-Control-Allow-Origin'
+  ]
 };
 
 app.use(cors(corsOptions));
