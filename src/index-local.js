@@ -57,11 +57,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
-
-// Add JSON body parsing middleware
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 const io = new Server(server, {
   cors: corsOptions
@@ -69,26 +64,40 @@ const io = new Server(server, {
 
 const PORT = 3001;
 
-// Database configuration
+// Database configuration - SECURE FOR PRODUCTION
 const dbConfig = {
-  host: 'shuttle.proxy.rlwy.net',
-  port: 49263,
-  user: 'root',
-  password: 'fhdgRvbocRQKcikxGTNsQUHVIMizngLb',
-  database: 'skydek_DB',
-  ssl: false,
-  connectionLimit: 10,
-  acquireTimeout: 60000,
-  timeout: 60000,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  ssl: process.env.DB_SSL === 'true',
+  connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
+  acquireTimeout: parseInt(process.env.DB_ACQUIRE_TIMEOUT) || 60000,
+  timeout: parseInt(process.env.DB_TIMEOUT) || 60000,
   reconnect: true
 };
+
+// Validate required database environment variables
+const requiredDbVars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
+const missingDbVars = requiredDbVars.filter(varName => !process.env[varName]);
+
+if (missingDbVars.length > 0) {
+  console.error('❌ Missing required database environment variables:', missingDbVars);
+  console.error('🚨 Please set the following environment variables:');
+  missingDbVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error('🚨 For local development, ensure credentials are set in .env file');
+  process.exit(1);
+}
 
 let db;
 
 // Initialize database connection
 async function initDatabase() {
   try {
-    console.log('🔌 Connecting to Railway MySQL database...');
+    console.log('🔌 Connecting to database...');
     db = mysql.createPool(dbConfig);
     
     // Test connection

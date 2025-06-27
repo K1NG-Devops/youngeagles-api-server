@@ -819,9 +819,13 @@ async function startServer() {
 
       console.log(`👩‍🏫 Fetching profile for teacher ID: ${user.id}`);
       
-      // Get teacher details from staff table
+      // Get teacher details from staff table with enhanced fields
       const [teacher] = await db.execute(
-        'SELECT id, name, email, role, is_verified, created_at FROM staff WHERE id = ? AND role = ?',
+        `SELECT id, name, email, role, className, qualification, 
+                specialization, bio, phone, experience_years, 
+                emergency_contact_name, emergency_contact_phone, 
+                profile_picture, is_verified, created_at, updated_at 
+         FROM staff WHERE id = ? AND role = ?`,
         [user.id, 'teacher']
       );
       
@@ -846,18 +850,39 @@ async function startServer() {
       console.log('✅ Teacher profile fetched successfully');
       
       res.json({
+        success: true,
+        profile: {
+          id: teacherData.id,
+          name: teacherData.name,
+          email: teacherData.email,
+          role: teacherData.role,
+          className: teacherData.className,
+          qualification: teacherData.qualification,
+          specialization: teacherData.specialization,
+          bio: teacherData.bio,
+          phone: teacherData.phone,
+          experience_years: teacherData.experience_years,
+          emergency_contact_name: teacherData.emergency_contact_name,
+          emergency_contact_phone: teacherData.emergency_contact_phone,
+          profile_picture: teacherData.profile_picture,
+          isVerified: teacherData.is_verified,
+          joinedAt: teacherData.created_at,
+          updatedAt: teacherData.updated_at
+        },
+        // Keep backward compatibility
         teacher: {
           id: teacherData.id,
           name: teacherData.name,
           email: teacherData.email,
-          phone: null, // Phone not available in current schema
+          phone: teacherData.phone,
           isVerified: teacherData.is_verified,
           joinedAt: teacherData.created_at
         },
         stats: {
           totalClasses: classCount[0]?.totalClasses || 0,
           totalStudents: studentCount[0]?.totalStudents || 0
-        }
+        },
+        message: 'Teacher profile fetched successfully'
       });
       
     } catch (error) {
@@ -865,6 +890,173 @@ async function startServer() {
       res.status(500).json({
         message: 'Internal server error',
         error: 'INTERNAL_ERROR'
+      });
+    }
+  });
+
+  // Update teacher profile
+  app.put('/api/teacher/profile', async (req, res) => {
+    console.log('🔧 Teacher profile update requested');
+    try {
+      const user = verifyToken(req);
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      const {
+        name,
+        phone,
+        qualification,
+        specialization,
+        bio,
+        experience_years,
+        emergency_contact_name,
+        emergency_contact_phone
+      } = req.body;
+
+      // Validate required fields
+      if (!name) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name is required'
+        });
+      }
+
+      console.log(`🔧 Updating profile for teacher ID: ${user.id}`);
+
+      // Update teacher profile
+      await db.execute(
+        `UPDATE staff SET 
+         name = ?, 
+         phone = ?, 
+         qualification = ?, 
+         specialization = ?, 
+         bio = ?, 
+         experience_years = ?, 
+         emergency_contact_name = ?, 
+         emergency_contact_phone = ?, 
+         updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND role = "teacher"`,
+        [
+          name,
+          phone || null,
+          qualification || null,
+          specialization || null,
+          bio || null,
+          experience_years || null,
+          emergency_contact_name || null,
+          emergency_contact_phone || null,
+          user.id
+        ]
+      );
+
+      // Fetch updated profile
+      const [updatedProfile] = await db.execute(
+        `SELECT id, name, email, role, className, qualification, 
+                specialization, bio, phone, experience_years, 
+                emergency_contact_name, emergency_contact_phone, 
+                profile_picture, created_at, updated_at
+         FROM staff WHERE id = ? AND role = "teacher"`,
+        [user.id]
+      );
+
+      console.log('✅ Teacher profile updated successfully');
+
+      res.json({
+        success: true,
+        profile: updatedProfile[0],
+        message: 'Profile updated successfully'
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher profile update error:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error updating profile',
+        error: error.message 
+      });
+    }
+  });
+
+  // Change teacher password
+  app.put('/api/teacher/profile/password', async (req, res) => {
+    console.log('🔐 Teacher password change requested');
+    try {
+      const user = verifyToken(req);
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!user || user.role !== 'teacher') {
+        return res.status(403).json({
+          message: 'Forbidden - teacher access required',
+          error: 'FORBIDDEN'
+        });
+      }
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password and new password are required'
+        });
+      }
+
+      // Validate new password strength
+      const passwordValidation = PasswordSecurity.validatePassword(newPassword);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: passwordValidation.message
+        });
+      }
+
+      console.log(`🔐 Changing password for teacher ID: ${user.id}`);
+
+      // Get current password hash
+      const [teacherRows] = await db.execute(
+        'SELECT password FROM staff WHERE id = ? AND role = "teacher"',
+        [user.id]
+      );
+
+      if (teacherRows.length === 0) {
+        return res.status(404).json({ 
+          success: false,
+          message: 'Teacher not found' 
+        });
+      }
+
+      // Verify current password
+      const validPassword = PasswordSecurity.verifyPassword(currentPassword, teacherRows[0].password);
+      if (!validPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password is incorrect'
+        });
+      }
+
+      // Hash new password
+      const hashedNewPassword = PasswordSecurity.hashPassword(newPassword);
+
+      // Update password
+      await db.execute(
+        'UPDATE staff SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role = "teacher"',
+        [hashedNewPassword, user.id]
+      );
+
+      console.log('✅ Teacher password updated successfully');
+
+      res.json({
+        success: true,
+        message: 'Password updated successfully'
+      });
+      
+    } catch (error) {
+      console.error('❌ Teacher password update error:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error updating password',
+        error: error.message 
       });
     }
   });
@@ -1171,6 +1363,7 @@ async function startServer() {
       });
     }
   });
+
 
   // =============================================================================
   // CHILD MANAGEMENT ENDPOINTS - PRODUCTION READY
@@ -1833,10 +2026,27 @@ async function startServer() {
       let teacherClasses = [];
       if (user.role === 'teacher') {
         const [classes] = await db.execute(
-          'SELECT DISTINCT className FROM staff WHERE email = ? AND role = "teacher"',
-          [user.email]
+          'SELECT DISTINCT className FROM staff WHERE id = ? AND role = "teacher"',
+          [user.id]
         );
         teacherClasses = classes.map(c => c.className);
+      }
+
+      // If no classes found, return empty stats
+      if (user.role === 'teacher' && teacherClasses.length === 0) {
+        console.log('⚠️ No classes found for teacher');
+        return res.json({
+          success: true,
+          stats: {
+            totalHomework: 0,
+            totalSubmissions: 0,
+            totalStudents: 0,
+            averageCompletionRate: 0
+          },
+          homeworkList: [],
+          recentActivity: [],
+          teacherClasses: []
+        });
       }
 
       // Build query based on role
@@ -1850,7 +2060,7 @@ async function startServer() {
           h.created_at,
           COUNT(DISTINCT c.id) as total_students,
           COUNT(DISTINCT s.id) as submitted_count,
-          (COUNT(DISTINCT s.id) / COUNT(DISTINCT c.id) * 100) as completion_rate
+          (COUNT(DISTINCT s.id) / NULLIF(COUNT(DISTINCT c.id), 0) * 100) as completion_rate
         FROM homeworks h
         LEFT JOIN children c ON c.className = h.class_name
         LEFT JOIN submissions s ON s.homework_id = h.id
@@ -1858,9 +2068,9 @@ async function startServer() {
       
       let queryParams = [];
       
-      if (user.role === 'teacher' && teacherClasses.length > 0) {
-        homeworkQuery += ` WHERE h.class_name IN (${teacherClasses.map(() => '?').join(',')})`;
-        queryParams = teacherClasses;
+      if (user.role === 'teacher') {
+        homeworkQuery += ` WHERE h.uploaded_by_teacher_id = ?`;
+        queryParams = [user.id];
       }
       
       homeworkQuery += `
@@ -1870,28 +2080,38 @@ async function startServer() {
 
       const [homeworkStats] = await db.execute(homeworkQuery, queryParams);
 
-      // Get total counts
-      let totalHomeworkQuery = 'SELECT COUNT(*) as total FROM homeworks';
-      let totalSubmissionQuery = 'SELECT COUNT(*) as total FROM submissions';
-      let totalStudentsQuery = 'SELECT COUNT(DISTINCT id) as total FROM children';
-
-      if (user.role === 'teacher' && teacherClasses.length > 0) {
-        const classFilter = ` WHERE class_name IN (${teacherClasses.map(() => '?').join(',')})`;
-        totalHomeworkQuery += classFilter;
-        totalStudentsQuery += classFilter;
-        
-        totalSubmissionQuery += ` WHERE homework_id IN (SELECT id FROM homeworks${classFilter})`;
-        queryParams = [...teacherClasses, ...teacherClasses];
-      } else {
-        queryParams = [];
+      // If no homework found, return empty stats
+      if (homeworkStats.length === 0) {
+        console.log('⚠️ No homework found for teacher');
+        return res.json({
+          success: true,
+          stats: {
+            totalHomework: 0,
+            totalSubmissions: 0,
+            totalStudents: teacherClasses.length > 0 ? await getStudentCount(db, teacherClasses) : 0,
+            averageCompletionRate: 0
+          },
+          homeworkList: [],
+          recentActivity: [],
+          teacherClasses: teacherClasses
+        });
       }
 
-      const [totalHomework] = await db.execute(totalHomeworkQuery, 
-        user.role === 'teacher' ? teacherClasses : []);
-      const [totalSubmissions] = await db.execute(totalSubmissionQuery, 
-        user.role === 'teacher' ? teacherClasses : []);
-      const [totalStudents] = await db.execute(totalStudentsQuery, 
-        user.role === 'teacher' ? teacherClasses : []);
+      // Get total counts
+      let totalHomeworkQuery = 'SELECT COUNT(*) as total FROM homeworks';
+      let totalSubmissionQuery = 'SELECT COUNT(*) as total FROM submissions s JOIN homeworks h ON s.homework_id = h.id';
+      let totalStudentsQuery = 'SELECT COUNT(DISTINCT id) as total FROM children';
+
+      if (user.role === 'teacher') {
+        totalHomeworkQuery += ' WHERE uploaded_by_teacher_id = ?';
+        totalSubmissionQuery += ' WHERE h.uploaded_by_teacher_id = ?';
+        totalStudentsQuery += ' WHERE className IN (SELECT DISTINCT className FROM staff WHERE id = ? AND role = "teacher")';
+        queryParams = [user.id];
+      }
+
+      const [totalHomework] = await db.execute(totalHomeworkQuery, queryParams);
+      const [totalSubmissions] = await db.execute(totalSubmissionQuery, queryParams);
+      const [totalStudents] = await db.execute(totalStudentsQuery, queryParams);
 
       // Recent homework activity
       let recentQuery = `
@@ -1900,8 +2120,8 @@ async function startServer() {
         LEFT JOIN submissions s ON h.id = s.homework_id
       `;
       
-      if (user.role === 'teacher' && teacherClasses.length > 0) {
-        recentQuery += ` WHERE h.class_name IN (${teacherClasses.map(() => '?').join(',')})`;
+      if (user.role === 'teacher') {
+        recentQuery += ' WHERE h.uploaded_by_teacher_id = ?';
       }
       
       recentQuery += `
@@ -1910,8 +2130,7 @@ async function startServer() {
         LIMIT 5
       `;
 
-      const [recentHomework] = await db.execute(recentQuery, 
-        user.role === 'teacher' ? teacherClasses : []);
+      const [recentHomework] = await db.execute(recentQuery, queryParams);
 
       console.log('✅ Teacher homework stats retrieved successfully');
       
@@ -1949,6 +2168,115 @@ async function startServer() {
       console.error('❌ Error fetching teacher homework stats:', error);
       res.status(500).json({
         message: 'Failed to fetch homework statistics',
+        error: 'DATABASE_ERROR',
+        details: error.sqlMessage || error.message
+      });
+    }
+  });
+
+  // Helper function to get student count
+  async function getStudentCount(db, teacherClasses) {
+    try {
+      const [result] = await db.execute(
+        `SELECT COUNT(DISTINCT id) as count FROM children WHERE className IN (${teacherClasses.map(() => '?').join(',')})`,
+        teacherClasses
+      );
+      return result[0].count;
+    } catch (error) {
+      console.error('Error getting student count:', error);
+      return 0;
+    }
+  }
+
+  // Teacher homework submissions endpoint
+  app.get('/api/homework/teacher/submissions', async (req, res) => {
+    console.log('📋 Teacher homework submissions requested');
+    
+    const user = verifyToken(req);
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired token',
+        error: 'INVALID_TOKEN'
+      });
+    }
+
+    if (user.role !== 'teacher' && user.role !== 'admin') {
+      return res.status(403).json({
+        message: 'Forbidden - teacher or admin access required',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    try {
+      console.log(`📋 Fetching submissions for teacher: ${user.email}`);
+
+      // Get teacher's class assignment from staff table
+      const [teacherData] = await db.execute(
+        'SELECT className FROM staff WHERE email = ? AND role = "teacher"',
+        [user.email]
+      );
+
+      if (teacherData.length === 0) {
+        return res.status(404).json({
+          message: 'Teacher not found',
+          error: 'TEACHER_NOT_FOUND'
+        });
+      }
+
+      const teacherClass = teacherData[0].className;
+      console.log(`👩‍🏫 Teacher assigned to class: ${teacherClass}`);
+
+      // Get all submissions for homework created by this teacher
+      const [submissions] = await db.execute(
+        `SELECT 
+          s.id,
+          s.homework_id,
+          s.parent_id,
+          s.child_id,
+          s.file_url,
+          s.comment,
+          s.submitted_at,
+          h.title as homework_title,
+          h.due_date,
+          h.class_name,
+          c.name as student_name,
+          c.age as student_age,
+          u.name as parent_name,
+          u.email as parent_email
+        FROM submissions s
+        JOIN homeworks h ON h.id = s.homework_id
+        LEFT JOIN children c ON s.child_id = c.id
+        LEFT JOIN users u ON s.parent_id = u.id
+        WHERE h.uploaded_by_teacher_id = (
+          SELECT id FROM staff WHERE email = ? AND role = "teacher"
+        )
+        AND c.className = ?
+        ORDER BY s.submitted_at DESC`,
+        [user.email, teacherClass]
+      );
+
+      console.log(`✅ Found ${submissions.length} submissions for ${teacherClass} class`);
+
+      // Even if no submissions found, return a valid response
+      res.json({
+        success: true,
+        submissions: submissions || [],
+        count: submissions ? submissions.length : 0,
+        teacherClass: teacherClass,
+        summary: {
+          total: submissions ? submissions.length : 0,
+          recent: submissions ? submissions.filter(s => {
+            const submittedDate = new Date(s.submitted_at);
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+            return submittedDate > threeDaysAgo;
+          }).length : 0
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching teacher submissions:', error);
+      res.status(500).json({
+        message: 'Failed to fetch homework submissions',
         error: 'DATABASE_ERROR'
       });
     }

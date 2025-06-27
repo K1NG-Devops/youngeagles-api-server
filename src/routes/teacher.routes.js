@@ -1,6 +1,7 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import { authMiddleware } from '../middleware/authMiddleware.js';
-import { query } from '../db.js';
+import { query, execute } from '../db.js';
 
 const router = Router();
 
@@ -321,4 +322,484 @@ router.get('/attendance', authMiddleware, async (req, res) => {
   }
 });
 
-export default router; 
+// Get teacher profile
+router.get('/profile', authMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user?.id;
+    
+    if (!teacherId) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Teacher ID required' 
+      });
+    }
+
+    // Get teacher profile information
+    const teacherRows = await query(
+      `SELECT id, name, email, role, className, qualification, 
+              specialization, bio, phone, experience_years, 
+              emergency_contact_name, emergency_contact_phone, 
+              profile_picture, created_at, updated_at
+       FROM staff WHERE id = ? AND role = "teacher"`,
+      [teacherId],
+      'skydek_DB'
+    );
+
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Teacher not found' 
+      });
+    }
+
+    const teacher = teacherRows[0];
+    
+    // Remove sensitive information
+    delete teacher.password;
+    
+    res.json({
+      success: true,
+      profile: teacher,
+      message: 'Teacher profile fetched successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error in teacher profile endpoint:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching profile',
+      error: error.message 
+    });
+  }
+});
+
+// Update teacher profile
+router.put('/profile', authMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user?.id;
+    
+    if (!teacherId) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Teacher ID required' 
+      });
+    }
+
+    const {
+      name,
+      phone,
+      qualification,
+      specialization,
+      bio,
+      experience_years,
+      emergency_contact_name,
+      emergency_contact_phone
+    } = req.body;
+
+    // Validate required fields
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name is required'
+      });
+    }
+
+    // Update teacher profile
+    await execute(
+      `UPDATE staff SET 
+       name = ?, 
+       phone = ?, 
+       qualification = ?, 
+       specialization = ?, 
+       bio = ?, 
+       experience_years = ?, 
+       emergency_contact_name = ?, 
+       emergency_contact_phone = ?, 
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND role = "teacher"`,
+      [
+        name,
+        phone || null,
+        qualification || null,
+        specialization || null,
+        bio || null,
+        experience_years || null,
+        emergency_contact_name || null,
+        emergency_contact_phone || null,
+        teacherId
+      ],
+      'skydek_DB'
+    );
+
+    // Fetch updated profile
+    const updatedProfile = await query(
+      `SELECT id, name, email, role, className, qualification, 
+              specialization, bio, phone, experience_years, 
+              emergency_contact_name, emergency_contact_phone, 
+              profile_picture, created_at, updated_at
+       FROM staff WHERE id = ? AND role = "teacher"`,
+      [teacherId],
+      'skydek_DB'
+    );
+
+    res.json({
+      success: true,
+      profile: updatedProfile[0],
+      message: 'Profile updated successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error updating teacher profile:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error updating profile',
+      error: error.message 
+    });
+  }
+});
+
+// Change teacher password
+router.put('/profile/password', authMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user?.id;
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!teacherId) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Teacher ID required' 
+      });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
+      });
+    }
+
+    // Validate new password strength
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters with uppercase, lowercase, numbers, and special characters'
+      });
+    }
+
+    // Get current password hash
+    const teacherRows = await query(
+      'SELECT password FROM staff WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'skydek_DB'
+    );
+
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Teacher not found' 
+      });
+    }
+
+    // Verify current password
+    const validPassword = await bcrypt.compare(currentPassword, teacherRows[0].password);
+    if (!validPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update password
+    await execute(
+      'UPDATE staff SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role = "teacher"',
+      [hashedNewPassword, teacherId],
+      'skydek_DB'
+    );
+
+    res.json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error updating teacher password:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error updating password',
+      error: error.message 
+    });
+  }
+});
+
+// Enhanced Student Report System Routes
+router.post('/student-reports/:studentId/generate-pdf', authMiddleware, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { reportData, pdfBase64 } = req.body;
+    const teacherId = req.user.id;
+
+    // Verify teacher has access to this student
+    const [student] = await query(
+      'SELECT className FROM children WHERE id = ?',
+      [studentId],
+      'skydek_DB'
+    );
+    
+    const [teacher] = await query(
+      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'railway'
+    );
+
+    if (!student || !teacher || student.className !== teacher.className) {
+      return res.status(403).json({ error: 'Not authorized to create reports for this student' });
+    }
+
+    // Save report to database
+    const reportSql = `
+      INSERT INTO student_reports (
+        student_id, teacher_id, report_data, pdf_base64, 
+        reporting_period, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+    `;
+
+    const result = await execute(reportSql, [
+      studentId,
+      teacherId,
+      JSON.stringify(reportData),
+      pdfBase64,
+      reportData.reportingPeriod || 'Current Period'
+    ], 'skydek_DB');
+
+    res.json({
+      success: true,
+      reportId: result.insertId,
+      message: 'Report saved to student profile successfully'
+    });
+
+  } catch (error) {
+    console.error('Error saving student report:', error);
+    res.status(500).json({ error: 'Failed to save report' });
+  }
+});
+
+router.post('/student-reports/:studentId/generate-homework', authMiddleware, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { assessmentArea, homeworkTemplates } = req.body;
+    const teacherId = req.user.id;
+
+    // Verify teacher authorization
+    const [student] = await query(
+      'SELECT className, name FROM children WHERE id = ?',
+      [studentId],
+      'skydek_DB'
+    );
+    
+    const [teacher] = await query(
+      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'railway'
+    );
+
+    if (!student || !teacher || student.className !== teacher.className) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // Save generated homework to library
+    const homeworkInserts = homeworkTemplates.map(template => [
+      template.title,
+      template.description,
+      template.instructions,
+      JSON.stringify(template.skills),
+      JSON.stringify(template.materials),
+      template.estimatedTime,
+      assessmentArea,
+      studentId,
+      teacherId,
+      new Date().toISOString(),
+      'library'
+    ]);
+
+    if (homeworkInserts.length > 0) {
+      const sql = `
+        INSERT INTO homework_library (
+          title, description, instructions, skills, materials, 
+          estimated_time, assessment_area, student_id, teacher_id, 
+          created_at, status
+        ) VALUES ${homeworkInserts.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
+      `;
+      
+      await execute(sql, homeworkInserts.flat(), 'skydek_DB');
+    }
+
+    res.json({
+      success: true,
+      message: `Generated ${homeworkTemplates.length} homework activities`,
+      homeworkCount: homeworkTemplates.length
+    });
+
+  } catch (error) {
+    console.error('Error generating homework:', error);
+    res.status(500).json({ error: 'Failed to generate homework' });
+  }
+});
+
+router.get('/student-analytics/:studentId', authMiddleware, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const teacherId = req.user.id;
+
+    // Verify teacher authorization
+    const [student] = await query(
+      'SELECT className, name FROM children WHERE id = ?',
+      [studentId],
+      'skydek_DB'
+    );
+    
+    const [teacher] = await query(
+      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'railway'
+    );
+
+    if (!student || !teacher || student.className !== teacher.className) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // Get homework completion data
+    const homeworkStats = await query(
+      `SELECT 
+        COUNT(*) as total_assigned,
+        SUM(CASE WHEN s.id IS NOT NULL THEN 1 ELSE 0 END) as completed,
+        AVG(CASE WHEN ha.overall_score IS NOT NULL THEN ha.overall_score ELSE 0 END) as avg_score
+       FROM homeworks h
+       LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+       LEFT JOIN homework_assessments ha ON h.id = ha.homework_id AND ha.student_id = ?
+       WHERE h.class_name = ?`,
+      [studentId, studentId, student.className],
+      'skydek_DB'
+    );
+
+    // Get skill progress data
+    const skillProgress = await query(
+      `SELECT 
+        sc.name as category,
+        AVG(ssp.proficiency_level) as avg_level,
+        COUNT(ssp.id) as skill_count
+       FROM student_skill_progress ssp
+       JOIN skills s ON ssp.skill_id = s.id
+       JOIN skill_categories sc ON s.category_id = sc.id
+       WHERE ssp.student_id = ?
+       GROUP BY sc.name`,
+      [studentId],
+      'skydek_DB'
+    );
+
+    // Get recent improvements
+    const recentProgress = await query(
+      `SELECT teacher_notes, demonstration_date
+       FROM student_skill_progress 
+       WHERE student_id = ? AND teacher_notes IS NOT NULL
+       ORDER BY demonstration_date DESC 
+       LIMIT 5`,
+      [studentId],
+      'skydek_DB'
+    );
+
+    const stats = homeworkStats[0] || { total_assigned: 0, completed: 0, avg_score: 0 };
+    const completionRate = stats.total_assigned > 0 ? 
+      Math.round((stats.completed / stats.total_assigned) * 100) : 0;
+
+    const analytics = {
+      totalHomeworkAssigned: stats.total_assigned,
+      homeworkCompleted: stats.completed,
+      completionRate: completionRate,
+      averageScore: Math.round(stats.avg_score || 0),
+      skillProgress: {},
+      recentImprovements: recentProgress.map(p => p.teacher_notes).filter(Boolean)
+    };
+
+    // Format skill progress
+    skillProgress.forEach(skill => {
+      analytics.skillProgress[skill.category] = {
+        current: Math.round(skill.avg_level || 1),
+        target: 5,
+        progress: Math.round(((skill.avg_level || 1) / 5) * 100)
+      };
+    });
+
+    res.json({
+      success: true,
+      analytics: analytics,
+      studentName: student.name
+    });
+
+  } catch (error) {
+    console.error('Error fetching student analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+router.post('/homework-library/:homeworkId/send-to-parent', authMiddleware, async (req, res) => {
+  try {
+    const { homeworkId } = req.params;
+    const teacherId = req.user.id;
+
+    // Get homework details
+    const [homework] = await query(
+      'SELECT * FROM homework_library WHERE id = ? AND teacher_id = ?',
+      [homeworkId, teacherId],
+      'skydek_DB'
+    );
+
+    if (!homework) {
+      return res.status(404).json({ error: 'Homework not found' });
+    }
+
+    // Get student and parent info
+    const [student] = await query(
+      'SELECT c.*, u.email as parent_email FROM children c JOIN users u ON c.parent_id = u.id WHERE c.id = ?',
+      [homework.student_id],
+      'skydek_DB'
+    );
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // Create homework assignment
+    const assignmentSql = `
+      INSERT INTO homeworks (
+        title, instructions, class_name, uploaded_by_teacher_id, 
+        status, due_date, created_at
+      ) VALUES (?, ?, ?, ?, 'Pending', DATE_ADD(NOW(), INTERVAL 7 DAY), NOW())
+    `;
+
+    const result = await execute(assignmentSql, [
+      homework.title,
+      homework.instructions,
+      student.className,
+      teacherId
+    ], 'skydek_DB');
+
+    // TODO: Send notification to parent via messaging system
+    // await sendHomeworkNotification(student.parent_email, homework.title, student.name);
+
+    res.json({
+      success: true,
+      message: `Homework "${homework.title}" sent to ${student.name}'s parent`,
+      assignmentId: result.insertId
+    });
+
+  } catch (error) {
+    console.error('Error sending homework to parent:', error);
+    res.status(500).json({ error: 'Failed to send homework' });
+  }
+});
+
+export default router;

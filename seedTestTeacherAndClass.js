@@ -21,7 +21,7 @@ const seedTestTeacherAndClass = async () => {
       email: 'test.teacher@youngeagles.org.za',
       password: 'Test@123',
       role: 'teacher',
-      className: 'Panda Class' // Assign to Panda Class
+      className: 'Panda' // Assign to Panda class
     };
 
     console.log('1️⃣ Creating test teacher...');
@@ -103,11 +103,11 @@ const seedTestTeacherAndClass = async () => {
     console.log('\n3️⃣ Creating test students...');
     
     const testStudents = [
-      { name: 'Emma Johnson', age: 5, className: 'Panda Class' },
-      { name: 'Liam Smith', age: 4, className: 'Panda Class' },
-      { name: 'Sophia Davis', age: 6, className: 'Panda Class' },
-      { name: 'Oliver Wilson', age: 5, className: 'Panda Class' },
-      { name: 'Ava Brown', age: 4, className: 'Panda Class' }
+      { name: 'Emma Johnson', age: 5, className: 'Panda' },
+      { name: 'Liam Smith', age: 4, className: 'Panda' },
+      { name: 'Sophia Davis', age: 6, className: 'Panda' },
+      { name: 'Oliver Wilson', age: 5, className: 'Panda' },
+      { name: 'Ava Brown', age: 4, className: 'Panda' }
     ];
 
     for (const student of testStudents) {
