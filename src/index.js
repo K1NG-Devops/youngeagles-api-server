@@ -13,6 +13,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { AdminWebSocketEvents } from './websocket-admin-events.js';
 import { MessageWebSocketEvents } from './websocket-message-events.js';
+import setupMessagingEndpoints from './messaging-endpoints.js';
 import crypto from 'crypto';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -22,6 +23,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+
+// Configure trust proxy for Railway
+if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy (Railway)
+  console.log('🔧 Trust proxy enabled for Railway deployment');
+}
+
 const server = createServer(app);
 
 const allowedOrigins = [
@@ -29,23 +37,68 @@ const allowedOrigins = [
       "http://localhost:3003", 
       "http://localhost:5173",
       "https://youngeagles.org.za",
+      "https://www.youngeagles.org.za",
       "https://youngeagles-api-server.up.railway.app",
-      "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app"
+      "https://youngeagles-g4tu8n56q-k1ng-devops-projects.vercel.app",
+      // Add more comprehensive domain coverage
+      "https://app.youngeagles.org.za",
+      "https://admin.youngeagles.org.za",
+      "https://api.youngeagles.org.za"
 ];
 
+// More permissive CORS for production issues
 const corsOptions = {
   origin: function (origin, callback) {
+    console.log(`🌐 CORS request from origin: ${origin || 'no origin'}`);
+    
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    if (!origin) {
+      console.log('✅ Allowing request with no origin');
+      return callback(null, true);
     }
-    return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log(`✅ Origin ${origin} is in allowed list`);
+      return callback(null, true);
+    }
+    
+    // Check for Vercel preview deployments (dynamic URLs)
+    if (origin.includes('vercel.app')) {
+      console.log(`✅ Allowing Vercel deployment: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Check for custom domains that might be configured
+    if (origin.includes('youngeagles')) {
+      console.log(`✅ Allowing youngeagles domain: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // In development, be more permissive
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`⚠️ Development mode: allowing ${origin}`);
+      return callback(null, true);
+    }
+    
+    console.log(`❌ CORS blocked origin: ${origin}`);
+    const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+    return callback(new Error(msg), false);
   },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   credentials: true,
-  allowedHeaders: 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, Expires, x-request-source'
+  allowedHeaders: [
+    'Origin', 
+    'X-Requested-With', 
+    'Content-Type', 
+    'Accept', 
+    'Authorization', 
+    'Cache-Control', 
+    'Pragma', 
+    'Expires', 
+    'x-request-source',
+    'Access-Control-Allow-Origin'
+  ]
 };
 
 app.use(cors(corsOptions));
@@ -1083,9 +1136,9 @@ async function startServer() {
 
       console.log('👥 Fetching all teachers');
       
-      // Get all teachers from staff table
+      // Get all teachers from staff table with class assignments
       const [teachers] = await db.execute(
-        'SELECT id, name, email, is_verified, created_at FROM staff WHERE role = ? ORDER BY name',
+        'SELECT id, name, email, is_verified, created_at, className, phone FROM staff WHERE role = ? ORDER BY name',
         ['teacher']
       );
       
@@ -1093,14 +1146,19 @@ async function startServer() {
         id: teacher.id,
         name: teacher.name,
         email: teacher.email,
-        phone: null, // Phone not available in current schema
-        isVerified: teacher.is_verified,
-        joinedAt: teacher.created_at
+        phone: teacher.phone || '',
+        className: teacher.className || '',
+        isVerified: teacher.is_verified || true,
+        joinedAt: teacher.created_at,
+        qualification: '',
+        experience: '',
+        specialization: ''
       }));
       
       console.log(`✅ Found ${formattedTeachers.length} teachers`);
       
       res.json({
+        success: true,
         teachers: formattedTeachers,
         total: formattedTeachers.length
       });
@@ -1775,10 +1833,10 @@ async function startServer() {
       let teacherClasses = [];
       if (user.role === 'teacher') {
         const [classes] = await db.execute(
-          'SELECT DISTINCT class_name FROM staff WHERE email = ? AND role = "teacher"',
+          'SELECT DISTINCT className FROM staff WHERE email = ? AND role = "teacher"',
           [user.email]
         );
-        teacherClasses = classes.map(c => c.class_name);
+        teacherClasses = classes.map(c => c.className);
       }
 
       // Build query based on role
@@ -2181,50 +2239,218 @@ async function startServer() {
     }
 
     try {
-      // Get analytics data
-      const [monthlyUsers] = await db.execute(`
+      // Get monthly enrollment data (last 12 months)
+      const [monthlyEnrollment] = await db.execute(`
         SELECT 
           DATE_FORMAT(created_at, '%Y-%m') as month,
+          DATE_FORMAT(created_at, '%M %Y') as monthName,
           COUNT(*) as count
-        FROM users 
+        FROM children 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-        ORDER BY month DESC
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%M %Y')
+        ORDER BY month ASC
       `);
       
-      const [homeworkSubmissions] = await db.execute(`
+      // Get weekly enrollment for more granular view
+      const [weeklyEnrollment] = await db.execute(`
         SELECT 
-          DATE_FORMAT(submitted_at, '%Y-%m-%d') as date,
-          COUNT(*) as submissions
-        FROM submissions 
-        WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-        GROUP BY DATE_FORMAT(submitted_at, '%Y-%m-%d')
-        ORDER BY date DESC
+          YEARWEEK(created_at) as week,
+          DATE_FORMAT(created_at, '%M %d') as weekLabel,
+          COUNT(*) as count
+        FROM children 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 8 WEEK)
+        GROUP BY YEARWEEK(created_at), DATE_FORMAT(created_at, '%M %d')
+        ORDER BY week ASC
       `);
       
+      // Get homework completion data
+      const [homeworkStats] = await db.execute(`
+        SELECT 
+          h.class_name,
+          COUNT(DISTINCT h.id) as total_homework,
+          COUNT(DISTINCT s.id) as completed_homework,
+          ROUND((COUNT(DISTINCT s.id) / COUNT(DISTINCT h.id)) * 100, 2) as completion_rate
+        FROM homeworks h
+        LEFT JOIN submissions s ON h.id = s.homework_id
+        GROUP BY h.class_name
+        ORDER BY completion_rate DESC
+      `);
+      
+      // Get class distribution with enrollment trends
       const [classDistribution] = await db.execute(`
         SELECT 
           className as class_name,
-          COUNT(*) as student_count
+          grade,
+          COUNT(*) as student_count,
+          AVG(age) as avg_age,
+          COUNT(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 END) as new_this_month
         FROM children 
-        GROUP BY className
+        GROUP BY className, grade
         ORDER BY student_count DESC
       `);
       
-      console.log('✅ Analytics data retrieved successfully');
+      // Get age distribution
+      const [ageDistribution] = await db.execute(`
+        SELECT 
+          age,
+          COUNT(*) as count
+        FROM children 
+        GROUP BY age
+        ORDER BY age ASC
+      `);
       
-      res.json({
-        monthlyUsers,
-        homeworkSubmissions,
-        classDistribution,
-        generatedAt: new Date().toISOString()
-      });
+      // Get recent activity for timeline
+      const [recentActivity] = await db.execute(`
+        SELECT 
+          'enrollment' as type,
+          CONCAT(name, ' enrolled in ', className) as activity,
+          created_at as timestamp
+        FROM children 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        
+        UNION ALL
+        
+        SELECT 
+          'homework' as type,
+          CONCAT('Homework assigned: ', title) as activity,
+          created_at as timestamp
+        FROM homeworks 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        
+        UNION ALL
+        
+        SELECT 
+          'submission' as type,
+          CONCAT('Homework submitted for child ID ', child_id) as activity,
+          submitted_at as timestamp
+        FROM submissions 
+        WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        
+        ORDER BY timestamp DESC
+        LIMIT 20
+      `);
+      
+      // Get performance metrics
+      const [performanceMetrics] = await db.execute(`
+        SELECT 
+          COUNT(DISTINCT c.id) as total_students,
+          COUNT(DISTINCT u.id) as total_parents,
+          COUNT(DISTINCT s.id) as total_staff,
+          COUNT(DISTINCT h.id) as total_homework,
+          COUNT(DISTINCT sub.id) as total_submissions,
+          ROUND(AVG(c.age), 1) as avg_student_age
+        FROM children c
+        LEFT JOIN users u ON c.parent_id = u.id
+        LEFT JOIN staff s ON s.role IN ('teacher', 'admin')
+        LEFT JOIN homeworks h ON 1=1
+        LEFT JOIN submissions sub ON 1=1
+      `);
+      
+      console.log('✅ Enhanced analytics data retrieved successfully');
+      
+      // Format data for frontend charts
+      const analyticsData = {
+        // Monthly enrollment chart data
+        monthlyEnrollment: {
+          labels: monthlyEnrollment.map(item => item.monthName || item.month),
+          data: monthlyEnrollment.map(item => item.count),
+          type: 'line'
+        },
+        
+        // Weekly enrollment for detailed view
+        weeklyEnrollment: {
+          labels: weeklyEnrollment.map(item => item.weekLabel || `Week ${item.week}`),
+          data: weeklyEnrollment.map(item => item.count),
+          type: 'bar'
+        },
+        
+        // Class performance chart
+        classPerformance: {
+          labels: homeworkStats.map(item => item.class_name || 'Unknown'),
+          datasets: [
+            {
+              label: 'Total Homework',
+              data: homeworkStats.map(item => item.total_homework || 0),
+              backgroundColor: 'rgba(54, 162, 235, 0.6)'
+            },
+            {
+              label: 'Completed',
+              data: homeworkStats.map(item => item.completed_homework || 0),
+              backgroundColor: 'rgba(75, 192, 192, 0.6)'
+            }
+          ],
+          type: 'bar'
+        },
+        
+        // Class distribution pie chart
+        classDistribution: {
+          labels: classDistribution.map(item => item.class_name),
+          data: classDistribution.map(item => item.student_count),
+          backgroundColor: [
+            '#FF6384',
+            '#36A2EB', 
+            '#FFCE56',
+            '#4BC0C0',
+            '#9966FF',
+            '#FF9F40'
+          ],
+          type: 'doughnut'
+        },
+        
+        // Age distribution
+        ageDistribution: {
+          labels: ageDistribution.map(item => `Age ${item.age}`),
+          data: ageDistribution.map(item => item.count),
+          type: 'bar'
+        },
+        
+        // Summary metrics
+        metrics: performanceMetrics[0] || {
+          total_students: 0,
+          total_parents: 0,
+          total_staff: 0,
+          total_homework: 0,
+          total_submissions: 0,
+          avg_student_age: 0
+        },
+        
+        // Recent activity timeline
+        recentActivity: recentActivity.map(activity => ({
+          type: activity.type,
+          description: activity.activity,
+          timestamp: activity.timestamp,
+          time: new Date(activity.timestamp).toLocaleString()
+        })),
+        
+        // Homework completion rates by class
+        completionRates: homeworkStats.map(item => ({
+          className: item.class_name,
+          rate: parseFloat(item.completion_rate || 0),
+          total: item.total_homework || 0,
+          completed: item.completed_homework || 0
+        })),
+        
+        // Class details with trends
+        classDetails: classDistribution.map(item => ({
+          name: item.class_name,
+          grade: item.grade,
+          studentCount: item.student_count,
+          avgAge: parseFloat(item.avg_age || 0).toFixed(1),
+          newThisMonth: item.new_this_month || 0
+        })),
+        
+        generatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toLocaleString()
+      };
+      
+      res.json(analyticsData);
       
     } catch (error) {
       console.error('❌ Analytics error:', error);
       res.status(500).json({
         message: 'Internal server error',
-        error: 'DATABASE_ERROR'
+        error: 'DATABASE_ERROR',
+        details: error.message
       });
     }
   });
@@ -3487,6 +3713,9 @@ async function startServer() {
 
   // Initialize WebSocket event handlers
   const messageEvents = new MessageWebSocketEvents(io, db);
+
+  // Setup comprehensive messaging endpoints
+  setupMessagingEndpoints(app, db, io, verifyToken);
 
   // Socket.IO connection handling
   io.on('connection', (socket) => {

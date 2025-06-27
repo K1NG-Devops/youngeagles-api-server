@@ -62,11 +62,17 @@ export const config = {
   // CORS Configuration
   cors: {
     origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-      'https://youngeagles.com',
-      'https://app.youngeagles.com',
-      'https://admin.youngeagles.com'
+      'https://youngeagles.org.za',
+      'https://www.youngeagles.org.za',
+      'https://app.youngeagles.org.za',
+      'https://admin.youngeagles.org.za',
+      'https://api.youngeagles.org.za',
+      'https://youngeagles-api-server.up.railway.app',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:5173'
     ],
-    credentials: process.env.CORS_CREDENTIALS === 'true',
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
   },
 

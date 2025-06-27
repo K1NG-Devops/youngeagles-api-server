@@ -1,8 +1,15 @@
-import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query, execute } from './src/db.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Use the same password hashing method as the API (PBKDF2)
+function hashPassword(password) {
+  const salt = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
 
 const seedKingAdmin = async () => {
   try {
@@ -11,12 +18,12 @@ const seedKingAdmin = async () => {
     const adminData = {
       name: 'King Admin',
       email: 'admin@youngeagles.org.za',
-      password: 'YoungEagles@123',
+      password: '#Admin@2012', // Use the known working password
       role: 'admin'
     };
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(adminData.password, 12);
+    // Hash password using PBKDF2 (same as API)
+    const hashedPassword = hashPassword(adminData.password);
 
     // Check if admin already exists in staff table
     const existingAdmin = await query(
