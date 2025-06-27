@@ -29,7 +29,7 @@ const setupProductionAccounts = async () => {
         password: 'Test@123',
         role: 'teacher',
         table: 'staff',
-        className: 'Panda Class'
+        className: 'Panda'
       },
       {
         name: 'Teacher Demo',
