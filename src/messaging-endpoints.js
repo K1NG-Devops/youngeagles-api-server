@@ -56,13 +56,11 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
           -- Latest message info
           m.content as last_message,
           m.created_at as last_message_time,
-          m.sender_type as last_sender_type,
           
-          -- Unread count
+          -- Unread count (simplified since we don't have sender_type)
           (SELECT COUNT(*) FROM messages m2 
            WHERE m2.conversation_id = c.id 
            AND m2.sender_id != ? 
-           AND m2.sender_type != ?
            AND m2.is_read = FALSE) as unread_count
 
         FROM conversations c
@@ -82,7 +80,7 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
         
         ORDER BY COALESCE(m.created_at, c.created_at) DESC
       `, [
-        user.id, user.id, user.id, user.id, user.role,
+        user.id, user.id, user.id, user.id,
         user.id, user.role, user.id, user.role
       ]);
 
@@ -102,7 +100,7 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
           },
           lastMessage: conv.last_message,
           lastMessageTime: conv.last_message_time,
-          lastSenderType: conv.last_sender_type,
+          lastSenderType: null, // Not available in current schema
           unreadCount: conv.unread_count,
           createdAt: conv.created_at,
           updatedAt: conv.updated_at
@@ -158,22 +156,20 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
           m.content,
           m.message_type,
           m.sender_id,
-          m.sender_type,
           m.is_read,
           m.created_at,
-          m.attachment_url,
           
           COALESCE(u.name, s.name) as sender_name,
           COALESCE(u.email, s.email) as sender_email
           
         FROM messages m
-        LEFT JOIN users u ON m.sender_id = u.id AND m.sender_type = 'parent'
-        LEFT JOIN staff s ON m.sender_id = s.id AND m.sender_type IN ('admin', 'teacher')
+        LEFT JOIN users u ON m.sender_id = u.id
+        LEFT JOIN staff s ON m.sender_id = s.id
         
         WHERE m.conversation_id = ?
         ORDER BY m.created_at DESC
-        LIMIT ? OFFSET ?
-      `, [conversationId, limit, offset]);
+        LIMIT ${limit} OFFSET ${offset}
+      `, [conversationId]);
 
       // Mark messages as read for current user
       await db.execute(`
@@ -181,9 +177,8 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
         SET is_read = TRUE 
         WHERE conversation_id = ? 
         AND sender_id != ? 
-        AND sender_type != ?
         AND is_read = FALSE
-      `, [conversationId, user.id, user.role]);
+      `, [conversationId, user.id]);
 
       console.log(`✅ Found ${messages.length} messages in conversation ${conversationId}`);
 
@@ -194,13 +189,13 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
           content: msg.content,
           messageType: msg.message_type,
           senderId: msg.sender_id,
-          senderType: msg.sender_type,
+          senderType: null, // Not available in current schema
           senderName: msg.sender_name,
           senderEmail: msg.sender_email,
           isRead: msg.is_read,
           createdAt: msg.created_at,
-          attachmentUrl: msg.attachment_url,
-          isOwn: msg.sender_id === user.id && msg.sender_type === user.role
+          attachmentUrl: null, // Not available in current schema
+          isOwn: msg.sender_id === user.id // Simplified since we don't have sender_type
         })),
         pagination: {
           page,
@@ -279,9 +274,9 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
       // Send initial message
       const [messageResult] = await db.execute(`
         INSERT INTO messages (
-          conversation_id, sender_id, sender_type, content, message_type, created_at
-        ) VALUES (?, ?, ?, ?, 'text', NOW())
-      `, [conversationId, user.id, user.role, messageContent]);
+          conversation_id, sender_id, receiver_id, content, message_type, created_at
+        ) VALUES (?, ?, ?, ?, 'general', NOW())
+      `, [conversationId, user.id, recipientId, messageContent]);
 
       // Update conversation timestamp
       await db.execute(`
@@ -357,12 +352,24 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
         });
       }
 
+      // Get the other participant (receiver) for this conversation
+      const [otherParticipant] = await db.execute(`
+        SELECT participant_id FROM conversation_participants 
+        WHERE conversation_id = ? AND participant_id != ?
+        UNION
+        SELECT created_by as participant_id FROM conversations 
+        WHERE id = ? AND created_by != ?
+        LIMIT 1
+      `, [conversationId, user.id, conversationId, user.id]);
+      
+      const receiverId = otherParticipant.length > 0 ? otherParticipant[0].participant_id : null;
+      
       // Insert message
       const [messageResult] = await db.execute(`
         INSERT INTO messages (
-          conversation_id, sender_id, sender_type, content, message_type, attachment_url, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, NOW())
-      `, [conversationId, user.id, user.role, content, messageType, attachmentUrl]);
+          conversation_id, sender_id, receiver_id, content, message_type, created_at
+        ) VALUES (?, ?, ?, ?, ?, NOW())
+      `, [conversationId, user.id, receiverId, content, messageType]);
 
       // Update conversation timestamp
       await db.execute(`
@@ -583,9 +590,9 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
           // Send message
           await db.execute(`
             INSERT INTO messages (
-              conversation_id, sender_id, sender_type, content, message_type, created_at
-            ) VALUES (?, ?, ?, ?, 'text', NOW())
-          `, [conversationId, user.id, user.role, content]);
+              conversation_id, sender_id, receiver_id, content, message_type, created_at
+            ) VALUES (?, ?, ?, ?, 'general', NOW())
+          `, [conversationId, user.id, recipient.id, content]);
 
           results.push({
             recipientId: recipient.id,
@@ -643,9 +650,8 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
         SET is_read = TRUE 
         WHERE conversation_id = ? 
         AND sender_id != ? 
-        AND sender_type != ?
         AND is_read = FALSE
-      `, [conversationId, user.id, user.role]);
+      `, [conversationId, user.id]);
 
       console.log(`✅ Marked ${result.affectedRows} messages as read`);
 
@@ -682,11 +688,10 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
         INNER JOIN conversations c ON m.conversation_id = c.id
         LEFT JOIN conversation_participants cp ON c.id = cp.conversation_id
         WHERE m.sender_id != ? 
-        AND m.sender_type != ?
         AND m.is_read = FALSE
         AND ((c.created_by = ? AND c.creator_type = ?) 
              OR (cp.participant_id = ? AND cp.participant_type = ?))
-      `, [user.id, user.role, user.id, user.role, user.id, user.role]);
+      `, [user.id, user.id, user.role, user.id, user.role]);
 
       const unreadCount = result[0].unread_count;
 

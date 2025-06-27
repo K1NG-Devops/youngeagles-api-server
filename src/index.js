@@ -1833,10 +1833,10 @@ async function startServer() {
       let teacherClasses = [];
       if (user.role === 'teacher') {
         const [classes] = await db.execute(
-          'SELECT DISTINCT class_name FROM staff WHERE email = ? AND role = "teacher"',
+          'SELECT DISTINCT className FROM staff WHERE email = ? AND role = "teacher"',
           [user.email]
         );
-        teacherClasses = classes.map(c => c.class_name);
+        teacherClasses = classes.map(c => c.className);
       }
 
       // Build query based on role
