@@ -67,11 +67,13 @@ export const getMessages = async (req, res) => {
 
     const messages = await query(
       `SELECT m.*, 
-              sender.name as sender_name, 
-              recipient.name as recipient_name
+              COALESCE(sender_user.name, sender_staff.name) as sender_name,
+              COALESCE(recipient_user.name, recipient_staff.name) as recipient_name
        FROM messages m
-       LEFT JOIN users sender ON m.sender_id = sender.id AND m.sender_type = 'parent'
-       LEFT JOIN users recipient ON m.recipient_id = recipient.id AND m.recipient_type = 'parent'
+       LEFT JOIN users sender_user ON m.sender_id = sender_user.id AND m.sender_type = 'parent'
+       LEFT JOIN staff sender_staff ON m.sender_id = sender_staff.id AND m.sender_type IN ('teacher', 'admin')
+       LEFT JOIN users recipient_user ON m.recipient_id = recipient_user.id AND m.recipient_type = 'parent'
+       LEFT JOIN staff recipient_staff ON m.recipient_id = recipient_staff.id AND m.recipient_type IN ('teacher', 'admin')
        ${whereClause}
        ORDER BY m.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -111,11 +113,13 @@ export const getConversation = async (req, res) => {
   try {
     const messages = await query(
       `SELECT m.*, 
-              sender.name as sender_name, 
-              recipient.name as recipient_name
+              COALESCE(sender_user.name, sender_staff.name) as sender_name,
+              COALESCE(recipient_user.name, recipient_staff.name) as recipient_name
        FROM messages m
-       LEFT JOIN users sender ON m.sender_id = sender.id
-       LEFT JOIN users recipient ON m.recipient_id = recipient.id
+       LEFT JOIN users sender_user ON m.sender_id = sender_user.id AND m.sender_type = 'parent'
+       LEFT JOIN staff sender_staff ON m.sender_id = sender_staff.id AND m.sender_type IN ('teacher', 'admin')
+       LEFT JOIN users recipient_user ON m.recipient_id = recipient_user.id AND m.recipient_type = 'parent'
+       LEFT JOIN staff recipient_staff ON m.recipient_id = recipient_staff.id AND m.recipient_type IN ('teacher', 'admin')
        WHERE ((m.sender_id = ? AND m.sender_type = ? AND m.recipient_id = ? AND m.recipient_type = ?)
            OR (m.sender_id = ? AND m.sender_type = ? AND m.recipient_id = ? AND m.recipient_type = ?))
        ORDER BY m.created_at ASC`,
@@ -188,14 +192,14 @@ export const getContacts = async (req, res) => {
     if (user_type === 'parent') {
       // Parents can message teachers and admins
       const teachers = await query(
-        'SELECT id, name, email, "teacher" as type FROM users WHERE role = "teacher"',
+        'SELECT id, name, email, "teacher" as type FROM staff WHERE role = "teacher"',
         [],
-        'railway'
+        'skydek_DB'
       );
       const admins = await query(
-        'SELECT id, name, email, "admin" as type FROM users WHERE role = "admin"',
+        'SELECT id, name, email, "admin" as type FROM staff WHERE role = "admin"',
         [],
-        'railway'
+        'skydek_DB'
       );
       contacts = [...teachers, ...admins];
     } else if (user_type === 'teacher') {
@@ -206,17 +210,17 @@ export const getContacts = async (req, res) => {
         'skydek_DB'
       );
       const admins = await query(
-        'SELECT id, name, email, "admin" as type FROM users WHERE role = "admin"',
+        'SELECT id, name, email, "admin" as type FROM staff WHERE role = "admin"',
         [],
-        'railway'
+        'skydek_DB'
       );
       contacts = [...parents, ...admins];
     } else if (user_type === 'admin') {
       // Admins can message everyone
       const teachers = await query(
-        'SELECT id, name, email, "teacher" as type FROM users WHERE role = "teacher"',
+        'SELECT id, name, email, "teacher" as type FROM staff WHERE role = "teacher"',
         [],
-        'railway'
+        'skydek_DB'
       );
       const parents = await query(
         'SELECT id, name, email, "parent" as type FROM users WHERE role = "parent"',
