@@ -1094,6 +1094,84 @@ export const getStudentSkillProgress = async (req, res) => {
 };
 
 // Generate weekly report for a student
+// Get saved weekly report by ID
+export const getSavedWeeklyReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Get the saved report
+    const [report] = await query(
+      'SELECT * FROM weekly_reports WHERE id = ?',
+      [id],
+      'skydek_DB'
+    );
+
+    if (!report) {
+      return res.status(404).json({ error: 'Weekly report not found' });
+    }
+
+    // Check authorization - parents can only view their child's reports
+    if (userRole === 'parent') {
+      const [child] = await query(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [report.student_id, userId],
+        'skydek_DB'
+      );
+      if (!child) {
+        return res.status(403).json({ error: 'Not authorized to view this report' });
+      }
+    } else if (userRole === 'teacher') {
+      // Verify teacher is authorized for this student's class
+      const [student] = await query(
+        'SELECT className FROM children WHERE id = ?',
+        [report.student_id],
+        'skydek_DB'
+      );
+      const [teacher] = await query(
+        'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+        [userId],
+        'railway'
+      );
+      if (!student || !teacher || student.className !== teacher.className) {
+        return res.status(403).json({ error: 'Not authorized to view this student\'s report' });
+      }
+    }
+
+    // Get student name for the report
+    const [student] = await query(
+      'SELECT name FROM children WHERE id = ?',
+      [report.student_id],
+      'skydek_DB'
+    );
+
+    // Parse JSON fields
+    const parsedReport = {
+      ...report,
+      skills_practiced: report.skills_practiced ? JSON.parse(report.skills_practiced) : [],
+      skills_mastered: report.skills_mastered ? JSON.parse(report.skills_mastered) : [],
+      areas_for_improvement: report.areas_for_improvement ? JSON.parse(report.areas_for_improvement) : [],
+      strengths_identified: report.strengths_identified ? JSON.parse(report.strengths_identified) : [],
+      teacher_recommendations: report.teacher_recommendations ? JSON.parse(report.teacher_recommendations) : [],
+      academic_growth_metrics: report.academic_growth_metrics ? JSON.parse(report.academic_growth_metrics) : {},
+      student_name: student ? student.name : 'Unknown Student'
+    };
+
+    res.json({
+      success: true,
+      report: parsedReport
+    });
+
+  } catch (error) {
+    console.error('Error fetching saved weekly report:', error);
+    res.status(500).json({
+      error: 'Failed to fetch weekly report',
+      message: error.message
+    });
+  }
+};
+
 export const generateWeeklyReport = async (req, res) => {
   try {
     const { studentId } = req.params;

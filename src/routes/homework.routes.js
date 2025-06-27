@@ -55,6 +55,9 @@ router.get('/skills/progress/:studentId', authMiddleware, getStudentSkillProgres
 router.get('/reports/weekly/:studentId', authMiddleware, generateWeeklyReport);
 router.post('/reports/weekly/generate', authMiddleware, generateWeeklyReport);
 
+// Get saved weekly report by ID
+router.get('/reports/saved/:id', authMiddleware, getSavedWeeklyReport);
+
 router.get('/submissions', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
