@@ -23,72 +23,70 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
     try {
       // Get all conversations where user is either sender or recipient
       const [conversations] = await db.execute(`
-        SELECT DISTINCT
+        SELECT 
           c.id as conversation_id,
           c.subject,
           c.type,
           c.is_group,
           c.created_at,
           c.updated_at,
-          
-          -- Get the other participant's info (for individual chats)
-          CASE 
-            WHEN c.created_by = ? THEN 
-              COALESCE(u_recipient.name, s_recipient.name, 'Unknown User')
-            ELSE 
-              COALESCE(u_creator.name, s_creator.name, 'Unknown User')
-          END as other_participant_name,
-          
-          CASE 
-            WHEN c.created_by = ? THEN 
-              COALESCE(u_recipient.email, s_recipient.email)
-            ELSE 
-              COALESCE(u_creator.email, s_creator.email)
-          END as other_participant_email,
-          
-          CASE 
-            WHEN c.created_by = ? THEN 
-              COALESCE(u_recipient.role, s_recipient.role)
-            ELSE 
-              COALESCE(u_creator.role, s_creator.role)
-          END as other_participant_role,
-          
-          -- Latest message info
-          m.content as last_message,
-          m.created_at as last_message_time,
-          
-          -- Unread count (simplified since we don't have sender_type)
-          (SELECT COUNT(*) FROM messages m2 
-           WHERE m2.conversation_id = c.id 
-           AND m2.sender_id != ? 
-           AND m2.is_read = FALSE) as unread_count
-
+          (
+            SELECT CONCAT(p.participant_type, ':', p.participant_id) 
+            FROM conversation_participants p 
+            WHERE p.conversation_id = c.id AND (p.participant_id != ? OR p.participant_type != ?)
+            LIMIT 1
+          ) as other_participant_info,
+          (
+            SELECT m.content 
+            FROM messages m 
+            WHERE m.conversation_id = c.id 
+            ORDER BY m.created_at DESC 
+            LIMIT 1
+          ) as last_message,
+          (
+            SELECT m.created_at 
+            FROM messages m 
+            WHERE m.conversation_id = c.id 
+            ORDER BY m.created_at DESC 
+            LIMIT 1
+          ) as last_message_time,
+          (
+            SELECT COUNT(*) 
+            FROM messages m 
+            WHERE m.conversation_id = c.id AND m.receiver_id = ? AND m.is_read = FALSE
+          ) as unread_count
         FROM conversations c
         LEFT JOIN conversation_participants cp ON c.id = cp.conversation_id
-        LEFT JOIN users u_creator ON c.created_by = u_creator.id AND c.creator_type = 'parent'
-        LEFT JOIN staff s_creator ON c.created_by = s_creator.id AND c.creator_type IN ('admin', 'teacher')
-        LEFT JOIN users u_recipient ON cp.participant_id = u_recipient.id AND cp.participant_type = 'parent'
-        LEFT JOIN staff s_recipient ON cp.participant_id = s_recipient.id AND cp.participant_type IN ('admin', 'teacher')
-        LEFT JOIN messages m ON c.id = m.conversation_id AND m.id = (
-          SELECT id FROM messages m3 
-          WHERE m3.conversation_id = c.id 
-          ORDER BY created_at DESC LIMIT 1
-        )
-        
-        WHERE (c.created_by = ? AND c.creator_type = ?) 
-           OR (cp.participant_id = ? AND cp.participant_type = ?)
-        
-        ORDER BY COALESCE(m.created_at, c.created_at) DESC
+        WHERE cp.participant_id = ? AND cp.participant_type = ?
+        ORDER BY c.updated_at DESC
       `, [
-        user.id, user.id, user.id, user.id,
-        user.id, user.role, user.id, user.role
+        user.id, user.role,
+        user.id,
+        user.id, user.role
       ]);
 
-      console.log(`✅ Found ${conversations.length} conversations for ${user.email}`);
+      const participantPromises = conversations.map(async (conv) => {
+          if (conv.other_participant_info) {
+              const [type, id] = conv.other_participant_info.split(':');
+              const tableName = type === 'parent' ? 'users' : 'staff';
+              const [participantDetails] = await db.execute(`SELECT name, email FROM ${tableName} WHERE id = ?`, [id]);
+              if (participantDetails.length > 0) {
+                  conv.other_participant_name = participantDetails[0].name;
+                  conv.other_participant_email = participantDetails[0].email;
+                  conv.other_participant_role = type;
+              }
+          }
+          return conv;
+      });
+
+      const processedConversations = await Promise.all(participantPromises);
+
+
+      console.log(`✅ Found ${processedConversations.length} conversations for ${user.email}`);
 
       res.json({
         success: true,
-        conversations: conversations.map(conv => ({
+        conversations: processedConversations.map(conv => ({
           id: conv.conversation_id,
           subject: conv.subject,
           type: conv.type,
@@ -710,4 +708,4 @@ export default function setupMessagingEndpoints(app, db, io, verifyToken) {
   });
 
   console.log('✅ Messaging endpoints configured');
-}
+} 

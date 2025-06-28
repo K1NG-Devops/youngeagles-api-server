@@ -374,7 +374,7 @@ router.get('/profile', authMiddleware, isTeacher, async (req, res) => {
 
     // Get teacher profile from staff table with all fields
     const teacherRows = await query(
-      `SELECT id, name, email, phone, className, profilePicture, bio, joinDate, status,
+      `SELECT id, name, email, phone, className, bio, 
               qualification, specialization, experience_years, 
               emergency_contact_name, emergency_contact_phone, 
               profile_picture, created_at, updated_at
@@ -446,18 +446,9 @@ router.get('/profile', authMiddleware, isTeacher, async (req, res) => {
 });
 
 // Update teacher profile
-<<<<<<< HEAD
-router.put('/profile', authMiddleware, isTeacher, async (req, res) => {
-  try {
-    const teacherId = req.user?.id;
-    const { name, email, phone, bio } = req.body;
-    
-    console.log('✏️ PUT /teacher/profile - Updating teacher profile:', { teacherId, name, email });
-=======
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const teacherId = req.user?.id;
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
     
     if (!teacherId) {
       return res.status(400).json({ 
@@ -466,41 +457,6 @@ router.put('/profile', authMiddleware, async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
-    // Validate required fields
-    if (!name || !email) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Name and email are required' 
-      });
-    }
-
-    // Check if teacher exists
-    const existingTeacher = await query(
-      'SELECT id FROM staff WHERE id = ? AND role = "teacher"',
-      [teacherId],
-      'skydek_DB'
-    );
-
-    if (existingTeacher.length === 0) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Teacher not found' 
-      });
-    }
-
-    // Check if email is already taken by another teacher
-    const emailCheck = await query(
-      'SELECT id FROM staff WHERE email = ? AND id != ? AND role = "teacher"',
-      [email, teacherId],
-      'skydek_DB'
-    );
-
-    if (emailCheck.length > 0) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Email is already taken by another teacher' 
-=======
     const {
       name,
       phone,
@@ -517,16 +473,10 @@ router.put('/profile', authMiddleware, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Name is required'
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       });
     }
 
     // Update teacher profile
-<<<<<<< HEAD
-    await query(
-      'UPDATE staff SET name = ?, email = ?, phone = ?, bio = ? WHERE id = ? AND role = "teacher"',
-      [name, email, phone || null, bio || null, teacherId],
-=======
     await execute(
       `UPDATE staff SET 
        name = ?, 
@@ -550,53 +500,20 @@ router.put('/profile', authMiddleware, async (req, res) => {
         emergency_contact_phone || null,
         teacherId
       ],
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       'skydek_DB'
     );
 
     // Fetch updated profile
-<<<<<<< HEAD
-    const updatedTeacher = await query(
-      'SELECT id, name, email, phone, className, profilePicture, bio, joinDate, status FROM staff WHERE id = ? AND role = "teacher"',
-=======
     const updatedProfile = await query(
       `SELECT id, name, email, role, className, qualification, 
               specialization, bio, phone, experience_years, 
               emergency_contact_name, emergency_contact_phone, 
               profile_picture, created_at, updated_at
        FROM staff WHERE id = ? AND role = "teacher"`,
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       [teacherId],
       'skydek_DB'
     );
 
-<<<<<<< HEAD
-    const profile = {
-      id: updatedTeacher[0].id,
-      name: updatedTeacher[0].name,
-      email: updatedTeacher[0].email,
-      phone: updatedTeacher[0].phone || '',
-      className: updatedTeacher[0].className || '',
-      profilePicture: updatedTeacher[0].profilePicture || null,
-      bio: updatedTeacher[0].bio || '',
-      joinDate: updatedTeacher[0].joinDate || null,
-      status: updatedTeacher[0].status || 'active'
-    };
-
-    console.log('✅ Teacher profile updated successfully:', { name: profile.name });
-
-    res.json({
-      success: true,
-      teacher: profile,
-      message: 'Teacher profile updated successfully'
-    });
-    
-  } catch (error) {
-    console.error('❌ Error updating teacher profile:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error updating teacher profile',
-=======
     res.json({
       success: true,
       profile: updatedProfile[0],
@@ -608,26 +525,16 @@ router.put('/profile', authMiddleware, async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Error updating profile',
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       error: error.message 
     });
   }
 });
 
-<<<<<<< HEAD
-// Upload teacher profile picture
-router.post('/profile/upload-picture', authMiddleware, isTeacher, uploadProfilePicture.single('profilePicture'), async (req, res) => {
-  try {
-    const teacherId = req.user?.id;
-    
-    console.log('📸 POST /teacher/profile/upload-picture - Uploading profile picture for teacher:', teacherId);
-=======
 // Change teacher password
 router.put('/profile/password', authMiddleware, async (req, res) => {
   try {
     const teacherId = req.user?.id;
     const { currentPassword, newPassword } = req.body;
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
     
     if (!teacherId) {
       return res.status(400).json({ 
@@ -636,18 +543,6 @@ router.put('/profile/password', authMiddleware, async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
-    if (!req.file) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'No file uploaded' 
-      });
-    }
-
-    // Check if teacher exists
-    const existingTeacher = await query(
-      'SELECT id, profilePicture FROM staff WHERE id = ? AND role = "teacher"',
-=======
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -667,71 +562,17 @@ router.put('/profile/password', authMiddleware, async (req, res) => {
     // Get current password hash
     const teacherRows = await query(
       'SELECT password FROM staff WHERE id = ? AND role = "teacher"',
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       [teacherId],
       'skydek_DB'
     );
 
-<<<<<<< HEAD
-    if (existingTeacher.length === 0) {
-=======
     if (teacherRows.length === 0) {
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       return res.status(404).json({ 
         success: false,
         message: 'Teacher not found' 
       });
     }
 
-<<<<<<< HEAD
-    // Delete old profile picture if it exists
-    const oldProfilePicture = existingTeacher[0].profilePicture;
-    if (oldProfilePicture) {
-      const oldFilePath = path.join(__dirname, '../uploads/profiles/', path.basename(oldProfilePicture));
-      if (fs.existsSync(oldFilePath)) {
-        try {
-          fs.unlinkSync(oldFilePath);
-          console.log('🗑️ Deleted old profile picture:', oldFilePath);
-        } catch (err) {
-          console.warn('⚠️ Could not delete old profile picture:', err.message);
-        }
-      }
-    }
-
-    // Generate the URL for the uploaded file
-    const profilePictureUrl = `/uploads/profiles/${req.file.filename}`;
-
-    // Update teacher's profile picture in database
-    await query(
-      'UPDATE staff SET profilePicture = ? WHERE id = ? AND role = "teacher"',
-      [profilePictureUrl, teacherId],
-      'skydek_DB'
-    );
-
-    console.log('✅ Profile picture uploaded successfully:', { teacherId, filename: req.file.filename });
-
-    res.json({
-      success: true,
-      profilePicture: profilePictureUrl,
-      message: 'Profile picture uploaded successfully'
-    });
-    
-  } catch (error) {
-    console.error('❌ Error uploading profile picture:', error);
-    
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (cleanupErr) {
-        console.error('❌ Error cleaning up uploaded file:', cleanupErr);
-      }
-    }
-    
-    res.status(500).json({ 
-      success: false,
-      message: 'Error uploading profile picture',
-=======
     // Verify current password
     const validPassword = await bcrypt.compare(currentPassword, teacherRows[0].password);
     if (!validPassword) {
@@ -761,14 +602,11 @@ router.put('/profile/password', authMiddleware, async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Error updating password',
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
       error: error.message 
     });
   }
 });
 
-<<<<<<< HEAD
-=======
 // Enhanced Student Report System Routes
 router.post('/student-reports/:studentId/generate-pdf', authMiddleware, async (req, res) => {
   try {
@@ -784,9 +622,9 @@ router.post('/student-reports/:studentId/generate-pdf', authMiddleware, async (r
     );
     
     const [teacher] = await query(
-      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
       [teacherId],
-      'railway'
+      'skydek_DB'
     );
 
     if (!student || !teacher || student.className !== teacher.className) {
@@ -835,9 +673,9 @@ router.post('/student-reports/:studentId/generate-homework', authMiddleware, asy
     );
     
     const [teacher] = await query(
-      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
       [teacherId],
-      'railway'
+      'skydek_DB'
     );
 
     if (!student || !teacher || student.className !== teacher.className) {
@@ -896,9 +734,9 @@ router.get('/student-analytics/:studentId', authMiddleware, async (req, res) => 
     );
     
     const [teacher] = await query(
-      'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
       [teacherId],
-      'railway'
+      'skydek_DB'
     );
 
     if (!student || !teacher || student.className !== teacher.className) {
@@ -1036,5 +874,141 @@ router.post('/homework-library/:homeworkId/send-to-parent', authMiddleware, asyn
   }
 });
 
->>>>>>> 9e9fc5619ce65d2fb68a94634dad3a1e5bb9f0f4
+// Get children for a specific teacher
+router.get('/:teacherId/children', [authMiddleware, isTeacher], async (req, res) => {
+  const { teacherId } = req.params;
+  console.log(`🧑‍🏫 Children for teacher ${teacherId} requested by user ${req.user.id}`);
+
+  // Ensure the authenticated teacher is only requesting their own students
+  if (req.user.id !== parseInt(teacherId)) {
+    return res.status(403).json({ success: false, message: "Forbidden: You can only access your own class's students." });
+  }
+
+  try {
+    // First, find the teacher's class name from the staff table
+    const [teacher] = await query('SELECT className FROM staff WHERE id = ?', [teacherId]);
+
+    if (!teacher || !teacher.className) {
+      console.log(`⚠️ Teacher ${teacherId} not found or has no class assigned.`);
+      return res.status(404).json({ success: false, message: 'Teacher not found or no class assigned.' });
+    }
+
+    // Now, fetch all children in that class
+    const children = await query('SELECT * FROM children WHERE className = ?', [teacher.className]);
+
+    console.log(`✅ Found ${children.length} children in class '${teacher.className}' for teacher ${teacherId}.`);
+    res.json({ success: true, data: children });
+
+  } catch (error) {
+    console.error(`❌ Error fetching children for teacher ${teacherId}:`, error);
+    res.status(500).json({ success: false, message: 'Failed to fetch children.' });
+  }
+});
+
+// THIS IS THE CORRECTED ROUTE
+router.get('/children/teacher/:teacherId', [authMiddleware, isTeacher], async (req, res) => {
+  const { teacherId } = req.params;
+  console.log(`🧑‍🏫 Children for teacher ${teacherId} requested by user ${req.user.id}`);
+
+  // Ensure the authenticated teacher is only requesting their own students
+  if (req.user.id !== parseInt(teacherId)) {
+    return res.status(403).json({ success: false, message: "Forbidden: You can only access your own class's students." });
+  }
+
+  try {
+    // First, find the teacher's class name from the staff table
+    const [teacher] = await query('SELECT className FROM staff WHERE id = ?', [teacherId]);
+
+    if (!teacher || !teacher.className) {
+      console.log(`⚠️ Teacher ${teacherId} not found or has no class assigned.`);
+      return res.status(404).json({ success: false, message: 'Teacher not found or no class assigned.' });
+    }
+
+    // Now, fetch all children in that class
+    const children = await query('SELECT * FROM children WHERE className = ?', [teacher.className]);
+
+    console.log(`✅ Found ${children.length} children in class '${teacher.className}' for teacher ${teacherId}.`);
+    res.json({ success: true, data: children });
+
+  } catch (error) {
+    console.error(`❌ Error fetching children for teacher ${teacherId}:`, error);
+    res.status(500).json({ success: false, message: 'Failed to fetch children.' });
+  }
+});
+
+// Get homework for a specific teacher
+router.get('/:teacherId/homework', [authMiddleware, isTeacher], async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    
+    // Ensure the authenticated teacher is only requesting their own homework
+    if (req.user.id.toString() !== teacherId) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'You can only view your own homework assignments' 
+      });
+    }
+
+    // Get teacher's class first
+    const teacherRows = await query(
+      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'skydek_DB'
+    );
+
+    if (teacherRows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Teacher not found' 
+      });
+    }
+
+    const teacherClass = teacherRows[0].className;
+
+    // Get homework assigned by this teacher
+    const homework = await query(
+      `SELECT 
+        h.id, h.title, h.instructions, h.due_date, h.status, h.class_name, h.grade, h.created_at,
+        (SELECT COUNT(*) FROM submissions s WHERE s.homework_id = h.id) as submission_count,
+        (SELECT COUNT(*) FROM children c WHERE c.className = h.class_name) as total_students
+      FROM homeworks h 
+      WHERE h.uploaded_by_teacher_id = ? 
+      ORDER BY h.created_at DESC`,
+      [teacherId],
+      'skydek_DB'
+    );
+
+    // Format homework data for frontend
+    const formattedHomework = homework.map(hw => ({
+      id: hw.id,
+      title: hw.title,
+      instructions: hw.instructions,
+      dueDate: hw.due_date,
+      status: hw.status,
+      className: hw.class_name,
+      grade: hw.grade,
+      createdAt: hw.created_at,
+      submissionCount: parseInt(hw.submission_count) || 0,
+      totalStudents: parseInt(hw.total_students) || 0,
+      completionRate: hw.total_students > 0 ? Math.round((hw.submission_count / hw.total_students) * 100) : 0
+    }));
+
+    res.json({
+      success: true,
+      homework: formattedHomework,
+      totalHomework: formattedHomework.length,
+      teacherClass: teacherClass,
+      message: 'Teacher homework fetched successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error fetching teacher homework:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching homework',
+      error: error.message 
+    });
+  }
+});
+
 export default router;

@@ -19,10 +19,40 @@ import {
   generateWeeklyReport
 } from '../controllers/homeworkController.js';
 
-import {authMiddleware} from '../middleware/authMiddleware.js';
+import {authMiddleware, isTeacher} from '../middleware/authMiddleware.js';
 
 const router = Router();
 
+// Teacher submission viewing routes - MUST BE DEFINED FIRST
+router.get('/teacher/submissions', [authMiddleware, isTeacher], async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    
+    // Get submissions for homework assigned by this teacher
+    const submissions = await query(
+      'SELECT s.*, h.title as homework_title, u.name as parent_name FROM submissions s LEFT JOIN homeworks h ON s.homework_id = h.id LEFT JOIN users u ON s.parent_id = u.id WHERE h.uploaded_by_teacher_id = ? ORDER BY s.submitted_at DESC',
+      [teacherId],
+      'skydek_DB'
+    );
+    
+    res.json({
+      success: true,
+      submissions: submissions || [],
+      count: submissions ? submissions.length : 0
+    });
+  } catch (error) {
+    console.error('Error fetching homework submissions:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching submissions',
+      error: error.message 
+    });
+  }
+});
+
+router.get('/teacher/all-submissions', authMiddleware, getAllSubmissionsForTeacher);
+
+// Other routes
 router.post('/assign', authMiddleware, upload.single('file'), assignHomework);
 router.get('/', authMiddleware, getHomeworkForParent);
 router.post('/submit', authMiddleware, submitHomework);
@@ -32,10 +62,43 @@ router.get('/submissions/:homeworkId/:parentId', getSubmission);
 router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
 router.delete('/:homeworkId', authMiddleware, deleteHomework);
 router.put('/:homeworkId', authMiddleware, updateHomework);
-
-// Teacher submission viewing routes
 router.get('/:homeworkId/submissions', authMiddleware, getSubmissionsForHomework);
-router.get('/teacher/all-submissions', authMiddleware, getAllSubmissionsForTeacher);
+
+// Teacher-specific stats route
+router.get('/teacher/stats', [authMiddleware, isTeacher], async (req, res) => {
+  const teacherId = req.user.id;
+  try {
+    // Get total homeworks created by teacher
+    const [homeworksResult] = await query(
+      `SELECT COUNT(*) as totalHomeworks FROM homeworks WHERE uploaded_by_teacher_id = ?`,
+      [teacherId]
+    );
+
+    // Get total submissions for those homeworks
+    const [submissionsResult] = await query(
+      `SELECT COUNT(*) as totalSubmissions,
+              SUM(CASE WHEN status = 'Graded' THEN 1 ELSE 0 END) as gradedSubmissions,
+              SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pendingSubmissions
+       FROM submissions s
+       JOIN homeworks h ON s.homework_id = h.id
+       WHERE h.uploaded_by_teacher_id = ?`,
+      [teacherId]
+    );
+
+    const stats = {
+      totalHomeworks: homeworksResult.totalHomeworks || 0,
+      totalSubmissions: submissionsResult.totalSubmissions || 0,
+      gradedSubmissions: submissionsResult.gradedSubmissions || 0,
+      pendingSubmissions: submissionsResult.pendingSubmissions || 0,
+    };
+
+    res.json({ success: true, stats });
+
+  } catch (error) {
+    console.error(`Error fetching teacher stats for teacher ${teacherId}:`, error);
+    res.status(500).json({ success: false, message: "Failed to fetch teacher statistics." });
+  }
+});
 
 // **NEW ADVANCED HOMEWORK ROUTES**
 // Advanced homework creation with skills tracking
@@ -55,8 +118,8 @@ router.get('/skills/progress/:studentId', authMiddleware, getStudentSkillProgres
 router.get('/reports/weekly/:studentId', authMiddleware, generateWeeklyReport);
 router.post('/reports/weekly/generate', authMiddleware, generateWeeklyReport);
 
-// Get saved weekly report by ID
-router.get('/reports/saved/:id', authMiddleware, getSavedWeeklyReport);
+// Get saved weekly report by ID (temporarily disabled - function not implemented)
+// router.get('/reports/saved/:id', authMiddleware, getSavedWeeklyReport);
 
 router.get('/submissions', authMiddleware, async (req, res) => {
   try {

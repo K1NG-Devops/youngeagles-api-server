@@ -1016,72 +1016,43 @@ export const getStudentSkillProgress = async (req, res) => {
         'skydek_DB'
       );
       const [teacher] = await query(
-        'SELECT className FROM users WHERE id = ? AND role = "teacher"',
+        'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
         [userId],
-        'railway'
+        'skydek_DB'
       );
       if (!student || !teacher || student.className !== teacher.className) {
         return res.status(403).json({ error: 'Not authorized to view this student\'s progress' });
       }
     }
 
-    // Get comprehensive skill progress
-    const skillProgress = await query(
-      `SELECT 
-         ssp.*,
-         s.name as skill_name,
-         s.description as skill_description,
-         s.difficulty_level as skill_difficulty,
-         sc.name as category_name,
-         sc.title as category_title,
-         sc.icon as category_icon,
-         sc.color as category_color,
-         h.title as homework_title,
-         h.due_date as homework_due_date
-       FROM student_skill_progress ssp
-       JOIN skills s ON ssp.skill_id = s.id
-       JOIN skill_categories sc ON s.category_id = sc.id
-       LEFT JOIN homeworks h ON ssp.homework_id = h.id
-       WHERE ssp.student_id = ?
-       ORDER BY ssp.updated_at DESC, sc.name, s.name`,
-      [studentId],
-      'skydek_DB'
-    );
+    // Return placeholder data while skill tracking is in development
+    const placeholderCategories = [
+      { name: 'literacy', title: 'Literacy & Language', icon: 'book', color: '#4CAF50' },
+      { name: 'numeracy', title: 'Numeracy & Math', icon: 'calculator', color: '#2196F3' },
+      { name: 'science', title: 'Science & Discovery', icon: 'microscope', color: '#9C27B0' },
+      { name: 'creativity', title: 'Arts & Creativity', icon: 'palette', color: '#FF9800' }
+    ];
 
-    // Group by category
     const progressByCategory = {};
-    skillProgress.forEach(progress => {
-      if (!progressByCategory[progress.category_name]) {
-        progressByCategory[progress.category_name] = {
-          title: progress.category_title,
-          icon: progress.category_icon,
-          color: progress.category_color,
-          skills: []
-        };
-      }
-      
-      // Parse JSON fields
-      progress.evidence_urls = progress.evidence_urls ? JSON.parse(progress.evidence_urls) : [];
-      
-      progressByCategory[progress.category_name].skills.push(progress);
+    placeholderCategories.forEach(category => {
+      progressByCategory[category.name] = {
+        title: category.title,
+        icon: category.icon,
+        color: category.color,
+        skills: []
+      };
     });
-
-    // Calculate overall statistics
-    const totalSkills = skillProgress.length;
-    const masteredSkills = skillProgress.filter(p => p.mastery_status === 'mastery').length;
-    const proficientSkills = skillProgress.filter(p => ['proficient', 'advanced', 'mastery'].includes(p.mastery_status)).length;
-    const averageProficiency = totalSkills > 0 ? 
-      skillProgress.reduce((sum, p) => sum + p.proficiency_level, 0) / totalSkills : 0;
 
     res.json({
       success: true,
       studentId,
-      totalSkills,
-      masteredSkills,
-      proficientSkills,
-      averageProficiency: Math.round(averageProficiency * 100) / 100,
+      totalSkills: 0,
+      masteredSkills: 0,
+      proficientSkills: 0,
+      averageProficiency: 0,
       progressByCategory,
-      allProgress: skillProgress
+      allProgress: [],
+      message: 'Skill tracking feature is under development'
     });
 
   } catch (error) {

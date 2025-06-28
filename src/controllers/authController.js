@@ -1,5 +1,5 @@
 import { query, execute } from '../db.js';
-import bcrypt from 'bcryptjs';
+import { PasswordSecurity } from '../utils/security.js';
 import { generateToken } from '../utils/jwt.js';
 import { validationResult } from 'express-validator';
 import dotenv from 'dotenv';
@@ -35,7 +35,7 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Email already exists.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12); // Increased salt rounds
+    const hashedPassword = PasswordSecurity.hashPassword(password);
     
     // Prepare parameters - workAddress can be null, but other fields are required
     const params = [
@@ -134,7 +134,7 @@ export const loginUser = async (req, res) => {
     }
 
     const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
@@ -180,7 +180,7 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
@@ -225,7 +225,7 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
