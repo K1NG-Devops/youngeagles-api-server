@@ -193,7 +193,18 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Support both PBKDF2 (contains colon) and bcrypt password formats
+    let isMatch = false;
+    if (user.password.includes(':')) {
+      // PBKDF2 format (salt:hash)
+      const [salt, hash] = user.password.split(':');
+      const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+      isMatch = (hash === verifyHash);
+    } else {
+      // bcrypt format
+      isMatch = await bcrypt.compare(password, user.password);
+    }
+    
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
@@ -238,7 +249,18 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Support both PBKDF2 (contains colon) and bcrypt password formats
+    let isMatch = false;
+    if (user.password.includes(':')) {
+      // PBKDF2 format (salt:hash)
+      const [salt, hash] = user.password.split(':');
+      const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+      isMatch = (hash === verifyHash);
+    } else {
+      // bcrypt format
+      isMatch = await bcrypt.compare(password, user.password);
+    }
+    
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
