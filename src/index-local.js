@@ -4148,6 +4148,52 @@ async function startServer() {
 
       console.log(`✅ Created ${createdHomeworks.length} homework assignments successfully`);
 
+      // Send notification to parents in this class
+      try {
+        // Get teacher's name
+        const [teacherData] = await db.execute(
+          'SELECT name FROM staff WHERE id = ? AND role = "teacher"',
+          [user.id]
+        );
+        const teacherName = teacherData[0]?.name || user.name || 'Your teacher';
+        
+        // Get all parents with children in this class
+        const [parents] = await db.execute(
+          `SELECT DISTINCT c.parent_id, u.name as parent_name 
+           FROM children c 
+           LEFT JOIN users u ON c.parent_id = u.id 
+           WHERE c.className = ?`,
+          [teacherClass]
+        );
+        
+        console.log(`📢 Sending homework notifications to ${parents.length} parents in class ${teacherClass}`);
+        
+        // Create notifications for all parents in the class
+        for (const parent of parents) {
+          if (!parent.parent_id) continue;
+          
+          try {
+            await db.execute(
+              `INSERT INTO notifications (userId, userType, title, body, type, \`read\`, createdAt, updatedAt) 
+               VALUES (?, 'parent', ?, ?, 'homework', FALSE, NOW(), NOW())`,
+              [
+                parent.parent_id,
+                'New Homework Posted! 📚',
+                `Teacher ${teacherName} posted "${title}" for your child's class.`
+              ]
+            );
+            console.log(`✅ Notification created for parent ${parent.parent_id} (${parent.parent_name})`);
+          } catch (notificationError) {
+            console.error(`❌ Failed to create notification for parent ${parent.parent_id}:`, notificationError);
+          }
+        }
+        
+        console.log('✅ Homework notification process completed');
+      } catch (notificationError) {
+        console.error('❌ Error sending homework notifications:', notificationError);
+        // Don't fail the homework creation if notifications fail
+      }
+
       res.status(201).json({
         success: true,
         message: `Homework "${title}" created for ${createdHomeworks.length} student${createdHomeworks.length === 1 ? '' : 's'}`,
@@ -4783,18 +4829,66 @@ async function startServer() {
         ]
       );
 
+      const homeworkId = result.insertId;
+      
       console.log('✅ Homework created successfully:', {
-        homeworkId: result.insertId,
+        homeworkId,
         title,
         class_name
       });
 
+      // Send notification to parents in this class
+      try {
+        // Get teacher's name
+        const [teacherData] = await db.execute(
+          'SELECT name FROM staff WHERE id = ? AND role = "teacher"',
+          [user.id]
+        );
+        const teacherName = teacherData[0]?.name || 'Your teacher';
+        
+        // Get all parents with children in this class
+        const [parents] = await db.execute(
+          `SELECT DISTINCT c.parent_id, u.name as parent_name 
+           FROM children c 
+           LEFT JOIN users u ON c.parent_id = u.id 
+           WHERE c.className = ?`,
+          [class_name]
+        );
+        
+        console.log(`📢 Sending homework notifications to ${parents.length} parents in class ${class_name}`);
+        
+        // Create notifications for all parents in the class
+        for (const parent of parents) {
+          if (!parent.parent_id) continue;
+          
+          try {
+            await db.execute(
+              `INSERT INTO notifications (userId, userType, title, body, type, \`read\`, createdAt, updatedAt) 
+               VALUES (?, 'parent', ?, ?, 'homework', FALSE, NOW(), NOW())`,
+              [
+                parent.parent_id,
+                'New Homework Posted! 📚',
+                `Teacher ${teacherName} posted "${title}" for your child's class.`
+              ]
+            );
+            console.log(`✅ Notification created for parent ${parent.parent_id} (${parent.parent_name})`);
+          } catch (notificationError) {
+            console.error(`❌ Failed to create notification for parent ${parent.parent_id}:`, notificationError);
+          }
+        }
+        
+        console.log('✅ Homework notification process completed');
+      } catch (notificationError) {
+        console.error('❌ Error sending homework notifications:', notificationError);
+        // Don't fail the homework creation if notifications fail
+      }
+
       res.json({
         success: true,
         message: 'Homework created successfully',
-        homeworkId: result.insertId,
+        homeworkId: homeworkId,
         homework: {
-          id: result.insertId,
+          id: homeworkId,
           title,
           instructions: instructions || '',
           due_date,

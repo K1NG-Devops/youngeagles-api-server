@@ -215,17 +215,30 @@ export const submitHomework = async (req, res) => {
     isInteractive 
   } = req.body;
   
+  // Handle uploaded files from multer
+  const uploadedFiles = req.files || [];
+  const hasUploadedFiles = uploadedFiles.length > 0;
+  
+  // Generate file URLs from uploaded files
+  let finalFileURL = fileURL; // Use existing fileURL if provided
+  if (hasUploadedFiles) {
+    // Create file URLs for uploaded files
+    const fileURLs = uploadedFiles.map(file => `/uploads/homework/${file.filename}`);
+    finalFileURL = fileURLs.length === 1 ? fileURLs[0] : JSON.stringify(fileURLs);
+  }
+  
   // Log the extracted values for debugging
   console.log('📊 Extracted values:', {
     homeworkId, 
     parentId, 
     childId, 
     childName, 
-    fileURL, 
+    fileURL: finalFileURL, 
     comment, 
     completion_answer, 
     activity_result, 
-    isInteractive
+    isInteractive,
+    uploadedFilesCount: uploadedFiles.length
   });
   
   // Validate required fields
@@ -235,7 +248,7 @@ export const submitHomework = async (req, res) => {
   }
   
   // For non-interactive homework, require either file or completion answer
-  if (!isInteractive && !fileURL && !completion_answer) {
+  if (!isInteractive && !finalFileURL && !completion_answer) {
     console.log('❌ Validation failed: File or completion answer required for non-interactive homework');
     return res.status(400).json({ message: "Either file upload or completion answer is required" });
   }
@@ -246,7 +259,7 @@ export const submitHomework = async (req, res) => {
     // Insert the homework submission including child_id for proper differentiation
     // Use empty string for file_url if null to avoid NOT NULL constraint
     const sql = `INSERT INTO submissions (homework_id, parent_id, child_id, file_url, comment, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())`;
-    const result = await execute(sql, [homeworkId, parentId, childId || null, fileURL || '', comment || ''], 'skydek_DB');
+    const result = await execute(sql, [homeworkId, parentId, childId || null, finalFileURL || '', comment || ''], 'skydek_DB');
     
     console.log('✅ Submission inserted successfully:', result);
     

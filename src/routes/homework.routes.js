@@ -22,6 +22,110 @@ import { sendPushNotification } from '../utils/pushNotifications.js';
 
 import {authMiddleware, isTeacher} from '../middleware/authMiddleware.js';
 
+// Function to send homework notification to parents
+const sendHomeworkNotification = async (className, homeworkTitle, teacherName, homeworkId) => {
+  try {
+    console.log('📢 Sending homework notification:', {
+      className,
+      homeworkTitle,
+      teacherName,
+      homeworkId
+    });
+    
+    // Get all parents with children in this class
+    const parents = await query(
+      `SELECT DISTINCT c.parent_id, u.name as parent_name 
+       FROM children c 
+       LEFT JOIN users u ON c.parent_id = u.id 
+       WHERE c.className = ?`,
+      [className],
+      'skydek_DB'
+    );
+    
+    console.log(`Found ${parents.length} parents in class ${className}`);
+    
+    if (parents.length === 0) {
+      console.log('No parents found for this class');
+      return;
+    }
+    
+    // Get FCM tokens for these parents
+    const parentIds = parents.map(p => p.parent_id).filter(id => id !== null);
+    if (parentIds.length === 0) {
+      console.log('No valid parent IDs found');
+      return;
+    }
+    
+    const tokens = await query(
+      `SELECT user_id, token FROM fcm_tokens 
+       WHERE user_id IN (${parentIds.map(() => '?').join(',')}) AND is_active = TRUE`,
+      parentIds,
+      'skydek_DB'
+    );
+    
+    console.log(`Found ${tokens.length} active FCM tokens`);
+    
+    // Prepare notification payload
+    const notification = {
+      title: 'New Homework Posted! 📚',
+      body: `Teacher ${teacherName} posted "${homeworkTitle}" for your child's class.`,
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-96x96.png',
+      tag: `homework-${homeworkId}`,
+      data: {
+        type: 'homework',
+        homeworkId: homeworkId.toString(),
+        teacherName,
+        className,
+        url: '/homework'
+      }
+    };
+    
+    // Send push notification using the new system (temporarily disabled)
+    const tokenList = tokens.map(t => t.token);
+    
+    // const pushResult = await sendPushNotification(
+    //   tokenList,
+    //   notification,
+    //   notification.data
+    // );
+    
+    console.log(`📱 Would send push notification to ${tokenList.length} devices (temporarily disabled)`);
+    
+    // Store notification in database for all parents in the class
+    console.log(`📝 Creating notifications for ${parents.length} parents in ${className} class`);
+    
+    for (const parent of parents) {
+      if (!parent.parent_id) {
+        console.log('Skipping parent with null ID');
+        continue;
+      }
+      
+      try {
+                 await execute(
+           `INSERT INTO notifications (userId, userType, title, body, type, isRead, createdAt, updatedAt) 
+            VALUES (?, 'parent', ?, ?, 'homework', FALSE, NOW(), NOW())`,
+           [
+             parent.parent_id,
+             notification.title,
+             notification.body
+           ],
+           'skydek_DB'
+         );
+        console.log(`✅ Notification created for parent ${parent.parent_id} (${parent.parent_name})`);
+      } catch (error) {
+        console.error(`❌ Failed to create notification for parent ${parent.parent_id}:`, error);
+      }
+    }
+    
+    console.log('✅ Homework notification process completed');
+    
+  } catch (error) {
+    console.error('❌ Error sending homework notification:', error);
+    // Don't throw error to prevent homework upload from failing
+  }
+};
+
 const router = Router();
 
 // Teacher submission viewing routes - MUST BE DEFINED FIRST
@@ -75,7 +179,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     
     // Get teacher's class to validate
     const teacherData = await query(
-      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
+      'SELECT className, name FROM staff WHERE id = ? AND role = "teacher"',
       [teacherId],
       'skydek_DB'
     );
@@ -89,6 +193,7 @@ router.post('/create', authMiddleware, async (req, res) => {
     }
     
     const teacherClass = teacherData[0].className;
+    const teacherName = teacherData[0].name || 'Your teacher';
     
     // Validate teacher can assign to this class
     if (teacherClass && teacherClass !== class_name) {
@@ -124,18 +229,29 @@ router.post('/create', authMiddleware, async (req, res) => {
       'skydek_DB'
     );
     
+    const homeworkId = result.insertId;
+    
     console.log('✅ Homework created successfully:', {
-      homeworkId: result.insertId,
+      homeworkId,
       title,
       class_name
     });
     
+    // Send notification to parents in this class
+    try {
+      await sendHomeworkNotification(class_name, title, teacherName, homeworkId);
+      console.log('✅ Homework notification sent successfully');
+    } catch (notificationError) {
+      console.error('❌ Failed to send homework notification:', notificationError);
+      // Don't fail the homework creation if notification fails
+    }
+    
     res.status(201).json({
       success: true,
       message: 'Homework created successfully',
-      homeworkId: result.insertId,
+      homeworkId: homeworkId,
       homework: {
-        id: result.insertId,
+        id: homeworkId,
         title,
         instructions: description || '',
         due_date: formattedDueDate,
@@ -159,9 +275,10 @@ router.get('/', authMiddleware, getHomeworkForParent);
 router.post('/submit', authMiddleware, submitHomework);
 
 // Route for submitting homework with homeworkId parameter (PWA compatibility)
-router.post('/submit/:homeworkId', authMiddleware, async (req, res) => {
+router.post('/submit/:homeworkId', authMiddleware, upload.array('files', 5), async (req, res) => {
   console.log('📝 Submit homework with homeworkId parameter:', req.params.homeworkId);
-  console.log('📝 Request body:', req.body);
+  console.log('📝 Request body before mapping:', req.body);
+  console.log('📝 Files received:', req.files ? req.files.length : 0);
   
   // Extract homeworkId from URL parameter and add it to the request body
   req.body.homeworkId = req.params.homeworkId;
@@ -173,6 +290,13 @@ router.post('/submit/:homeworkId', authMiddleware, async (req, res) => {
   if (req.body.child_id && !req.body.childId) {
     req.body.childId = req.body.child_id;
   }
+  
+  console.log('📝 Request body after mapping:', {
+    homeworkId: req.body.homeworkId,
+    parentId: req.body.parentId,
+    childId: req.body.childId,
+    comment: req.body.comment
+  });
   
   console.log('📝 Processed request body:', {
     homeworkId: req.body.homeworkId,

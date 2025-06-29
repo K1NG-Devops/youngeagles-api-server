@@ -243,11 +243,27 @@ router.get('/stats', authMiddleware, async (req, res) => {
     if (teacherRows.length === 0) {
       return res.status(404).json({ 
         success: false,
-        message: 'Teacher not found' 
+        message: 'Teacher not found or not assigned to any class' 
       });
     }
 
     const teacherClass = teacherRows[0].className;
+    
+    // Handle case where teacher has no class assigned
+    if (!teacherClass) {
+      console.log(`⚠️ Teacher ${teacherId} has no class assigned`);
+      return res.json({
+        success: true,
+        stats: {
+          totalHomework: 0,
+          totalSubmissions: 0,
+          totalStudents: 0,
+          submissionRate: 0
+        },
+        teacherClass: null,
+        message: 'No class assigned to teacher'
+      });
+    }
 
     // Get homework count
     const homeworkCount = await query(
@@ -256,10 +272,10 @@ router.get('/stats', authMiddleware, async (req, res) => {
       'skydek_DB'
     );
 
-    // Get submission count for teacher's homework
+    // Get submission count for teacher's homework (using correct table name)
     const submissionCount = await query(
-      `SELECT COUNT(*) as count FROM homework_submissions hs 
-       JOIN homeworks h ON hs.homework_id = h.id 
+      `SELECT COUNT(*) as count FROM submissions s 
+       JOIN homeworks h ON s.homework_id = h.id 
        WHERE h.uploaded_by_teacher_id = ?`,
       [teacherId],
       'skydek_DB'
@@ -293,10 +309,17 @@ router.get('/stats', authMiddleware, async (req, res) => {
     
   } catch (error) {
     console.error('Error in teacher stats endpoint:', error);
+    console.error('Full error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      sqlMessage: error.sqlMessage
+    });
     res.status(500).json({ 
       success: false,
       message: 'Error fetching stats',
-      error: error.message 
+      error: error.message,
+      details: error.sqlMessage || 'Database connection error'
     });
   }
 });

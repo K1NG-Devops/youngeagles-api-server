@@ -86,7 +86,7 @@ const sendHomeworkNotification = async (className, homeworkTitle, teacherName, h
     for (const parent of parents) {
       try {
         await execute(
-          `INSERT INTO notifications (userId, userType, title, body, type, \`read\`, createdAt, updatedAt) 
+          `INSERT INTO notifications (userId, userType, title, body, type, isRead, createdAt, updatedAt) 
            VALUES (?, 'parent', ?, ?, 'homework', FALSE, NOW(), NOW())`,
           [
             parent.parent_id,
@@ -172,9 +172,9 @@ router.post('/upload', authMiddleware, isTeacher, async (req, res) => {
     
     // Get teacher's name for notification
     const [teacher] = await query(
-      'SELECT name FROM users WHERE id = ?',
+      'SELECT name FROM staff WHERE id = ? AND role = "teacher"',
       [uploadedBy],
-      'railway'
+      'skydek_DB'
     );
     const teacherName = teacher?.name || 'Your teacher';
     
