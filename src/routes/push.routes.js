@@ -53,4 +53,32 @@ router.post('/subscribe', authMiddleware, async (req, res) => {
   }
 });
 
-export default router; 
+// Unsubscribe from push notifications
+router.delete('/unsubscribe', authMiddleware, async (req, res) => {
+  const { endpoint } = req.body;
+  const userId = req.user.id;
+
+  if (!endpoint) {
+    return res.status(400).json({ error: 'Endpoint is required to unsubscribe.' });
+  }
+
+  try {
+    const result = await execute(
+      'DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?',
+      [userId, endpoint]
+    );
+
+    if (result.affectedRows === 0) {
+      console.log(`⚠️ No subscription found for user ${userId} with endpoint: ${endpoint}`);
+      return res.status(404).json({ message: 'Subscription not found.' });
+    }
+
+    console.log(`✅ Subscription removed for user ${userId}`);
+    res.status(200).json({ message: 'Successfully unsubscribed.' });
+  } catch (error) {
+    console.error('❌ Error removing push subscription:', error);
+    res.status(500).json({ error: 'Failed to unsubscribe.' });
+  }
+});
+
+export default router;

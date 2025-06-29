@@ -357,7 +357,7 @@ export const getHomeworksForTeacher = async (req, res) => {
       
       // Get submission count for this homework
       const submissionCount = await query(
-        'SELECT COUNT(*) as count FROM homework_submissions WHERE homework_id = ?',
+        'SELECT COUNT(*) as count FROM submissions WHERE homework_id = ?',
         [hw.id],
         'skydek_DB'
       );

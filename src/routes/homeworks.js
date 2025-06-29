@@ -2,7 +2,7 @@ import express from 'express';
 import { query, execute } from '../db.js';
 import { getHomeworkForParent, getHomeworksForTeacher, submitHomework, debugHomeworkSubmission } from '../controllers/homeworkController.js';
 import { authMiddleware, isTeacher } from '../middleware/authMiddleware.js';
-import { sendPushNotification } from '../utils/pushNotifications.js';
+// import { sendPushNotification } from '../utils/pushNotifications.js'; // Commented out if causing issues
 
 // Function to send homework notification to parents
 const sendHomeworkNotification = async (className, homeworkTitle, teacherName, homeworkId) => {
@@ -60,37 +60,45 @@ const sendHomeworkNotification = async (className, homeworkTitle, teacherName, h
       }
     };
     
-    // Send push notification using the new system
+    // Send push notification using the new system (temporarily disabled)
     const tokenList = tokens.map(t => t.token);
     
-    const pushResult = await sendPushNotification(
-      tokenList,
-      notification,
-      notification.data
-    );
+    // const pushResult = await sendPushNotification(
+    //   tokenList,
+    //   notification,
+    //   notification.data
+    // );
     
-    if (pushResult.success) {
-      console.log(`✅ Push notification sent to ${pushResult.successCount} devices`);
-      if (pushResult.failureCount > 0) {
-        console.log(`⚠️  ${pushResult.failureCount} notifications failed to send`);
-      }
-    } else {
-      console.log(`📱 Push notification not sent: ${pushResult.reason || pushResult.error}`);
-    }
+    console.log(`📱 Would send push notification to ${tokenList.length} devices (temporarily disabled)`);
     
-    // Store notification in database for parents to see
+    // if (pushResult.success) {
+    //   console.log(`✅ Push notification sent to ${pushResult.successCount} devices`);
+    //   if (pushResult.failureCount > 0) {
+    //     console.log(`⚠️  ${pushResult.failureCount} notifications failed to send`);
+    //   }
+    // } else {
+    //   console.log(`📱 Push notification not sent: ${pushResult.reason || pushResult.error}`);
+    // }
+    
+    // Store notification in database for all parents in the class
+    console.log(`📝 Creating notifications for ${parents.length} parents in ${className} class`);
+    
     for (const parent of parents) {
-      await execute(
-        `INSERT INTO notifications (user_id, user_type, title, message, type, related_id, related_type, created_at) 
-         VALUES (?, 'parent', ?, ?, 'homework', ?, 'homework', NOW())`,
-        [
-          parent.parent_id,
-          notification.title,
-          notification.body,
-          homeworkId
-        ],
-        'skydek_DB'
-      );
+      try {
+        await execute(
+          `INSERT INTO notifications (userId, userType, title, body, type, \`read\`, createdAt, updatedAt) 
+           VALUES (?, 'parent', ?, ?, 'homework', FALSE, NOW(), NOW())`,
+          [
+            parent.parent_id,
+            notification.title,
+            notification.body
+          ],
+          'skydek_DB'
+        );
+        console.log(`✅ Notification created for parent ${parent.parent_id} (${parent.parent_name})`);
+      } catch (error) {
+        console.error(`❌ Failed to create notification for parent ${parent.parent_id}:`, error);
+      }
     }
     
     console.log('✅ Homework notification process completed');
@@ -250,6 +258,65 @@ router.get('/for-teacher/:teacherId', authMiddleware, getHomeworksForTeacher);
 
 // Route for submitting homework
 router.post('/submit', authMiddleware, submitHomework);
+
+// Route for submitting homework with homeworkId parameter (PWA compatibility)
+router.post('/submit/:homeworkId', authMiddleware, async (req, res) => {
+  console.log('📝 Submit homework with homeworkId parameter:', req.params.homeworkId);
+  
+  // Extract homeworkId from URL parameter and add it to the request body
+  req.body.homeworkId = req.params.homeworkId;
+  
+  try {
+    // Call the existing submitHomework function
+    await submitHomework(req, res);
+    
+    // If submission was successful, create notifications
+    if (res.statusCode === 201) {
+      const { homeworkId } = req.params;
+      const { parentId, childId } = req.body;
+      
+      // Get homework and child information for notification
+      const [homework] = await query(
+        'SELECT title, class_name FROM homeworks WHERE id = ?',
+        [homeworkId],
+        'skydek_DB'
+      );
+      
+      const [child] = await query(
+        'SELECT name FROM children WHERE id = ?',
+        [childId],
+        'skydek_DB'
+      );
+      
+      if (homework && homework.length > 0 && child && child.length > 0) {
+        const homeworkTitle = homework[0].title;
+        const childName = child[0].name;
+        
+        // Create notification for parent only (preschool children don't need notifications)
+        await execute(
+          `INSERT INTO notifications (userId, userType, title, body, type, createdAt, updatedAt) 
+           VALUES (?, 'parent', ?, ?, 'homework', NOW(), NOW())`,
+          [
+            parentId,
+            'Homework Submitted Successfully',
+            `${childName} has successfully submitted homework: "${homeworkTitle}"`
+          ],
+          'skydek_DB'
+        );
+        
+        console.log('✅ Homework submission notifications created');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error in homework submission with parameter:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Internal server error during submission',
+        error: error.message 
+      });
+    }
+  }
+});
 
 // Route for listing homeworks by class
 // Route for completing homework (saving completion answer)

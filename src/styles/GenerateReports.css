@@ -1,0 +1,194 @@
+/* GenerateReports.css */
+
+/* Card Styles */
+.ant-card {
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  background-color: var(--bg-dark, #1f2937) !important;
+  border-color: var(--border-dark, #374151) !important;
+}
+
+.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.ant-card-head {
+  background-color: var(--bg-dark, #1f2937) !important;
+  border-color: var(--border-dark, #374151) !important;
+}
+
+/* Radio Button Styles */
+.ant-radio-button-wrapper {
+  border-radius: 8px !important;
+  margin: 4px !important;
+  transition: all 0.3s ease;
+  background-color: var(--bg-dark-secondary, #374151) !important;
+  border-color: var(--border-dark, #4b5563) !important;
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.ant-radio-button-wrapper:hover {
+  transform: translateY(-1px);
+}
+
+.ant-radio-button-wrapper-checked {
+  background-color: var(--primary-dark, #3b82f6) !important;
+  border-color: var(--primary-dark, #3b82f6) !important;
+  color: white !important;
+}
+
+/* Select Styles */
+.ant-select {
+  width: 100%;
+}
+
+.ant-select-selector {
+  border-radius: 8px !important;
+  height: 40px !important;
+  padding: 4px 12px !important;
+  background-color: var(--bg-dark-secondary, #374151) !important;
+  border-color: var(--border-dark, #4b5563) !important;
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.ant-select-selection-placeholder {
+  color: var(--text-dark-secondary, #9ca3af) !important;
+}
+
+.ant-select-dropdown {
+  background-color: var(--bg-dark, #1f2937) !important;
+  border-color: var(--border-dark, #374151) !important;
+}
+
+.ant-select-item {
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.ant-select-item-option-selected {
+  background-color: var(--bg-dark-secondary, #374151) !important;
+}
+
+/* Date Range Picker Styles */
+.rdrDateRangePickerWrapper {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-dark, #1f2937) !important;
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.rdrDateDisplayWrapper {
+  background-color: var(--bg-dark-secondary, #374151) !important;
+}
+
+.rdrDateDisplay {
+  margin: 0.8em;
+}
+
+.rdrDefinedRangesWrapper {
+  border-right: 1px solid var(--border-dark, #374151) !important;
+  background-color: var(--bg-dark, #1f2937) !important;
+}
+
+.rdrDayNumber span {
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.rdrMonthAndYearPickers select {
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+.rdrDateInput {
+  background-color: var(--bg-dark-secondary, #374151) !important;
+}
+
+.rdrDayToday .rdrDayNumber span:after {
+  background-color: var(--primary-dark, #3b82f6) !important;
+}
+
+/* Button Styles */
+.ant-btn {
+  border-radius: 8px;
+  height: 44px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.ant-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.ant-btn-primary {
+  background-color: var(--primary-dark, #3b82f6) !important;
+  border-color: var(--primary-dark, #3b82f6) !important;
+}
+
+.ant-btn-primary:hover {
+  background-color: var(--primary-dark-hover, #2563eb) !important;
+  border-color: var(--primary-dark-hover, #2563eb) !important;
+}
+
+/* Preview Section Styles */
+.preview-section {
+  border-radius: 12px;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  background-color: var(--bg-dark-secondary, #374151);
+}
+
+/* Loading Spinner Styles */
+.ant-spin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ant-spin-dot {
+  font-size: 24px;
+}
+
+.ant-spin-dot i {
+  background-color: var(--primary-dark, #3b82f6) !important;
+}
+
+/* Message Styles */
+.ant-message-notice-content {
+  animation: slideIn 0.3s ease;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  background-color: var(--bg-dark, #1f2937) !important;
+  color: var(--text-dark, #e5e7eb) !important;
+}
+
+/* Animation */
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .ant-card {
+    margin-bottom: 16px;
+  }
+
+  .rdrDateRangePickerWrapper {
+    font-size: 14px;
+  }
+
+  .ant-radio-group {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+} 

@@ -1,1 +1,6 @@
 2025-06-19 11:37:35:3735 [31merror[39m: [31mError fetching notifications: Table 'skydek_DB.notifications' doesn't exist[39m
+2025-06-29 15:33:40:3340 [31merror[39m: [31mError fetching contacts: read ECONNRESET[39m
+2025-06-29 15:33:41:3341 [31merror[39m: [31mError fetching contacts: read ECONNRESET[39m
+2025-06-29 20:36:19:3619 [31merror[39m: [31mError fetching contacts: read ECONNRESET[39m
+2025-06-29 20:36:37:3637 [31merror[39m: [31mError fetching contacts: read ECONNRESET[39m
+2025-06-29 20:50:56:5056 [31merror[39m: [31mError fetching contacts: read ETIMEDOUT[39m

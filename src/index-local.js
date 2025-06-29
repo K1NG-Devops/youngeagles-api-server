@@ -482,7 +482,7 @@ async function startServer() {
   });
 
   // Get children for teacher (for assignment creation)
-  app.get('/auth/children', async (req, res) => {
+  app.get('/api/auth/children', async (req, res) => {
     console.log('👶 Teacher children endpoint requested');
     try {
       const user = verifyToken(req);
@@ -3355,7 +3355,7 @@ async function startServer() {
   });
 
   // Teacher homework stats endpoint
-  app.get('/homework/teacher/stats', async (req, res) => {
+  app.get('/api/homework/teacher/stats', async (req, res) => {
     console.log('📊 Teacher homework stats requested');
     const user = verifyToken(req);
     if (!user || user.role !== 'teacher') {
@@ -3396,10 +3396,10 @@ async function startServer() {
       const [homeworkRows] = await db.execute(
         `SELECT
           COUNT(*) as total,
-          SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as active,
-          SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
-          COUNT(DISTINCT class_name) as classes
-         FROM homeworks WHERE uploaded_by_teacher_id = ?`,
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+          COUNT(DISTINCT class_id) as classes
+         FROM homework WHERE teacher_id = ?`,
         [user.id]
       );
 
@@ -3416,11 +3416,11 @@ async function startServer() {
       const [submissionRows] = await db.execute(
         `SELECT
           COUNT(*) as total,
-          COUNT(*) as pending,
-          0 as graded
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END) as graded
          FROM submissions s
-         JOIN homeworks h ON h.id = s.homework_id
-         WHERE h.uploaded_by_teacher_id = ?`,
+         JOIN homework h ON h.id = s.homework_id
+         WHERE h.teacher_id = ?`,
         [user.id]
       );
       
@@ -3428,15 +3428,14 @@ async function startServer() {
         stats.submissions.total = submissionRows[0].total || 0;
         stats.submissions.pending = submissionRows[0].pending || 0;
         stats.submissions.graded = submissionRows[0].graded || 0;
-        // Keep the student count from teacher's class, not from submissions
       }
 
       // Step 5: Get recent activity
       const [recentActivity] = await db.execute(
         `SELECT h.id, h.title, h.status, h.due_date, COUNT(s.id) as submission_count
-         FROM homeworks h
+         FROM homework h
          LEFT JOIN submissions s ON h.id = s.homework_id
-         WHERE h.uploaded_by_teacher_id = ?
+         WHERE h.teacher_id = ?
          GROUP BY h.id
          ORDER BY h.created_at DESC
          LIMIT 5`,
@@ -3448,7 +3447,7 @@ async function startServer() {
       const transformedStats = {
         totalHomework: stats.homework.total,
         totalSubmissions: stats.submissions.total,
-        totalStudents: totalStudents, // Use the actual student count from teacher's class
+        totalStudents: totalStudents,
         submissionRate: stats.homework.total > 0 && totalStudents > 0 
           ? Math.round((stats.submissions.total / (stats.homework.total * totalStudents)) * 100)
           : 0,

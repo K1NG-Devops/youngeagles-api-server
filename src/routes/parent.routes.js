@@ -13,14 +13,29 @@ router.get('/test', (req, res) => {
   });
 });
 
-// Get parent's children (simplified)
+// Get parent's children
 router.get('/children', authMiddleware, async (req, res) => {
   try {
+    const parentId = req.user?.id;
+    
+    if (!parentId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+    }
+
+    // Fetch children for this parent
+    const children = await query(
+      'SELECT id, name, age, className, grade FROM children WHERE parent_id = ?',
+      [parentId],
+      'skydek_DB'
+    );
+
     res.json({
       success: true,
-      children: [],
-      message: 'Parent children endpoint working - database queries temporarily disabled',
-      parentId: req.user?.id || 'unknown'
+      children: children,
+      parentId: parentId
     });
   } catch (error) {
     console.error('Error in parent children endpoint:', error);
@@ -32,17 +47,44 @@ router.get('/children', authMiddleware, async (req, res) => {
   }
 });
 
-// Get parent's profile (simplified)
+// Get parent's profile
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
+    const parentId = req.user?.id;
+    
+    if (!parentId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+    }
+
+    // Fetch parent profile from database
+    const parentProfile = await query(
+      'SELECT id, name, email, phone, address, created_at FROM users WHERE id = ?',
+      [parentId],
+      'skydek_DB'
+    );
+
+    if (parentProfile.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Parent profile not found'
+      });
+    }
+
+    const profile = parentProfile[0];
+    
     res.json({
       success: true,
       profile: {
-        id: req.user?.id || 'unknown',
-        name: req.user?.name || 'Test Parent',
-        email: req.user?.email || 'test@example.com'
-      },
-      message: 'Parent profile endpoint working - database queries temporarily disabled'
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone || null,
+        address: profile.address || null,
+        member_since: profile.created_at
+      }
     });
   } catch (error) {
     console.error('Error in parent profile endpoint:', error);
@@ -54,14 +96,66 @@ router.get('/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// Get homework for parent's children (simplified)
+// Get homework for parent's children
 router.get('/homework', authMiddleware, async (req, res) => {
   try {
+    const parentId = req.user?.id;
+    
+    if (!parentId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+    }
+
+    // First get all children for this parent
+    const children = await query(
+      'SELECT id, name, className FROM children WHERE parent_id = ?',
+      [parentId],
+      'skydek_DB'
+    );
+
+    if (children.length === 0) {
+      return res.json({
+        success: true,
+        homework: [],
+        message: 'No children found for this parent'
+      });
+    }
+
+    const childIds = children.map(child => child.id);
+    const placeholders = childIds.map(() => '?').join(',');
+
+    // Fetch homework and submissions for all children
+    const homework = await query(
+      `SELECT 
+        h.id,
+        h.title,
+        h.instructions as description,
+        h.due_date,
+        h.class_name,
+        h.type as subject,
+        s.status as submission_status,
+        s.grade,
+        s.feedback,
+        s.submitted_at,
+        c.name as child_name,
+        c.id as child_id
+      FROM homeworks h
+      LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id IN (${placeholders})
+      LEFT JOIN children c ON s.child_id = c.id
+      WHERE h.class_name IN (${children.map(child => '?').join(',')})
+      ORDER BY h.due_date DESC
+      LIMIT 20`,
+      [...childIds, ...children.map(child => child.className)],
+      'skydek_DB'
+    );
+
     res.json({
       success: true,
-      homework: [],
-      message: 'Parent homework endpoint working - database queries temporarily disabled',
-      parentId: req.user?.id || 'unknown'
+      homework: homework,
+      children: children,
+      parentId: parentId
     });
   } catch (error) {
     console.error('Error in parent homework endpoint:', error);
@@ -145,7 +239,7 @@ router.get('/reports', authMiddleware, async (req, res) => {
         s.status as submission_status,
         s.grade,
         s.feedback
-      FROM homework h
+      FROM homeworks h
       LEFT JOIN submissions s ON h.id = s.homework_id
       WHERE s.child_id = ?
       ORDER BY h.due_date DESC

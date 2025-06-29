@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import upload from '../middleware/uploadMiddleware.js';
-import { query } from '../db.js';
+import { query, execute } from '../db.js';
 import {
   assignHomework,
   getHomeworkForParent,
@@ -18,6 +18,7 @@ import {
   getStudentSkillProgress,
   generateWeeklyReport
 } from '../controllers/homeworkController.js';
+import { sendPushNotification } from '../utils/pushNotifications.js';
 
 import {authMiddleware, isTeacher} from '../middleware/authMiddleware.js';
 
@@ -54,8 +55,183 @@ router.get('/teacher/all-submissions', authMiddleware, getAllSubmissionsForTeach
 
 // Other routes
 router.post('/assign', authMiddleware, upload.single('file'), assignHomework);
+
+// Create homework endpoint (without file requirement)
+router.post('/create', authMiddleware, async (req, res) => {
+  try {
+    const { title, description, class_name, due_date, child_ids } = req.body;
+    const teacherId = req.user.id;
+    
+    console.log('📝 Creating homework:', { title, class_name, due_date, child_ids });
+    
+    // Validate required fields
+    if (!title || !due_date || !class_name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, due date, and class name are required',
+        error: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+    
+    // Get teacher's class to validate
+    const teacherData = await query(
+      'SELECT className FROM staff WHERE id = ? AND role = "teacher"',
+      [teacherId],
+      'skydek_DB'
+    );
+    
+    if (teacherData.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Teacher not found or not authorized',
+        error: 'TEACHER_NOT_FOUND'
+      });
+    }
+    
+    const teacherClass = teacherData[0].className;
+    
+    // Validate teacher can assign to this class
+    if (teacherClass && teacherClass !== class_name) {
+      return res.status(403).json({
+        success: false,
+        message: `You can only create homework for your assigned class: ${teacherClass}`,
+        error: 'CLASS_NOT_ASSIGNED'
+      });
+    }
+    
+    // Format due date
+    const formattedDueDate = new Date(due_date).toISOString().split('T')[0];
+    
+    // Insert homework into database
+    const result = await execute(
+      `INSERT INTO homeworks (
+        title, 
+        instructions, 
+        due_date, 
+        class_name, 
+        uploaded_by_teacher_id, 
+        grade, 
+        status, 
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, 'R', 'Pending', NOW())`,
+      [
+        title,
+        description || '',
+        formattedDueDate,
+        class_name,
+        teacherId
+      ],
+      'skydek_DB'
+    );
+    
+    console.log('✅ Homework created successfully:', {
+      homeworkId: result.insertId,
+      title,
+      class_name
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Homework created successfully',
+      homeworkId: result.insertId,
+      homework: {
+        id: result.insertId,
+        title,
+        instructions: description || '',
+        due_date: formattedDueDate,
+        class_name,
+        status: 'Pending',
+        uploaded_by_teacher_id: teacherId
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating homework:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create homework',
+      error: 'DATABASE_ERROR',
+      details: error.message
+    });
+  }
+});
 router.get('/', authMiddleware, getHomeworkForParent);
 router.post('/submit', authMiddleware, submitHomework);
+
+// Route for submitting homework with homeworkId parameter (PWA compatibility)
+router.post('/submit/:homeworkId', authMiddleware, async (req, res) => {
+  console.log('📝 Submit homework with homeworkId parameter:', req.params.homeworkId);
+  console.log('📝 Request body:', req.body);
+  
+  // Extract homeworkId from URL parameter and add it to the request body
+  req.body.homeworkId = req.params.homeworkId;
+  
+  // Handle field name variations (parent_id vs parentId, child_id vs childId)
+  if (req.body.parent_id && !req.body.parentId) {
+    req.body.parentId = req.body.parent_id;
+  }
+  if (req.body.child_id && !req.body.childId) {
+    req.body.childId = req.body.child_id;
+  }
+  
+  console.log('📝 Processed request body:', {
+    homeworkId: req.body.homeworkId,
+    parentId: req.body.parentId,
+    childId: req.body.childId,
+    hasFiles: !!(req.files && req.files.length > 0)
+  });
+  
+  try {
+    // Call the existing submitHomework function
+    await submitHomework(req, res);
+    
+    // If submission was successful, create notifications
+    if (res.statusCode === 201) {
+      const { homeworkId } = req.params;
+      const { parentId, childId } = req.body;
+      
+      // Get homework and child information for notification
+      const homework = await query(
+        'SELECT title, class_name FROM homeworks WHERE id = ?',
+        [homeworkId],
+        'skydek_DB'
+      );
+      
+      const child = await query(
+        'SELECT name FROM children WHERE id = ?',
+        [childId],
+        'skydek_DB'
+      );
+      
+      if (homework && homework.length > 0 && child && child.length > 0) {
+        const homeworkTitle = homework[0].title;
+        const childName = child[0].name;
+        
+        // Create notification for parent only (preschool children don't need notifications)
+        await execute(
+          `INSERT INTO notifications (userId, userType, title, body, type, createdAt, updatedAt) 
+           VALUES (?, 'parent', ?, ?, 'homework', NOW(), NOW())`,
+          [
+            parentId,
+            'Homework Submitted Successfully',
+            `${childName} has successfully submitted homework: "${homeworkTitle}"`
+          ],
+          'skydek_DB'
+        );
+        
+        console.log('✅ Homework submission notifications created');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error in homework submission with parameter:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Internal server error during submission',
+        error: error.message 
+      });
+    }
+  }
+});
 router.get('/for-parent/:parent_id', authMiddleware, getHomeworkForParent);  
 router.delete('/submissions/:submissionId', authMiddleware, deleteSubmissions);
 router.get('/submissions/:homeworkId/:parentId', getSubmission);
@@ -196,7 +372,7 @@ router.get('/parent/:parentId/child/:childId', authMiddleware, async (req, res) 
       `SELECT 
         h.id,
         h.title,
-        h.description,
+        h.instructions as description,
         h.due_date,
         h.created_at,
         s.status,
@@ -209,10 +385,10 @@ router.get('/parent/:parentId/child/:childId', authMiddleware, async (req, res) 
           WHEN h.due_date < NOW() THEN 'overdue'
           ELSE 'pending'
         END as homework_status
-      FROM homework h
+      FROM homeworks h
       LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
-      WHERE h.class_id IN (
-        SELECT DISTINCT class_id FROM children WHERE id = ?
+      WHERE h.class_name IN (
+        SELECT DISTINCT className FROM children WHERE id = ?
       )
       ORDER BY h.created_at DESC
       LIMIT 20`,
@@ -279,7 +455,7 @@ router.get('/grades/child/:childId', authMiddleware, async (req, res) => {
       `SELECT 
         h.id as homework_id,
         h.title,
-        h.description,
+        h.instructions as description,
         h.due_date,
         h.created_at,
         s.status,
@@ -288,10 +464,10 @@ router.get('/grades/child/:childId', authMiddleware, async (req, res) => {
         s.submitted_at,
         s.graded_at,
         s.comment
-      FROM homework h
+      FROM homeworks h
       LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
-      WHERE h.class_id IN (
-        SELECT DISTINCT class_id FROM children WHERE id = ?
+      WHERE h.class_name IN (
+        SELECT DISTINCT className FROM children WHERE id = ?
       ) OR s.child_id = ?
       ORDER BY h.created_at DESC
       LIMIT 20`,
