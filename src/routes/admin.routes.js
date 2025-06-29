@@ -3,6 +3,7 @@ import { query, execute } from '../db.js';
 import { authMiddleware, isAdmin } from '../middleware/authMiddleware.js';
 import bcrypt from 'bcryptjs';
 import { adminResetTeacherPassword } from '../controllers/passwordResetController.js';
+import { createSampleNotifications, clearAllNotifications } from '../utils/sampleNotifications.js';
 
 const router = Router();
 
@@ -79,8 +80,8 @@ router.post('/teachers', authMiddleware, isAdmin, async (req, res) => {
 
 // Update a teacher
 router.put('/teachers/:id', authMiddleware, isAdmin, async (req, res) => {
-  console.log('Updating teacher ID:', id, 'with request body:', req.body);
   const { id } = req.params;
+  console.log('Updating teacher ID:', id, 'with request body:', req.body);
   const { name, email, password, className } = req.body;
 
   if (!name || !email) {
@@ -272,6 +273,83 @@ router.get('/users', authMiddleware, isAdmin, async (req, res) => {
   }
 });
 
+// Update any user (universal endpoint for admin)
+router.put('/users/:id', authMiddleware, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, email, password, source } = req.body;
+
+  if (!name || !email) {
+    return res.status(400).json({ message: 'Name and email are required.' });
+  }
+
+  try {
+    console.log(`Admin updating user ${id} with source: ${source}`);
+    
+    // Determine which table to update based on source or role
+    let tableName, roleCondition;
+    
+    if (source === 'staff_table') {
+      tableName = 'staff';
+      roleCondition = 'role IN (?, ?)';
+    } else {
+      tableName = 'users';
+      roleCondition = 'role = ?';
+    }
+    
+    // Build update query
+    let updateQuery = `UPDATE ${tableName} SET name = ?, email = ?`;
+    const params = [name, email];
+
+    if (password && password.trim() !== '') {
+      const hashedPassword = await bcrypt.hash(password, 12);
+      updateQuery += ', password = ?';
+      params.push(hashedPassword);
+    }
+
+    if (source === 'staff_table') {
+      updateQuery += ' WHERE id = ? AND role IN (?, ?)';
+      params.push(id, 'teacher', 'admin');
+    } else {
+      updateQuery += ' WHERE id = ? AND role = ?';
+      params.push(id, 'parent');
+    }
+
+    console.log('Executing update query:', updateQuery, params);
+    const result = await execute(updateQuery, params);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'User not found or no changes made.' });
+    }
+    
+    // Return updated user data
+    const updatedUser = {
+      id: parseInt(id),
+      name,
+      email,
+      source,
+      updatedAt: new Date().toISOString()
+    };
+    
+    res.json({ 
+      message: 'User updated successfully!',
+      user: updatedUser,
+      affectedRows: result.affectedRows
+    });
+    
+  } catch (error) {
+    console.error('Error updating user:', error);
+    console.error('SQL Error:', error.sqlMessage || 'No SQL message');
+    console.error('Error Code:', error.code);
+    console.error('Request Body:', req.body);
+    
+    res.status(500).json({ 
+      message: 'Server error when updating user.',
+      details: error.sqlMessage || error.message,
+      errorCode: error.code
+    });
+  }
+});
+
 // Admin dashboard summary endpoint
 router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
   try {
@@ -346,4 +424,58 @@ router.get('/dashboard', authMiddleware, isAdmin, async (req, res) => {
   }
 });
 
-export default router; 
+// Sample notifications management (admin only)
+router.post('/notifications/sample', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    console.log('🔔 Admin creating sample notifications');
+    const success = await createSampleNotifications();
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'Sample notifications created successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create sample notifications'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error creating sample notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating sample notifications',
+      error: error.message
+    });
+  }
+});
+
+// Clear all notifications (admin only)
+router.delete('/notifications/clear', authMiddleware, isAdmin, async (req, res) => {
+  try {
+    console.log('🗑️ Admin clearing all notifications');
+    const success = await clearAllNotifications();
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: 'All notifications cleared successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to clear notifications'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error clearing notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error clearing notifications',
+      error: error.message
+    });
+  }
+});
+
+export default router;

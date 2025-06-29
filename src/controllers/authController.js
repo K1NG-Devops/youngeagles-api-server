@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import winston from 'winston';
 import Event from '../models/events.js';
 import admin from '../config/firebase-admin.js';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -134,9 +136,20 @@ export const loginUser = async (req, res) => {
     }
 
     const user = users[0];
-    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
+    
+    // Check if password is in PBKDF2 format (contains a colon separator)
+    if (user.password.includes(':')) {
+      const [salt, hash] = user.password.split(':');
+      const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+      if (hash !== verifyHash) {
+        return res.status(400).json({ message: 'Invalid email or password.' });
+      }
+    } else {
+      // Try bcrypt format
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Invalid email or password.' });
+      }
     }
 
     const token = generateToken(user); // Token with expiry
@@ -180,7 +193,7 @@ export const teacherLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }
@@ -225,7 +238,7 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Invalid user data: password missing.' });
     }
 
-    const isMatch = PasswordSecurity.verifyPassword(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid email or password.' });
     }

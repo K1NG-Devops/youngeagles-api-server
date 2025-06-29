@@ -168,4 +168,152 @@ router.get('/submissions', authMiddleware, async (req, res) => {
 
 router.delete('/submissions/:id', authMiddleware, deleteSubmissions);
 
+// Get homework for parent/child (PWA compatibility route)
+router.get('/parent/:parentId/child/:childId', authMiddleware, async (req, res) => {
+  try {
+    const { parentId, childId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Check if parent has access to this child
+    if (userRole === 'parent') {
+      const childCheck = await query(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [childId, userId],
+        'skydek_DB'
+      );
+      
+      if (childCheck.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: Child not found or does not belong to this parent'
+        });
+      }
+    }
+    
+    // Get homework for this child
+    const homework = await query(
+      `SELECT 
+        h.id,
+        h.title,
+        h.description,
+        h.due_date,
+        h.created_at,
+        s.status,
+        s.grade,
+        s.feedback,
+        s.submitted_at,
+        s.comment,
+        CASE 
+          WHEN s.id IS NOT NULL THEN 'submitted'
+          WHEN h.due_date < NOW() THEN 'overdue'
+          ELSE 'pending'
+        END as homework_status
+      FROM homework h
+      LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+      WHERE h.class_id IN (
+        SELECT DISTINCT class_id FROM children WHERE id = ?
+      )
+      ORDER BY h.created_at DESC
+      LIMIT 20`,
+      [childId, childId],
+      'skydek_DB'
+    );
+    
+    // Calculate stats
+    const totalHomework = homework.length;
+    const submittedHomework = homework.filter(h => h.status === 'submitted' || h.homework_status === 'submitted').length;
+    const overdueHomework = homework.filter(h => h.homework_status === 'overdue').length;
+    const pendingHomework = homework.filter(h => h.homework_status === 'pending').length;
+    
+    res.json({
+      success: true,
+      homework: homework || [],
+      stats: {
+        total: totalHomework,
+        submitted: submittedHomework,
+        pending: pendingHomework,
+        overdue: overdueHomework,
+        completion_rate: totalHomework > 0 ? Math.round((submittedHomework / totalHomework) * 100) : 0
+      },
+      parentId: parentId,
+      childId: childId,
+      count: homework ? homework.length : 0
+    });
+    
+  } catch (error) {
+    console.error('Error fetching homework for parent/child:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching homework',
+      error: error.message
+    });
+  }
+});
+
+// Get grades for a specific child
+router.get('/grades/child/:childId', authMiddleware, async (req, res) => {
+  try {
+    const { childId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    // Check if parent has access to this child
+    if (userRole === 'parent') {
+      const childCheck = await query(
+        'SELECT id FROM children WHERE id = ? AND parent_id = ?',
+        [childId, userId],
+        'skydek_DB'
+      );
+      
+      if (childCheck.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: Child not found or does not belong to this parent'
+        });
+      }
+    }
+    
+    // Get homework grades/submissions for this child
+    const grades = await query(
+      `SELECT 
+        h.id as homework_id,
+        h.title,
+        h.description,
+        h.due_date,
+        h.created_at,
+        s.status,
+        s.grade,
+        s.feedback,
+        s.submitted_at,
+        s.graded_at,
+        s.comment
+      FROM homework h
+      LEFT JOIN submissions s ON h.id = s.homework_id AND s.child_id = ?
+      WHERE h.class_id IN (
+        SELECT DISTINCT class_id FROM children WHERE id = ?
+      ) OR s.child_id = ?
+      ORDER BY h.created_at DESC
+      LIMIT 20`,
+      [childId, childId, childId],
+      'skydek_DB'
+    );
+    
+    res.json({
+      success: true,
+      grades: grades || [],
+      childId: childId,
+      count: grades ? grades.length : 0
+    });
+    
+  } catch (error) {
+    console.error('Error fetching child grades:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching grades',
+      error: error.message
+    });
+  }
+});
+
 export default router;

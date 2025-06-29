@@ -1,0 +1,260 @@
+[
+  {
+    "id": 1,
+    "studentId": 15,
+    "studentName": "Daniel Baker",
+    "className": "Panda",
+    "grade": "RR",
+    "teacherId": 14,
+    "date": "2025-06-25T22:36:21.000Z",
+    "day": "Thursday",
+    "results": [
+      "/home/king/Desktop/YoungEagles_API/uploads/files-1750890980686-428792355.png"
+    ],
+    "type": "homework_submission",
+    "createdAt": null,
+    "updatedAt": null,
+    "status": "submitted",
+    "homework_id": null
+  },
+  {
+    "id": 2,
+    "studentId": 77,
+    "studentName": "Sofia Martinez",
+    "className": "Eagles",
+    "grade": "18",
+    "teacherId": 19,
+    "date": "2025-06-26T15:19:56.000Z",
+    "day": "Thursday",
+    "results": {
+      "feedback": "Excellent work! Your family tree is very detailed and creative.",
+      "attachments": [],
+      "submissionText": "Submitted work for My Family Tree"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-26T15:19:56.000Z",
+    "updatedAt": "2025-06-26T15:19:56.000Z",
+    "status": "graded",
+    "homework_id": 9
+  },
+  {
+    "id": 3,
+    "studentId": 77,
+    "studentName": "Sofia Martinez",
+    "className": "Eagles",
+    "grade": "",
+    "teacherId": 19,
+    "date": "2025-06-29T06:39:00.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Colors and Shapes Recognition"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:00.000Z",
+    "updatedAt": "2025-06-29T06:39:00.000Z",
+    "status": "pending",
+    "homework_id": 7
+  },
+  {
+    "id": 4,
+    "studentId": 78,
+    "studentName": "Diego Martinez",
+    "className": "Hawks",
+    "grade": "",
+    "teacherId": 20,
+    "date": "2025-06-29T06:39:01.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Letter Tracing A-F"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:01.000Z",
+    "updatedAt": "2025-06-29T06:39:01.000Z",
+    "status": "pending",
+    "homework_id": 10
+  },
+  {
+    "id": 5,
+    "studentId": 78,
+    "studentName": "Diego Martinez",
+    "className": "Hawks",
+    "grade": "",
+    "teacherId": 20,
+    "date": "2025-06-29T06:39:01.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Weather Chart"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:01.000Z",
+    "updatedAt": "2025-06-29T06:39:01.000Z",
+    "status": "pending",
+    "homework_id": 11
+  },
+  {
+    "id": 6,
+    "studentId": 79,
+    "studentName": "Emma Thompson",
+    "className": "Falcons",
+    "grade": "19",
+    "teacherId": 21,
+    "date": "2025-06-24T23:34:29.000Z",
+    "day": "Wednesday",
+    "results": {
+      "feedback": "Great storytelling! Your pictures clearly show the story sequence.",
+      "attachments": [],
+      "submissionText": "Submitted work for Story Retelling"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-24T23:34:29.000Z",
+    "updatedAt": "2025-06-24T23:34:29.000Z",
+    "status": "graded",
+    "homework_id": 13
+  },
+  {
+    "id": 7,
+    "studentId": 79,
+    "studentName": "Emma Thompson",
+    "className": "Falcons",
+    "grade": "",
+    "teacherId": 21,
+    "date": "2025-06-29T06:39:03.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Simple Addition Practice"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:03.000Z",
+    "updatedAt": "2025-06-29T06:39:03.000Z",
+    "status": "pending",
+    "homework_id": 12
+  },
+  {
+    "id": 8,
+    "studentId": 80,
+    "studentName": "Noah Thompson",
+    "className": "Eagles",
+    "grade": "16",
+    "teacherId": 19,
+    "date": "2025-06-27T10:35:57.000Z",
+    "day": "Friday",
+    "results": {
+      "feedback": "Good effort! Try to add more details about each family member next time.",
+      "attachments": [],
+      "submissionText": "Submitted work for My Family Tree"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-27T10:35:57.000Z",
+    "updatedAt": "2025-06-27T10:35:57.000Z",
+    "status": "graded",
+    "homework_id": 9
+  },
+  {
+    "id": 9,
+    "studentId": 80,
+    "studentName": "Noah Thompson",
+    "className": "Eagles",
+    "grade": "",
+    "teacherId": 19,
+    "date": "2025-06-29T06:39:04.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Number Counting 1-20"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:04.000Z",
+    "updatedAt": "2025-06-29T06:39:04.000Z",
+    "status": "pending",
+    "homework_id": 8
+  },
+  {
+    "id": 10,
+    "studentId": 81,
+    "studentName": "Ava Wilson",
+    "className": "Owls",
+    "grade": "",
+    "teacherId": 22,
+    "date": "2025-06-29T06:39:05.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Animal Habitats"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:05.000Z",
+    "updatedAt": "2025-06-29T06:39:05.000Z",
+    "status": "pending",
+    "homework_id": 14
+  },
+  {
+    "id": 11,
+    "studentId": 82,
+    "studentName": "Lucas Garcia",
+    "className": "Hawks",
+    "grade": "",
+    "teacherId": 20,
+    "date": "2025-06-29T06:39:05.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Letter Tracing A-F"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:05.000Z",
+    "updatedAt": "2025-06-29T06:39:05.000Z",
+    "status": "pending",
+    "homework_id": 10
+  },
+  {
+    "id": 12,
+    "studentId": 83,
+    "studentName": "Isabella Garcia",
+    "className": "Falcons",
+    "grade": "20",
+    "teacherId": 21,
+    "date": "2025-06-22T08:19:06.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "Perfect! Your story was engaging and your drawings were beautiful.",
+      "attachments": [],
+      "submissionText": "Submitted work for Story Retelling"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-22T08:19:06.000Z",
+    "updatedAt": "2025-06-22T08:19:06.000Z",
+    "status": "graded",
+    "homework_id": 13
+  },
+  {
+    "id": 13,
+    "studentId": 83,
+    "studentName": "Isabella Garcia",
+    "className": "Falcons",
+    "grade": "",
+    "teacherId": 21,
+    "date": "2025-06-29T06:39:07.000Z",
+    "day": "Sunday",
+    "results": {
+      "feedback": "",
+      "attachments": [],
+      "submissionText": "Submitted work for Simple Addition Practice"
+    },
+    "type": "homework",
+    "createdAt": "2025-06-29T06:39:07.000Z",
+    "updatedAt": "2025-06-29T06:39:07.000Z",
+    "status": "pending",
+    "homework_id": 12
+  }
+]

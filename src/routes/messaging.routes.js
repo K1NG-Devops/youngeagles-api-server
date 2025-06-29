@@ -239,6 +239,17 @@ router.get('/conversations', authMiddleware, async (req, res) => {
     
     console.log(`📥 Getting conversations for user ${userId} (${userType})`);
     
+    // Debug: Log all messages for this user to understand the data
+    const allUserMessages = await query(
+      `SELECT id, sender_id, sender_type, recipient_id, recipient_type, subject, message, created_at
+       FROM messages 
+       WHERE (sender_id = ? AND sender_type = ?) OR (recipient_id = ? AND recipient_type = ?)
+       ORDER BY created_at DESC LIMIT 10`,
+      [userId, userType, userId, userType],
+      'skydek_DB'
+    );
+    console.log(`🔍 Debug: Recent messages for user ${userId}:`, allUserMessages);
+    
     // Get all unique conversations (both sent and received)
     const conversations = await query(
       `SELECT 
@@ -381,6 +392,20 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
             message: 'Invalid conversation ID format - could not resolve legacy ID'
           });
         }
+      } else if (conversationId.startsWith('contact_')) {
+        // Handle contact-style IDs
+        const contactId = conversationId.split('_')[1];
+        if (!isNaN(contactId)) {
+          otherUserId = parseInt(contactId);
+          otherUserType = 'contact';
+          console.log(`✅ Resolved contact ID ${conversationId} to ${otherUserId}_${otherUserType}`);
+        } else {
+          console.log('❌ Invalid contact ID format:', conversationId);
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid contact ID format'
+          });
+        }
       } else {
         console.log('❌ Invalid conversation ID format:', conversationId);
         return res.status(400).json({
@@ -388,6 +413,9 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
           message: 'Invalid conversation ID format'
         });
       }
+    } else {
+      // Convert numeric strings to integers where appropriate
+      otherUserId = !isNaN(otherUserId) ? parseInt(otherUserId) : otherUserId;
     }
     
     console.log(`🔍 Looking for messages between ${userId}(${userType}) and ${otherUserId}(${otherUserType})`);
@@ -406,12 +434,23 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
     console.log(`📊 Found ${messages.length} messages in conversation`);
 
     // Mark messages as read
-    await execute(
-      `UPDATE messages SET is_read = TRUE 
-       WHERE recipient_id = ? AND recipient_type = ? AND sender_id = ? AND sender_type = ?`,
-      [userId, userType, otherUserId, otherUserType],
-      'skydek_DB'
-    );
+    if (otherUserType === 'contact') {
+      // For contacts, we only update messages where the contact is the sender
+      await execute(
+        `UPDATE messages SET is_read = TRUE 
+         WHERE recipient_id = ? AND recipient_type = ? AND sender_id = ?`,
+        [userId, userType, otherUserId],
+        'skydek_DB'
+      );
+    } else {
+      // For regular conversations
+      await execute(
+        `UPDATE messages SET is_read = TRUE 
+         WHERE recipient_id = ? AND recipient_type = ? AND sender_id = ? AND sender_type = ?`,
+        [userId, userType, otherUserId, otherUserType],
+        'skydek_DB'
+      );
+    }
 
     // Format messages for frontend
     const formattedMessages = messages.map(msg => ({
@@ -590,6 +629,189 @@ router.get('/contacts', authMiddleware, getContacts);
 // Notification routes
 router.get('/notifications', authMiddleware, getNotifications);
 router.put('/notifications/:notificationId/read', authMiddleware, markNotificationAsRead);
+
+// Delete a message
+router.delete('/messages/:messageId', authMiddleware, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+    const userType = req.user.role;
+
+    // Get message details
+    const [message] = await query(
+      'SELECT * FROM messages WHERE id = ?',
+      [messageId],
+      'skydek_DB'
+    );
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Message not found'
+      });
+    }
+
+    // Check if user has permission to delete the message
+    const canDelete = 
+      userType === 'admin' || // Admins can delete any message
+      (message.sender_id === userId && message.sender_type === userType) || // Users can delete their own messages
+      (message.group_id && await isGroupAdmin(message.group_id, userId, userType)); // Group admins can delete group messages
+
+    if (!canDelete) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this message'
+      });
+    }
+
+    // Soft delete the message
+    await execute(
+      `UPDATE messages 
+       SET is_deleted = TRUE,
+           deleted_at = NOW(),
+           deleted_by = ?,
+           deleted_by_type = ?
+       WHERE id = ?`,
+      [userId, userType, messageId],
+      'skydek_DB'
+    );
+
+    res.json({
+      success: true,
+      message: 'Message deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete message',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to check if user is a group admin
+async function isGroupAdmin(groupId, userId, userType) {
+  const [membership] = await query(
+    'SELECT role FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?',
+    [groupId, userId, userType],
+    'skydek_DB'
+  );
+  return membership?.role === 'admin';
+}
+
+// Send message to a group
+router.post('/groups/:groupId/messages', authMiddleware, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { content, messageType = 'text' } = req.body;
+    const userId = req.user.id;
+    const userType = req.user.role;
+
+    // Check if user is a member of the group
+    const [membership] = await query(
+      'SELECT role FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?',
+      [groupId, userId, userType],
+      'skydek_DB'
+    );
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not a member of this group'
+      });
+    }
+
+    // Validate message type
+    const validTypes = ['text', 'emoji', 'image', 'file', 'system'];
+    if (!validTypes.includes(messageType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid message type'
+      });
+    }
+
+    // Insert the message
+    const result = await execute(
+      `INSERT INTO messages (
+        sender_id, 
+        sender_type, 
+        group_id,
+        message,
+        message_type,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, NOW())`,
+      [userId, userType, groupId, content, messageType],
+      'skydek_DB'
+    );
+
+    res.json({
+      success: true,
+      messageId: result.insertId,
+      message: 'Message sent successfully'
+    });
+
+  } catch (error) {
+    console.error('Error sending group message:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send message',
+      error: error.message
+    });
+  }
+});
+
+// Get messages for a group
+router.get('/groups/:groupId/messages', authMiddleware, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.user.id;
+    const userType = req.user.role;
+
+    // Check if user is a member of the group
+    const [membership] = await query(
+      'SELECT role FROM group_members WHERE group_id = ? AND user_id = ? AND user_type = ?',
+      [groupId, userId, userType],
+      'skydek_DB'
+    );
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not a member of this group'
+      });
+    }
+
+    // Get messages
+    const messages = await query(
+      `SELECT m.*,
+        CASE 
+          WHEN m.sender_type = 'parent' THEN (SELECT name FROM users WHERE id = m.sender_id)
+          ELSE (SELECT name FROM staff WHERE id = m.sender_id)
+        END as sender_name
+       FROM messages m
+       WHERE m.group_id = ?
+       ORDER BY m.created_at ASC`,
+      [groupId],
+      'skydek_DB'
+    );
+
+    res.json({
+      success: true,
+      messages,
+      count: messages.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching group messages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch messages',
+      error: error.message
+    });
+  }
+});
 
 export default router;
 

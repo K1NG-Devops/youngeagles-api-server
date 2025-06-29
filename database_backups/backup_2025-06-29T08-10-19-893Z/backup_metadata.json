@@ -1,0 +1,33 @@
+{
+  "timestamp": "2025-06-29T08:10:27.007Z",
+  "database": "skydek_DB",
+  "tables": [
+    "users",
+    "staff",
+    "children",
+    "homework",
+    "homework_submissions",
+    "classes",
+    "attendance",
+    "messages",
+    "groups",
+    "group_members",
+    "fcm_tokens",
+    "push_subscriptions"
+  ],
+  "recordCounts": {
+    "users": 51,
+    "staff": 11,
+    "children": 44,
+    "homework": 11,
+    "homework_submissions": 13,
+    "classes": 3,
+    "attendance": 9,
+    "messages": 23,
+    "groups": 0,
+    "group_members": 0,
+    "fcm_tokens": 4,
+    "push_subscriptions": 0
+  },
+  "totalRecords": 169
+}

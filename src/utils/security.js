@@ -159,4 +159,24 @@ export function verifyToken(req) {
   
   const token = authHeader.substring(7);
   return TokenManager.verifyToken(token);
-} 
+}
+
+/**
+ * Middleware to require specific role for route access
+ */
+export function requireRole(role) {
+  return (req, res, next) => {
+    const user = verifyToken(req);
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    if (user.role !== role) {
+      return res.status(403).json({ error: `Access denied. ${role} role required.` });
+    }
+    
+    req.user = user;
+    next();
+  };
+}

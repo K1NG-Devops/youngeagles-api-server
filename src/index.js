@@ -19,19 +19,25 @@ import { PasswordSecurity, TokenManager, verifyToken } from './utils/security.js
 // Import WebSocket events
 import { AdminWebSocketEvents } from './websocket-admin-events.js';
 import { MessageWebSocketEvents } from './websocket-message-events.js';
+import { setupEnhancedMessagingWebSocket } from './websocket-enhanced-messaging.js';
 import setupMessagingEndpoints from './messaging-endpoints.js';
 
 // Import route modules
 import authRoutes from './routes/auth.routes.js';
 import teacherRoutes from './routes/teacher.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import adminChildrenRoutes from './routes/adminChildren.routes.js';
 import parentRoutes from './routes/parent.routes.js';
 import childrenRoutes from './routes/children.routes.js';
 import homeworkRoutes from './routes/homework.routes.js';
 import messagingRoutes from './routes/messaging.routes.js';
+import enhancedMessagingRoutes from './routes/enhancedMessaging.routes.js';
 import classRoutes from './routes/classes.routes.js';
 import publicRoutes from './routes/public.routes.js';
 import pushRoutes from './routes/push.routes.js';
+import groupsRoutes from './routes/groups.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
+import userRoutes from './routes/users.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -158,6 +164,8 @@ async function startServer() {
 
   // Mount the messaging routes
   app.use('/api/messaging', messagingRoutes);
+  app.use('/api/messaging-enhanced', enhancedMessagingRoutes);
+  app.use('/api/groups', groupsRoutes);
 
   // Setup messaging endpoints
   setupMessagingEndpoints(app, io);
@@ -165,6 +173,9 @@ async function startServer() {
   // Initialize WebSocket events
   const adminWebSocketEvents = new AdminWebSocketEvents(io);
   const messageWebSocketEvents = new MessageWebSocketEvents(io, db);
+  
+  // Setup enhanced messaging WebSocket handlers
+  setupEnhancedMessagingWebSocket(io);
   
   // Setup WebSocket connection handlers
   io.on('connection', (socket) => {
@@ -295,13 +306,16 @@ async function startServer() {
   // Mount route modules
   app.use('/api/auth', authRoutes);
   app.use('/api/teacher', teacherRoutes);
-  app.use('/api/admin', adminRoutes);
-  app.use('/api/parent', parentRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/children', adminChildrenRoutes);
+app.use('/api/parent', parentRoutes);
   app.use('/api/children', childrenRoutes);
   app.use('/api/homework', homeworkRoutes);
+  app.use('/api/homeworks', homeworkRoutes); // Alias for PWA compatibility
   app.use('/api/classes', classRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/push', pushRoutes);
+  app.use('/api/user', userRoutes);
 
   // Redirect old routes to new API routes
   app.get('/children/teacher/:teacherId', (req, res) => {
@@ -312,33 +326,8 @@ async function startServer() {
     res.redirect(307, '/api/homework/teacher/submissions');
   });
 
-  // Notifications endpoint (should be moved to notifications.routes.js)
-  app.get('/api/notifications', async (req, res) => {
-    console.log('🔔 Notifications requested');
-    try {
-      const user = verifyToken(req);
-      if (!user) {
-        return res.status(403).json({
-          message: 'Forbidden - authentication required',
-          error: 'FORBIDDEN'
-        });
-      }
-
-      // For now, return empty notifications
-      res.json({
-        success: true,
-        notifications: [],
-        message: 'Notifications fetched successfully'
-      });
-      
-    } catch (error) {
-      console.error('❌ Notifications error:', error);
-      res.status(500).json({
-        message: 'Internal server error',
-        error: 'INTERNAL_ERROR'
-      });
-    }
-  });
+// Notifications route handler
+app.use('/api/notifications', notificationsRoutes);
 
   // Messages endpoint (should be moved to messaging.routes.js)
   app.get('/api/messages', async (req, res) => {
