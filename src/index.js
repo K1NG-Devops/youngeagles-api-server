@@ -13,6 +13,7 @@ import parentRoutes from './routes/parent.routes.js';
 import teacherRoutes from './routes/teacher.routes.js';
 import activitiesRoutes from './routes/activities.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
+import paymentsRoutes from './routes/payments.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -64,6 +65,7 @@ app.use('/api/parent', parentRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/activities', activitiesRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/payments', paymentsRoutes);
 
 // Error handling middleware
 app.use((error, req, res, _next) => {
