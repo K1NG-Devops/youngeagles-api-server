@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "local": "NODE_ENV=development node src/index.js",
+    "migrate": "node src/migrations/run-migrations.js",
     "test": "node test-api-endpoints.js"
   },
   "keywords": [
