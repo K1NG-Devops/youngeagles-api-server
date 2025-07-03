@@ -3,8 +3,41 @@ import authenticateToken from '../middleware/authMiddleware.js';
 import Payment from '../models/payment.model.js';
 import mysql from 'mysql2/promise';
 import config from '../config/database.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(process.cwd(), 'uploads', 'payment_proofs');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'payment-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only images (JPG, PNG, GIF) and PDF files are allowed.'));
+        }
+    }
+});
 
 // Helper function to execute database queries
 async function executeQuery(sql, params = []) {
@@ -18,40 +51,84 @@ async function executeQuery(sql, params = []) {
 }
 
 // Route for payment proof submission
-router.post('/proof', authenticateToken, async (req, res) => {
+router.post('/proof', authenticateToken, upload.single('proof_file'), async (req, res) => {
     try {
-        const { studentId, amount, paymentDate, proofImage, description } = req.body;
+        // Handle both old and new field names for backward compatibility
+        const child_id = req.body.child_id || req.body.studentId;
+        const amount = req.body.amount;
+        const payment_date = req.body.payment_date || req.body.paymentDate;
+        const payment_method = req.body.payment_method || 'bank_transfer';
+        const reference_number = req.body.reference_number;
 
         // Validate required fields
-        if (!studentId || !amount || !paymentDate || !proofImage) {
+        if (!child_id || !amount || !payment_date) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields. Please provide studentId, amount, paymentDate, and proofImage'
+                message: 'Missing required fields. Please provide child_id, amount, and payment_date'
             });
         }
 
-        // Create new payment proof
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment proof file is required'
+            });
+        }
+
+        // Try to save to payment_proofs table first (newer schema)
+        try {
+            const file_url = `/uploads/payment_proofs/${req.file.filename}`;
+            
+            const result = await executeQuery(`
+                INSERT INTO payment_proofs (
+                    parent_id, child_id, amount, file_url, payment_date,
+                    reference_number, payment_method, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
+            `, [
+                req.user.id,
+                child_id,
+                amount,
+                file_url,
+                payment_date,
+                reference_number,
+                payment_method
+            ]);
+
+            return res.status(201).json({
+                success: true,
+                message: 'Payment proof submitted successfully',
+                data: {
+                    paymentId: result.insertId,
+                    status: 'pending'
+                }
+            });
+        } catch (error) {
+            console.log('payment_proofs table not found, trying payments table');
+        }
+
+        // Fallback to payments table (older schema)
         const paymentData = {
-            student_id: studentId,
+            student_id: child_id,
             amount,
-            payment_date: new Date(paymentDate),
-            proof_image: proofImage,
-            description,
-            submitted_by: req.user.id // from authenticateToken middleware
+            payment_date: new Date(payment_date),
+            proof_image: req.file.filename,
+            description: reference_number || `Payment for child ${child_id}`,
+            submitted_by: req.user.id
         };
 
-        // Save to database
         const payment = await Payment.create(paymentData);
 
         res.status(201).json({
             success: true,
             message: 'Payment proof submitted successfully',
             data: {
-                paymentId: payment._id,
-                status: payment.status
+                paymentId: payment.id,
+                status: payment.status || 'pending'
             }
         });
+
     } catch (error) {
+        console.error('Error submitting payment proof:', error);
         res.status(500).json({
             success: false,
             message: 'Error submitting payment proof',
