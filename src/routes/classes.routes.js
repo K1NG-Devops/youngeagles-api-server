@@ -40,15 +40,15 @@ router.get('/', authenticateToken, async (req, res) => {
     } else {
       // Admin or other users can see all classes
       classes = await query(`
-        SELECT DISTINCT
-          className as name,
-          className as id,
-          COUNT(c.id) as student_count
-        FROM children c
-        WHERE className IS NOT NULL AND className != ''
-        GROUP BY className
-        ORDER BY className ASC
-      `);
+      SELECT DISTINCT
+        className as name,
+        className as id,
+        COUNT(c.id) as student_count
+      FROM children c
+      WHERE className IS NOT NULL AND className != ''
+      GROUP BY className
+      ORDER BY className ASC
+    `);
     }
 
     res.json({

@@ -102,7 +102,7 @@ router.get('/class/:classId', verifyTokenMiddleware, async (req, res) => {
         const [classInfo] = await query(
           'SELECT name FROM classes WHERE id = ?',
           [classId]
-        );
+      );
 
         if (!classInfo || classInfo.name !== teacher.className) {
           return res.status(403).json({ error: 'Access denied - not your class' });
