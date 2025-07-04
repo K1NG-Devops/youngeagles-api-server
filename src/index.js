@@ -14,6 +14,8 @@ import teacherRoutes from './routes/teacher.routes.js';
 import activitiesRoutes from './routes/activities.routes.js';
 import attendanceRoutes from './routes/attendance.routes.js';
 import paymentsRoutes from './routes/payments.routes.js';
+import notificationsRoutes from './routes/notifications.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -51,7 +53,8 @@ app.get('/', (req, res) => {
       parent: '/api/parent',
       teacher: '/api/teacher',
       activities: '/api/activities',
-      attendance: '/api/attendance'
+      attendance: '/api/attendance',
+      notifications: '/api/notifications'
     }
   });
 });
@@ -66,6 +69,8 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/activities', activitiesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payments', paymentsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling middleware
 app.use((error, req, res, _next) => {

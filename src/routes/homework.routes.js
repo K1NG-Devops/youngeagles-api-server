@@ -1,8 +1,41 @@
 import express from 'express';
 import { verifyTokenMiddleware } from '../utils/security.js';
 import { query } from '../db.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(process.cwd(), 'uploads', 'homework_submissions');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'submission-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'), false);
+    }
+  }
+});
 
 // Get homework for a parent's children
 router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
@@ -283,4 +316,316 @@ router.get('/:homeworkId', verifyTokenMiddleware, async (req, res) => {
   }
 });
 
-export default router; 
+// Submit homework
+router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 5), async (req, res) => {
+  try {
+    const { homeworkId } = req.params;
+    const { child_id, comments } = req.body;
+
+    // Validate required fields
+    if (!child_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Child ID is required'
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one file is required for submission'
+      });
+    }
+
+    // Verify homework exists
+    const [homework] = await query(`
+      SELECT 
+        h.*,
+        cl.name as class_name,
+        s.name as teacher_name
+      FROM homework h
+      LEFT JOIN classes cl ON cl.id = h.class_id
+      LEFT JOIN staff s ON s.id = h.teacher_id
+      WHERE h.id = ?
+    `, [homeworkId]);
+
+    if (!homework) {
+      return res.status(404).json({
+        success: false,
+        message: 'Homework assignment not found'
+      });
+    }
+
+    // Verify child exists and belongs to the requesting parent (if parent)
+    const [child] = await query(`
+      SELECT c.*, cl.name as class_name
+      FROM children c
+      LEFT JOIN classes cl ON cl.id = c.class_id
+      WHERE c.id = ?
+    `, [child_id]);
+
+    if (!child) {
+      return res.status(404).json({
+        success: false,
+        message: 'Child not found'
+      });
+    }
+
+    // Check if user has permission to submit for this child
+    if (req.user.userType === 'parent' && child.parent_id !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only submit homework for your own children'
+      });
+    }
+
+    // Check if already submitted
+    const [existingSubmission] = await query(`
+      SELECT id FROM homework_submissions 
+      WHERE homework_id = ? AND child_id = ?
+    `, [homeworkId, child_id]);
+
+    if (existingSubmission) {
+      return res.status(400).json({
+        success: false,
+        message: 'Homework has already been submitted for this child'
+      });
+    }
+
+    // Prepare file URLs
+    const fileUrls = req.files.map(file => `/uploads/homework_submissions/${file.filename}`);
+    const mainFileUrl = fileUrls[0]; // Use first file as main file URL
+
+    // Insert submission record
+    const submissionResult = await query(`
+      INSERT INTO homework_submissions (
+        homework_id, 
+        child_id, 
+        submitted_at, 
+        file_url, 
+        feedback,
+        status
+      ) VALUES (?, ?, NOW(), ?, ?, 'submitted')
+    `, [
+      homeworkId,
+      child_id,
+      mainFileUrl,
+      comments || null
+    ]);
+
+    const submissionId = submissionResult.insertId;
+
+    // Get submission details for response
+    const [submission] = await query(`
+      SELECT 
+        hs.*,
+        c.first_name,
+        c.last_name,
+        h.title as homework_title
+      FROM homework_submissions hs
+      JOIN children c ON hs.child_id = c.id
+      JOIN homework h ON hs.homework_id = h.id
+      WHERE hs.id = ?
+    `, [submissionId]);
+
+    res.json({
+      success: true,
+      message: 'Homework submitted successfully',
+      submission: {
+        id: submissionId,
+        homework_id: homeworkId,
+        child_id: child_id,
+        submitted_at: submission.submitted_at,
+        file_url: mainFileUrl,
+        files: fileUrls,
+        comments: comments,
+        status: 'submitted',
+        child_name: `${submission.first_name} ${submission.last_name}`,
+        homework_title: submission.homework_title
+      }
+    });
+
+  } catch (error) {
+    console.error('Error submitting homework:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit homework',
+      error: error.message
+    });
+  }
+});
+
+// Create new homework assignment (teacher only)
+router.post('/', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      instructions,
+      due_date,
+      class_id,
+      child_ids,
+      assignment_type,
+      subject,
+      grade,
+      difficulty,
+      estimated_duration,
+      learning_objectives,
+      required_materials,
+      assessment_criteria
+    } = req.body;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({ error: 'Access denied - teachers only' });
+    }
+
+    if (!title || !description || !due_date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title, description, and due date are required'
+      });
+    }
+
+    // Validate assignment type
+    if (assignment_type === 'individual' && (!child_ids || child_ids.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Child IDs are required for individual assignments'
+      });
+    }
+
+    if (assignment_type === 'class' && !class_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Class ID is required for class assignments'
+      });
+    }
+
+    console.log(`📝 Creating ${assignment_type} homework: "${title}" by teacher ${req.user.id}`);
+
+    // For individual assignments, we need to get the class from the children
+    let finalClassId = class_id;
+    if (assignment_type === 'individual' && child_ids.length > 0) {
+      const [childClass] = await query(
+        'SELECT class_id FROM children WHERE id = ? LIMIT 1',
+        [child_ids[0]]
+      );
+      if (childClass) {
+        finalClassId = childClass.class_id;
+      }
+    }
+
+    // Insert homework record
+    const result = await query(`
+      INSERT INTO homework (
+        title,
+        description,
+        instructions,
+        teacher_id,
+        class_id,
+        due_date,
+        subject,
+        grade,
+        difficulty,
+        estimated_duration,
+        status,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+    `, [
+      title,
+      description || '',
+      instructions || '',
+      req.user.id,
+      finalClassId,
+      due_date,
+      subject || '',
+      grade || '',
+      difficulty || 'medium',
+      estimated_duration || 30
+    ]);
+
+    const homeworkId = result.insertId;
+    console.log(`✅ Homework created with ID: ${homeworkId}`);
+
+    // For individual assignments, create homework_individual_assignments entries
+    if (assignment_type === 'individual' && child_ids.length > 0) {
+      console.log(`👥 Creating individual assignments for ${child_ids.length} children`);
+      
+      // Create individual assignment table if it doesn't exist
+      try {
+        await query(`
+          CREATE TABLE IF NOT EXISTS homework_individual_assignments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            homework_id INT NOT NULL,
+            child_id INT NOT NULL,
+            status ENUM('assigned', 'submitted', 'graded') DEFAULT 'assigned',
+            assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_homework_id (homework_id),
+            INDEX idx_child_id (child_id),
+            UNIQUE KEY unique_assignment (homework_id, child_id)
+          )
+        `);
+      } catch (tableError) {
+        console.log('Individual assignments table already exists');
+      }
+
+      // Insert individual assignments
+      for (const childId of child_ids) {
+        try {
+          await query(
+            `INSERT INTO homework_individual_assignments (homework_id, child_id, status, assigned_at) 
+             VALUES (?, ?, 'assigned', NOW())
+             ON DUPLICATE KEY UPDATE status = 'assigned', assigned_at = NOW()`,
+            [homeworkId, childId]
+          );
+        } catch (insertError) {
+          console.error(`Error assigning to child ${childId}:`, insertError.message);
+        }
+      }
+      
+      console.log(`✅ Created individual assignments for homework ${homeworkId}`);
+    }
+
+    // Get child names for response (for individual assignments)
+    let assignedChildren = [];
+    if (assignment_type === 'individual' && child_ids.length > 0) {
+      const children = await query(
+        `SELECT id, name, className FROM children WHERE id IN (${child_ids.map(() => '?').join(',')})`,
+        child_ids
+      );
+      assignedChildren = children;
+    }
+
+    res.status(201).json({
+      success: true,
+      homework: {
+        id: homeworkId,
+        title,
+        description,
+        instructions,
+        teacher_id: req.user.id,
+        class_id: finalClassId,
+        due_date,
+        subject,
+        grade,
+        difficulty,
+        estimated_duration,
+        assignment_type: assignment_type || 'class',
+        status: 'active',
+        assigned_children: assignedChildren
+      },
+      message: `Homework "${title}" created successfully${assignment_type === 'individual' ? ` for ${assignedChildren.length} students` : ''}`
+    });
+
+  } catch (error) {
+    console.error('Error creating homework:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal server error',
+      message: error.message 
+    });
+  }
+});
+
+export default router;
