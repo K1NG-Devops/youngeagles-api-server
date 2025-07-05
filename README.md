@@ -133,4 +133,7 @@ npm run local
 
 ## License
 
-MIT 
+MIT
+
+---
+*Last updated: 2025-07-05 - Railway deployment test*
