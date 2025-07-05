@@ -1,39 +1,35 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/authMiddleware.js';
+import { verifyTokenMiddleware } from '../utils/security.js';
+import { query } from '../db.js';
 
 const router = express.Router();
 
 // Get all notifications for the current user
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', verifyTokenMiddleware, async (req, res) => {
   try {
-    // TODO: Replace with actual database query
-    // For now, return mock data
-    const mockNotifications = [
-      {
-        id: 1,
-        title: "Welcome to Young Eagles!",
-        message: "Thank you for joining Young Eagles. We're excited to have you on board!",
-        type: "announcement",
-        priority: "low",
-        read: false,
-        sender: "Young Eagles Admin",
-        timestamp: new Date().toISOString()
-      },
-      {
-        id: 2,
-        title: "New Homework Assignment",
-        message: "A new homework assignment has been posted for Mathematics.",
-        type: "homework",
-        priority: "high",
-        read: false,
-        sender: "Mathematics Teacher",
-        timestamp: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
-      }
-    ];
+    const userId = req.user.id;
+    
+    // Get notifications for the user
+    const notifications = await query(`
+      SELECT 
+        id,
+        title,
+        body as message,
+        type,
+        priority,
+        isRead as \`read\`,
+        'System' as sender,
+        data,
+        createdAt as timestamp
+      FROM notifications 
+      WHERE userId = ? 
+      ORDER BY createdAt DESC 
+      LIMIT 50
+    `, [userId]);
 
     res.json({
       success: true,
-      notifications: mockNotifications
+      notifications: notifications
     });
   } catch (error) {
     console.error('Error fetching notifications:', error);
@@ -45,23 +41,36 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Get notification by ID
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', verifyTokenMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
     
-    // TODO: Replace with actual database query
+    const [notification] = await query(`
+      SELECT 
+        id,
+        title,
+        body as message,
+        type,
+        priority,
+        isRead as \`read\`,
+        'System' as sender,
+        data,
+        createdAt as timestamp
+      FROM notifications 
+      WHERE id = ? AND userId = ?
+    `, [id, userId]);
+    
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found'
+      });
+    }
+
     res.json({
       success: true,
-      notification: {
-        id: parseInt(id),
-        title: "Sample Notification",
-        message: "This is a sample notification.",
-        type: "message",
-        priority: "medium",
-        read: false,
-        sender: "System",
-        timestamp: new Date().toISOString()
-      }
+      notification: notification
     });
   } catch (error) {
     console.error('Error fetching notification:', error);
@@ -73,11 +82,24 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Mark notification as read
-router.post('/:id/read', authenticateToken, async (req, res) => {
+router.post('/:id/read', verifyTokenMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
     
-    // TODO: Replace with actual database update
+    const result = await query(`
+      UPDATE notifications 
+      SET isRead = 1, updatedAt = NOW()
+      WHERE id = ? AND userId = ?
+    `, [id, userId]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found'
+      });
+    }
+
     res.json({
       success: true,
       message: `Notification ${id} marked as read`
@@ -92,9 +114,16 @@ router.post('/:id/read', authenticateToken, async (req, res) => {
 });
 
 // Mark all notifications as read
-router.post('/mark-all-read', authenticateToken, async (req, res) => {
+router.post('/mark-all-read', verifyTokenMiddleware, async (req, res) => {
   try {
-    // TODO: Replace with actual database update
+    const userId = req.user.id;
+    
+    await query(`
+      UPDATE notifications 
+      SET isRead = 1, updatedAt = NOW()
+      WHERE userId = ? AND isRead = 0
+    `, [userId]);
+
     res.json({
       success: true,
       message: 'All notifications marked as read'
@@ -109,12 +138,19 @@ router.post('/mark-all-read', authenticateToken, async (req, res) => {
 });
 
 // Get unread notifications count
-router.get('/unread-count', authenticateToken, async (req, res) => {
+router.get('/unread/count', verifyTokenMiddleware, async (req, res) => {
   try {
-    // TODO: Replace with actual database query
+    const userId = req.user.id;
+    
+    const [result] = await query(`
+      SELECT COUNT(*) as count 
+      FROM notifications 
+      WHERE userId = ? AND isRead = 0
+    `, [userId]);
+
     res.json({
       success: true,
-      count: 2
+      count: result.count
     });
   } catch (error) {
     console.error('Error fetching unread count:', error);

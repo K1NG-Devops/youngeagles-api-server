@@ -1,5 +1,6 @@
 import express from 'express';
 import { verifyTokenMiddleware } from '../utils/security.js';
+import { query } from '../db.js';
 import aiGradingService from '../services/aiGrading.js';
 
 const router = express.Router();
@@ -27,7 +28,7 @@ router.post('/grading/start', verifyTokenMiddleware, async (req, res) => {
 
     console.log(`🤖 Starting AI grading for ${submissions.length} submissions by teacher ${teacherId}`);
 
-    const result = await aiGradingService.startGrading(submissions, teacherId);
+    const result = await aiGradingService.startGrading(submissions, teacherId, query);
 
     res.json({
       success: true,

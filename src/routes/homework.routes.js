@@ -70,10 +70,21 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
         hs.file_url as attachment_url,
         hs.feedback as submission_text,
         h.assignment_type,
+        h.content_type,
         CASE 
           WHEN h.assignment_type = 'individual' THEN 'individual'
           ELSE 'class'
-        END as assignment_scope
+        END as assignment_scope,
+        CASE 
+          WHEN hs.id IS NOT NULL THEN 'start_homework'
+          WHEN h.content_type = 'interactive' THEN 'start_homework'
+          ELSE 'view_details'
+        END as button_action,
+        CASE 
+          WHEN hs.id IS NOT NULL THEN false
+          WHEN h.content_type = 'interactive' THEN false
+          ELSE true
+        END as show_submit_button
       FROM children c
       JOIN classes cl ON cl.id = c.class_id
       JOIN homework h ON (
@@ -331,11 +342,11 @@ router.get('/:homeworkId', verifyTokenMiddleware, async (req, res) => {
   }
 });
 
-// Submit homework
+// Submit homework (handles both interactive and traditional)
 router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 5), async (req, res) => {
   try {
     const { homeworkId } = req.params;
-    const { child_id, comments } = req.body;
+    const { child_id, comments, interactive_score, time_spent, answers } = req.body;
 
     // Validate required fields
     if (!child_id) {
@@ -345,14 +356,7 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
       });
     }
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'At least one file is required for submission'
-      });
-    }
-
-    // Verify homework exists
+    // Verify homework exists and get its content type
     const [homework] = await query(`
       SELECT 
         h.*,
@@ -369,6 +373,29 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
         success: false,
         message: 'Homework assignment not found'
       });
+    }
+
+    console.log(`📝 Submitting ${homework.content_type || 'traditional'} homework: "${homework.title}"`);
+
+    // Check content type and validate accordingly
+    const isInteractive = homework.content_type === 'interactive';
+    
+    if (!isInteractive) {
+      // Traditional homework requires file upload
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'At least one file is required for traditional homework submission'
+        });
+      }
+    } else {
+      // Interactive homework requires score/answers but no files
+      if (interactive_score === undefined && !answers) {
+        return res.status(400).json({
+          success: false,
+          message: 'Interactive homework requires completion data (score or answers)'
+        });
+      }
     }
 
     // Verify child exists and belongs to the requesting parent (if parent)
@@ -396,39 +423,119 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
 
     // Check if already submitted
     const [existingSubmission] = await query(`
-      SELECT id FROM homework_submissions 
+      SELECT id, status FROM homework_submissions 
       WHERE homework_id = ? AND child_id = ?
     `, [homeworkId, child_id]);
 
     if (existingSubmission) {
-      return res.status(400).json({
-        success: false,
-        message: 'Homework has already been submitted for this child'
-      });
+      // For interactive homework, don't allow resubmission
+      if (isInteractive) {
+        return res.status(400).json({
+          success: false,
+          message: 'Interactive homework can only be completed once',
+          already_submitted: true,
+          submission_status: existingSubmission.status
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Homework has already been submitted for this child'
+        });
+      }
     }
 
-    // Prepare file URLs
-    const fileUrls = req.files.map(file => `/uploads/homework_submissions/${file.filename}`);
-    const mainFileUrl = fileUrls[0]; // Use first file as main file URL
+    // Prepare submission data based on content type
+    let submissionData = {
+      homework_id: homeworkId,
+      child_id: child_id,
+      submitted_at: 'NOW()',
+      status: 'submitted',
+      submission_type: isInteractive ? 'interactive' : 'file_upload'
+    };
 
-    // Insert submission record
+    let insertFields = ['homework_id', 'child_id', 'status', 'submission_type'];
+    let insertValues = [homeworkId, child_id, 'submitted', isInteractive ? 'interactive' : 'file_upload'];
+
+    if (isInteractive) {
+      // Interactive homework submission
+      console.log(`🎮 Processing interactive homework submission for child ${child_id}`);
+      
+      if (interactive_score !== undefined) {
+        submissionData.score = interactive_score;
+        insertFields.push('score');
+        insertValues.push(interactive_score);
+      }
+      
+      if (time_spent) {
+        submissionData.time_spent = time_spent;
+        insertFields.push('time_spent');
+        insertValues.push(time_spent);
+      }
+      
+      if (answers) {
+        submissionData.answers_data = typeof answers === 'string' ? answers : JSON.stringify(answers);
+        insertFields.push('answers_data');
+        insertValues.push(submissionData.answers_data);
+      }
+      
+      if (comments) {
+        submissionData.feedback = comments;
+        insertFields.push('feedback');
+        insertValues.push(comments);
+      }
+      
+      // Auto-grade interactive homework based on score
+      if (interactive_score !== undefined) {
+        const percentage = Math.min(100, Math.max(0, interactive_score));
+        submissionData.grade = percentage;
+        submissionData.status = 'graded'; // Auto-grade interactive homework
+        insertFields.push('grade');
+        insertValues.push(percentage);
+        insertValues[insertValues.indexOf('submitted')] = 'graded'; // Update status
+      }
+      
+    } else {
+      // Traditional homework submission (requires files)
+      console.log(`📎 Processing traditional homework submission for child ${child_id}`);
+      
+      const fileUrls = req.files.map(file => `/uploads/homework_submissions/${file.filename}`);
+      const mainFileUrl = fileUrls[0];
+      
+      submissionData.file_url = mainFileUrl;
+      submissionData.additional_files = fileUrls.length > 1 ? JSON.stringify(fileUrls.slice(1)) : null;
+      
+      insertFields.push('file_url');
+      insertValues.push(mainFileUrl);
+      
+      if (submissionData.additional_files) {
+        insertFields.push('additional_files');
+        insertValues.push(submissionData.additional_files);
+      }
+      
+      if (comments) {
+        submissionData.feedback = comments;
+        insertFields.push('feedback');
+        insertValues.push(comments);
+      }
+    }
+
+    // Build dynamic INSERT query
+    const placeholders = insertFields.map(() => '?').join(', ');
+    const fieldsString = insertFields.join(', ');
+    
+    // Add submitted_at to all submissions
+    insertFields.push('submitted_at');
+    insertValues.push('NOW()');
+    
     const submissionResult = await query(`
       INSERT INTO homework_submissions (
-        homework_id, 
-        child_id, 
-        submitted_at, 
-        file_url, 
-        feedback,
-        status
-      ) VALUES (?, ?, NOW(), ?, ?, 'submitted')
-    `, [
-      homeworkId,
-      child_id,
-      mainFileUrl,
-      comments || null
-    ]);
+        ${insertFields.join(', ')}
+      ) VALUES (${insertFields.map((field, index) => field === 'submitted_at' ? 'NOW()' : '?').join(', ')})
+    `, insertValues.filter((val, index) => insertFields[index] !== 'submitted_at'));
 
     const submissionId = submissionResult.insertId;
+    
+    console.log(`✅ ${isInteractive ? 'Interactive' : 'Traditional'} homework submitted with ID: ${submissionId}`);
 
     // Get submission details for response
     const [submission] = await query(`
@@ -436,27 +543,108 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
         hs.*,
         c.first_name,
         c.last_name,
-        h.title as homework_title
+        h.title as homework_title,
+        h.content_type
       FROM homework_submissions hs
       JOIN children c ON hs.child_id = c.id
       JOIN homework h ON hs.homework_id = h.id
       WHERE hs.id = ?
     `, [submissionId]);
 
+    // Build response based on submission type
+    const responseData = {
+      id: submissionId,
+      homework_id: homeworkId,
+      child_id: child_id,
+      submitted_at: submission.submitted_at,
+      status: submission.status,
+      submission_type: submission.submission_type || (isInteractive ? 'interactive' : 'file_upload'),
+      child_name: `${submission.first_name} ${submission.last_name}`,
+      homework_title: submission.homework_title,
+      content_type: submission.content_type
+    };
+
+    if (isInteractive) {
+      responseData.score = submission.score;
+      responseData.grade = submission.grade;
+      responseData.time_spent = submission.time_spent;
+      if (submission.answers_data) {
+        try {
+          responseData.answers = JSON.parse(submission.answers_data);
+        } catch (e) {
+          responseData.answers = submission.answers_data;
+        }
+      }
+      responseData.auto_graded = true;
+    } else {
+      responseData.file_url = submission.file_url;
+      if (submission.additional_files) {
+        try {
+          responseData.additional_files = JSON.parse(submission.additional_files);
+        } catch (e) {
+          responseData.additional_files = [];
+        }
+      }
+    }
+
+    if (submission.feedback) {
+      responseData.comments = submission.feedback;
+    }
+
+    // Create notification for submission
+    const notificationData = {
+      title: isInteractive ? 'Interactive Homework Completed' : 'Homework Submitted',
+      message: `${isInteractive ? 'Interactive homework "' + homework.title + '" completed' : 'Homework "' + homework.title + '" submitted'} by ${submission.first_name} ${submission.last_name}${isInteractive && submission.grade ? ` with ${submission.grade}% score` : ''}. Submitted to ${homework.teacher_name}.`,
+      type: 'homework_submission',
+      priority: 'medium',
+      user_id: child.parent_id, // Send to parent
+      homework_id: homeworkId,
+      submission_id: submissionId,
+      teacher_name: homework.teacher_name,
+      score: isInteractive ? submission.grade : null,
+      auto_graded: isInteractive
+    };
+
+    // Insert notification using existing schema
+    try {
+      const notificationPayload = {
+        homework_id: homeworkId,
+        submission_id: submissionId,
+        teacher_name: homework.teacher_name,
+        score: isInteractive ? submission.grade : null,
+        auto_graded: isInteractive
+      };
+      
+      await query(`
+        INSERT INTO notifications (
+          userId, userType, title, body, type, data, priority, 
+          isRead, createdAt, sentAt, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
+      `, [
+        child.parent_id, // userId
+        'parent', // userType
+        notificationData.title,
+        notificationData.message,
+        'homework', // type from existing enum
+        JSON.stringify(notificationPayload), // data as JSON
+        notificationData.priority === 'high' ? 'high' : 'normal', // priority mapping
+        0, // isRead (false)
+        'sent' // status
+      ]);
+      console.log(`📬 Notification sent to parent ${child.parent_id} for homework submission`);
+    } catch (notificationError) {
+      console.error('Error creating notification:', notificationError);
+      // Don't fail the submission if notification fails
+    }
+
     res.json({
       success: true,
-      message: 'Homework submitted successfully',
-      submission: {
-        id: submissionId,
-        homework_id: homeworkId,
-        child_id: child_id,
-        submitted_at: submission.submitted_at,
-        file_url: mainFileUrl,
-        files: fileUrls,
-        comments: comments,
-        status: 'submitted',
-        child_name: `${submission.first_name} ${submission.last_name}`,
-        homework_title: submission.homework_title
+      message: `${isInteractive ? 'Interactive' : 'Traditional'} homework submitted successfully${isInteractive && submission.grade ? ` with ${submission.grade}% score` : ''}`,
+      submission: responseData,
+      notification: {
+        sent: true,
+        teacher_name: homework.teacher_name,
+        score: isInteractive ? submission.grade : null
       }
     });
 
@@ -483,6 +671,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       child_ids,
       selectedChildren, // Also accept selectedChildren for individual assignments
       assignment_type,
+      content_type, // interactive, traditional, project, etc.
       subject,
       grade,
       difficulty,
@@ -582,6 +771,9 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       console.log(`📍 Using teacher's class_id ${finalClassId} for individual assignment`);
     }
 
+    // Determine content type
+    const actualContentType = content_type || 'traditional'; // interactive, traditional, project
+    
     // Insert homework record with proper validation
     const result = await query(`
       INSERT INTO homework (
@@ -591,6 +783,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         teacher_id,
         class_id,
         assignment_type,
+        content_type,
         due_date,
         subject,
         grade,
@@ -598,7 +791,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         estimated_duration,
         status,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
     `, [
       title,
       description || '',
@@ -606,6 +799,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       req.user.id,
       finalClassId,
       actualAssignmentType,
+      actualContentType,
       finalDueDate,
       subject || '',
       grade || '',
@@ -696,6 +890,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         difficulty,
         estimated_duration,
         assignment_type: actualAssignmentType,
+        content_type: actualContentType,
         status: 'active',
         assigned_children: assignedChildren,
         created_at: new Date().toISOString()
@@ -709,6 +904,133 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       success: false,
       error: 'Internal server error',
       message: error.message 
+    });
+  }
+});
+
+// Grade homework submission (teacher only)
+router.post('/:homeworkId/submissions/:submissionId/grade', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const { homeworkId, submissionId } = req.params;
+    const { grade, feedback, return_to_parent } = req.body;
+    const teacherId = req.user.id;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - teachers only'
+      });
+    }
+
+    // Validate required fields
+    if (grade === undefined || feedback === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Grade and feedback are required'
+      });
+    }
+
+    // Verify submission exists and belongs to teacher's homework
+    const [submission] = await query(`
+      SELECT 
+        hs.*,
+        h.title as homework_title,
+        h.teacher_id,
+        h.content_type,
+        c.first_name,
+        c.last_name,
+        c.parent_id,
+        s.name as teacher_name
+      FROM homework_submissions hs
+      JOIN homework h ON hs.homework_id = h.id
+      JOIN children c ON hs.child_id = c.id
+      JOIN staff s ON h.teacher_id = s.id
+      WHERE hs.id = ? AND h.id = ?
+    `, [submissionId, homeworkId]);
+
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message: 'Submission not found'
+      });
+    }
+
+    // Verify teacher owns this homework
+    if (submission.teacher_id !== teacherId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only grade submissions for your own homework'
+      });
+    }
+
+    // Update submission with grade and feedback
+    const status = return_to_parent ? 'returned' : 'graded';
+    await query(`
+      UPDATE homework_submissions 
+      SET grade = ?, feedback = ?, graded_at = NOW(), status = ?
+      WHERE id = ?
+    `, [grade, feedback, status, submissionId]);
+
+    console.log(`✅ Homework submission ${submissionId} graded by teacher ${teacherId}: ${grade}%`);
+
+    // Create notification for parent about grading
+    const notificationTitle = return_to_parent ? 'Homework Graded and Returned' : 'Homework Graded';
+    const notificationMessage = `Homework "${submission.homework_title}" for ${submission.first_name} ${submission.last_name} has been graded by ${submission.teacher_name}. Grade: ${grade}%. ${feedback}`;
+    
+    try {
+      const gradingPayload = {
+        homework_id: homeworkId,
+        submission_id: submissionId,
+        teacher_name: submission.teacher_name,
+        grade: grade,
+        feedback: feedback,
+        return_to_parent: return_to_parent
+      };
+      
+      await query(`
+        INSERT INTO notifications (
+          userId, userType, title, body, type, data, priority, 
+          isRead, createdAt, sentAt, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
+      `, [
+        submission.parent_id, // userId
+        'parent', // userType
+        notificationTitle,
+        notificationMessage,
+        'homework', // type from existing enum
+        JSON.stringify(gradingPayload), // data as JSON
+        'high', // priority
+        0, // isRead (false)
+        'sent' // status
+      ]);
+      console.log(`📬 Grading notification sent to parent ${submission.parent_id}`);
+    } catch (notificationError) {
+      console.error('Error creating grading notification:', notificationError);
+      // Don't fail the grading if notification fails
+    }
+
+    res.json({
+      success: true,
+      message: `Homework graded successfully${return_to_parent ? ' and returned to parent' : ''}`,
+      grading: {
+        submission_id: submissionId,
+        homework_id: homeworkId,
+        grade: grade,
+        feedback: feedback,
+        status: status,
+        graded_at: new Date().toISOString(),
+        student_name: `${submission.first_name} ${submission.last_name}`,
+        homework_title: submission.homework_title
+      }
+    });
+
+  } catch (error) {
+    console.error('Error grading homework:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to grade homework',
+      error: error.message
     });
   }
 });

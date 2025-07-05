@@ -15,7 +15,7 @@ class AIGradingService {
    * @param {number} teacherId - ID of the teacher requesting grading
    * @returns {Object} Grading queue status
    */
-  async startGrading(submissions, teacherId) {
+  async startGrading(submissions, teacherId, dbQuery) {
     try {
       const queueId = `grading_${Date.now()}_${teacherId}`;
       
@@ -28,6 +28,9 @@ class AIGradingService {
         progress: 0,
         results: []
       });
+
+      // Store dbQuery function in queueItem for later use
+      this.gradingQueue.get(queueId).dbQuery = dbQuery;
 
       // Mock AI processing (in real implementation, this would call OpenAI/Claude)
       setTimeout(() => {
@@ -84,6 +87,37 @@ class AIGradingService {
     queueItem.status = 'completed';
     queueItem.completedAt = new Date();
     this.gradingQueue.set(queueId, queueItem);
+
+    // Notify teacher of grading completion
+    if (queueItem.dbQuery) {
+      try {
+        const gradingPayload = {
+          queue_id: queueId,
+          submission_count: queueItem.submissions.length,
+          completed_count: queueItem.results.length
+        };
+        
+        await queueItem.dbQuery(`
+          INSERT INTO notifications (
+            userId, userType, title, body, type, data, priority, 
+            isRead, createdAt, sentAt, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
+        `, [
+          queueItem.teacherId, // userId
+          'teacher', // userType
+          'AI Grading Completed',
+          `AI grading for your submissions has been completed for queue ${queueId}. ${queueItem.results.length} submissions were processed.`,
+          'general', // type from existing enum
+          JSON.stringify(gradingPayload), // data as JSON
+          'normal', // priority
+          0, // isRead (false)
+          'sent' // status
+        ]);
+        console.log(`📬 Notification sent to teacher ${queueItem.teacherId} for grading completion`);
+      } catch (error) {
+        console.error('Error creating grading completion notification:', error);
+      }
+    }
   }
 
   /**

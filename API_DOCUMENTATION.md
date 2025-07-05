@@ -370,28 +370,73 @@ Authorization: Bearer <your-jwt-token>
 **Headers:** `Authorization: Bearer <token>`, `Content-Type: multipart/form-data`
 
 **Request Body (Form Data):**
-- `childId`: string (required)
-- `file`: file upload (optional)
+- `child_id`: string (required)
+- `files`: file upload(s) (required for traditional homework)
+- `comments`: string (optional)
+- `interactive_score`: number (required for interactive homework)
+- `time_spent`: number (optional, time in minutes)
+- `answers`: string/JSON (optional, for interactive homework)
 
-**Response:**
+**Response for Traditional Homework:**
 ```json
 {
   "success": true,
-  "message": "Homework submitted successfully",
-  "submissionId": "456"
+  "message": "Traditional homework submitted successfully",
+  "submission": {
+    "id": 456,
+    "homework_id": 123,
+    "child_id": 1,
+    "submitted_at": "2024-01-15T10:30:00.000Z",
+    "status": "submitted",
+    "submission_type": "file_upload",
+    "file_url": "/uploads/homework_submissions/file.pdf",
+    "child_name": "Alice Johnson"
+  },
+  "notification": {
+    "sent": true,
+    "teacher_name": "Jane Smith",
+    "score": null
+  }
 }
 ```
 
-### Grade Homework (AI Assistant)
-**POST** `/api/homework/{homeworkId}/student/{studentId}/grade`
+**Response for Interactive Homework:**
+```json
+{
+  "success": true,
+  "message": "Interactive homework submitted successfully with 85% score",
+  "submission": {
+    "id": 456,
+    "homework_id": 123,
+    "child_id": 1,
+    "submitted_at": "2024-01-15T10:30:00.000Z",
+    "status": "graded",
+    "submission_type": "interactive",
+    "score": 85,
+    "grade": 85,
+    "time_spent": 25,
+    "auto_graded": true,
+    "child_name": "Alice Johnson"
+  },
+  "notification": {
+    "sent": true,
+    "teacher_name": "Jane Smith",
+    "score": 85
+  }
+}
+```
+
+### Grade Homework Submission
+**POST** `/api/homework/{homeworkId}/submissions/{submissionId}/grade`
 
 **Headers:** `Authorization: Bearer <token>`
 
 **Request Body:**
 ```json
 {
-  "score": 85.5,
-  "feedback": "Excellent work! Keep it up."
+  "grade": 85.5,
+  "feedback": "Excellent work! Keep it up.",
+  "return_to_parent": true
 }
 ```
 
@@ -399,8 +444,46 @@ Authorization: Bearer <your-jwt-token>
 ```json
 {
   "success": true,
-  "message": "Homework graded successfully",
-  "graded": true
+  "message": "Homework graded successfully and returned to parent",
+  "grading": {
+    "submission_id": 456,
+    "homework_id": 123,
+    "grade": 85.5,
+    "feedback": "Excellent work! Keep it up.",
+    "status": "returned",
+    "graded_at": "2024-01-15T15:30:00.000Z",
+    "student_name": "Alice Johnson",
+    "homework_title": "Math Assignment"
+  }
+}
+```
+
+### AI Grading (Teachers)
+**POST** `/api/ai/grading/start`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request Body:**
+```json
+{
+  "submissions": [
+    {"id": 456, "homework_id": 123},
+    {"id": 457, "homework_id": 123}
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "queueId": "grading_1640995200000_17",
+    "status": "started",
+    "estimatedTime": "2-5 minutes",
+    "submissionCount": 2
+  },
+  "message": "AI grading started successfully"
 }
 ```
 
@@ -430,6 +513,103 @@ Authorization: Bearer <your-jwt-token>
 **GET** `/api/homework/files/{fileId}`
 
 **Response:** File download (binary data)
+
+---
+
+## Notifications
+
+### Get All Notifications
+**GET** `/api/notifications`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "notifications": [
+    {
+      "id": 1,
+      "title": "Interactive Homework Completed",
+      "message": "Interactive homework 'Math Quiz' completed by Alice Johnson with 85% score. Submitted to Jane Smith.",
+      "type": "homework_submission",
+      "priority": "medium",
+      "read": false,
+      "sender": "Jane Smith",
+      "score": 85,
+      "homework_id": 123,
+      "submission_id": 456,
+      "auto_graded": true,
+      "timestamp": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+### Get Notification by ID
+**GET** `/api/notifications/{id}`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "notification": {
+    "id": 1,
+    "title": "Homework Graded and Returned",
+    "message": "Homework 'Math Assignment' for Alice Johnson has been graded by Jane Smith. Grade: 85.5%. Excellent work!",
+    "type": "homework_graded",
+    "priority": "high",
+    "read": false,
+    "sender": "Jane Smith",
+    "score": 85.5,
+    "homework_id": 123,
+    "submission_id": 456,
+    "auto_graded": false,
+    "timestamp": "2024-01-15T15:30:00.000Z"
+  }
+}
+```
+
+### Mark Notification as Read
+**POST** `/api/notifications/{id}/read`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Notification 1 marked as read"
+}
+```
+
+### Mark All Notifications as Read
+**POST** `/api/notifications/mark-all-read`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read"
+}
+```
+
+### Get Unread Notifications Count
+**GET** `/api/notifications/unread/count`
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "success": true,
+  "count": 3
+}
+```
 
 ---
 
