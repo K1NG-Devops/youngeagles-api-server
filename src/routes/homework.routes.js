@@ -48,9 +48,11 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Base query to get homework for children - Fixed table names and columns
+    console.log(`🔍 Fetching homework for parent ${parentId}${childId ? ` and child ${childId}` : ''}`);
+
+    // Enhanced query to get homework for children with proper individual assignment handling
     let sql = `
-      SELECT 
+      SELECT DISTINCT
         h.*,
         c.first_name as child_name,
         c.last_name as child_last_name,
@@ -66,13 +68,24 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
         hs.grade,
         hs.feedback as teacher_feedback,
         hs.file_url as attachment_url,
-        hs.feedback as submission_text
+        hs.feedback as submission_text,
+        h.assignment_type,
+        CASE 
+          WHEN h.assignment_type = 'individual' THEN 'individual'
+          ELSE 'class'
+        END as assignment_scope
       FROM children c
       JOIN classes cl ON cl.id = c.class_id
-      JOIN homework h ON h.class_id = cl.id
+      JOIN homework h ON (
+        (h.class_id = cl.id AND h.assignment_type = 'class') OR
+        (h.assignment_type = 'individual' AND EXISTS (
+          SELECT 1 FROM homework_individual_assignments hia 
+          WHERE hia.homework_id = h.id AND hia.child_id = c.id
+        ))
+      )
       LEFT JOIN staff s ON s.id = h.teacher_id
       LEFT JOIN homework_submissions hs ON hs.homework_id = h.id AND hs.child_id = c.id
-      WHERE c.parent_id = ?
+      WHERE c.parent_id = ? AND h.status = 'active'
     `;
 
     const params = [parentId];
@@ -84,9 +97,11 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
     }
 
     // Add order by
-    sql += ' ORDER BY h.due_date DESC, c.first_name';
+    sql += ' ORDER BY h.due_date DESC, h.created_at DESC, c.first_name';
 
+    console.log(`📊 Executing homework query for parent ${parentId}`);
     const homework = await query(sql, params);
+    console.log(`📚 Found ${homework.length} homework assignments for parent ${parentId}`);
 
     // Get children list for the parent (for the selector)
     const children = await query(`
@@ -464,7 +479,9 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       instructions,
       due_date,
       class_id,
+      classId, // Also accept classId for compatibility
       child_ids,
+      selectedChildren, // Also accept selectedChildren for individual assignments
       assignment_type,
       subject,
       grade,
@@ -480,43 +497,92 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Access denied - teachers only' });
     }
 
-    if (!title || !description || !due_date) {
+    if (!title || !description) {
       return res.status(400).json({
         success: false,
-        message: 'Title, description, and due date are required'
+        message: 'Title and description are required'
       });
     }
+
+    // Get teacher's assigned class for validation
+    const [teacher] = await query(
+      'SELECT id, name, className FROM staff WHERE id = ? AND role = ?',
+      [req.user.id, 'teacher']
+    );
+
+    if (!teacher) {
+      return res.status(403).json({ error: 'Teacher not found' });
+    }
+
+    if (!teacher.className) {
+      return res.status(400).json({
+        success: false,
+        message: 'Teacher is not assigned to any class. Please contact admin.'
+      });
+    }
+
+    // Get the teacher's class ID
+    const [teacherClass] = await query(
+      'SELECT id FROM classes WHERE name = ?',
+      [teacher.className]
+    );
+
+    if (!teacherClass) {
+      return res.status(400).json({
+        success: false,
+        message: 'Teacher assigned class not found in database'
+      });
+    }
+
+    const teacherClassId = teacherClass.id;
+    console.log(`👩‍🏫 Teacher ${teacher.name} creating homework for class ${teacher.className} (ID: ${teacherClassId})`);
+
+    // Determine assignment type and validate accordingly
+    const actualAssignmentType = assignment_type || (selectedChildren && selectedChildren.length > 0 ? 'individual' : 'class');
+    const actualChildIds = child_ids || selectedChildren || [];
+    const actualClassId = class_id || classId || teacherClassId;
+
+    console.log(`📝 Creating ${actualAssignmentType} homework: "${title}" by teacher ${req.user.id}`);
+    console.log(`📍 Using class_id: ${actualClassId}`);
+    console.log(`👥 Selected children: ${actualChildIds.length} students`);
 
     // Validate assignment type
-    if (assignment_type === 'individual' && (!child_ids || child_ids.length === 0)) {
+    if (actualAssignmentType === 'individual' && actualChildIds.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Child IDs are required for individual assignments'
+        message: 'At least one student must be selected for individual assignments'
       });
     }
 
-    if (assignment_type === 'class' && !class_id) {
-      return res.status(400).json({
-        success: false,
-        message: 'Class ID is required for class assignments'
-      });
-    }
-
-    console.log(`📝 Creating ${assignment_type} homework: "${title}" by teacher ${req.user.id}`);
-
-    // For individual assignments, we need to get the class from the children
-    let finalClassId = class_id;
-    if (assignment_type === 'individual' && child_ids.length > 0) {
-      const [childClass] = await query(
-        'SELECT class_id FROM children WHERE id = ? LIMIT 1',
-        [child_ids[0]]
+    // For individual assignments, verify the children belong to teacher's class
+    if (actualAssignmentType === 'individual' && actualChildIds.length > 0) {
+      const childrenInClass = await query(
+        `SELECT id, first_name, last_name FROM children 
+         WHERE id IN (${actualChildIds.map(() => '?').join(',')}) AND class_id = ?`,
+        [...actualChildIds, teacherClassId]
       );
-      if (childClass) {
-        finalClassId = childClass.class_id;
+      
+      if (childrenInClass.length !== actualChildIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Some selected students do not belong to your class'
+        });
       }
+      
+      console.log(`✅ Verified ${childrenInClass.length} children belong to teacher's class`);
     }
 
-    // Insert homework record
+    // Set default due date if not provided (7 days from now)
+    const finalDueDate = due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+    // For individual assignments, always use teacher's class
+    let finalClassId = actualClassId;
+    if (actualAssignmentType === 'individual') {
+      finalClassId = teacherClassId;
+      console.log(`📍 Using teacher's class_id ${finalClassId} for individual assignment`);
+    }
+
+    // Insert homework record with proper validation
     const result = await query(`
       INSERT INTO homework (
         title,
@@ -524,6 +590,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         instructions,
         teacher_id,
         class_id,
+        assignment_type,
         due_date,
         subject,
         grade,
@@ -531,14 +598,15 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         estimated_duration,
         status,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
     `, [
       title,
       description || '',
       instructions || '',
       req.user.id,
       finalClassId,
-      due_date,
+      actualAssignmentType,
+      finalDueDate,
       subject || '',
       grade || '',
       difficulty || 'medium',
@@ -549,8 +617,8 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
     console.log(`✅ Homework created with ID: ${homeworkId}`);
 
     // For individual assignments, create homework_individual_assignments entries
-    if (assignment_type === 'individual' && child_ids.length > 0) {
-      console.log(`👥 Creating individual assignments for ${child_ids.length} children`);
+    if (actualAssignmentType === 'individual' && actualChildIds.length > 0) {
+      console.log(`👥 Creating individual assignments for ${actualChildIds.length} children`);
       
       // Create individual assignment table if it doesn't exist
       try {
@@ -571,7 +639,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       }
 
       // Insert individual assignments
-      for (const childId of child_ids) {
+      for (const childId of actualChildIds) {
         try {
           await query(
             `INSERT INTO homework_individual_assignments (homework_id, child_id, status, assigned_at) 
@@ -579,22 +647,36 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
              ON DUPLICATE KEY UPDATE status = 'assigned', assigned_at = NOW()`,
             [homeworkId, childId]
           );
+          console.log(`✅ Assigned homework ${homeworkId} to child ${childId}`);
         } catch (insertError) {
-          console.error(`Error assigning to child ${childId}:`, insertError.message);
+          console.error(`❌ Error assigning to child ${childId}:`, insertError.message);
         }
       }
       
-      console.log(`✅ Created individual assignments for homework ${homeworkId}`);
+      console.log(`✅ Created ${actualChildIds.length} individual assignments for homework ${homeworkId}`);
     }
 
     // Get child names for response (for individual assignments)
     let assignedChildren = [];
-    if (assignment_type === 'individual' && child_ids.length > 0) {
+    if (actualAssignmentType === 'individual' && actualChildIds.length > 0) {
       const children = await query(
-        `SELECT id, name, className FROM children WHERE id IN (${child_ids.map(() => '?').join(',')})`,
-        child_ids
+        `SELECT id, first_name, last_name, className FROM children WHERE id IN (${actualChildIds.map(() => '?').join(',')})`,
+        actualChildIds
       );
-      assignedChildren = children;
+      assignedChildren = children.map(child => ({
+        id: child.id,
+        name: `${child.first_name} ${child.last_name}`,
+        className: child.className
+      }));
+    }
+
+    // Log the successful creation
+    console.log(`🎉 Successfully created ${actualAssignmentType} homework "${title}"`);
+    console.log(`📋 Homework ID: ${homeworkId}`);
+    console.log(`👩‍🏫 Teacher: ${teacher.name} (ID: ${req.user.id})`);
+    console.log(`🏫 Class: ${teacher.className} (ID: ${finalClassId})`);
+    if (actualAssignmentType === 'individual') {
+      console.log(`👥 Assigned to: ${assignedChildren.length} students`);
     }
 
     res.status(201).json({
@@ -605,17 +687,20 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         description,
         instructions,
         teacher_id: req.user.id,
+        teacher_name: teacher.name,
         class_id: finalClassId,
-        due_date,
+        class_name: teacher.className,
+        due_date: finalDueDate,
         subject,
         grade,
         difficulty,
         estimated_duration,
-        assignment_type: assignment_type || 'class',
+        assignment_type: actualAssignmentType,
         status: 'active',
-        assigned_children: assignedChildren
+        assigned_children: assignedChildren,
+        created_at: new Date().toISOString()
       },
-      message: `Homework "${title}" created successfully${assignment_type === 'individual' ? ` for ${assignedChildren.length} students` : ''}`
+      message: `Homework "${title}" created successfully${actualAssignmentType === 'individual' ? ` for ${assignedChildren.length} students` : ` for ${teacher.className} class`}`
     });
 
   } catch (error) {

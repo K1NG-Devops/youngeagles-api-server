@@ -106,21 +106,55 @@ router.get('/homework', verifyTokenMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Access denied - teachers only' });
     }
 
-    // Get homework created by this teacher only
+    console.log(`👩‍🏫 Fetching homework for teacher ${teacherId}`);
+
+    // Get homework created by this teacher with proper assignment type handling
     const homework = await query(`
       SELECT 
         h.*,
         cl.name as class_name,
         COUNT(DISTINCT hs.id) as submissions_count,
-        COUNT(DISTINCT c.id) as total_students
+        CASE 
+          WHEN h.assignment_type = 'individual' THEN (
+            SELECT COUNT(*) FROM homework_individual_assignments hia WHERE hia.homework_id = h.id
+          )
+          ELSE COUNT(DISTINCT c.id)
+        END as total_students,
+        CASE 
+          WHEN h.assignment_type = 'individual' THEN 'Individual Assignment'
+          ELSE 'Class Assignment'
+        END as assignment_scope
       FROM homework h
       LEFT JOIN classes cl ON cl.id = h.class_id
       LEFT JOIN children c ON c.class_id = h.class_id
       LEFT JOIN homework_submissions hs ON hs.homework_id = h.id
-      WHERE h.teacher_id = ?
+      WHERE h.teacher_id = ? AND h.status = 'active'
       GROUP BY h.id
-      ORDER BY h.due_date DESC
+      ORDER BY h.created_at DESC, h.due_date DESC
     `, [teacherId]);
+
+    console.log(`📚 Found ${homework.length} homework assignments for teacher ${teacherId}`);
+
+    // Add individual assignment details for each homework
+    for (let hw of homework) {
+      if (hw.assignment_type === 'individual') {
+        const individualAssignments = await query(`
+          SELECT 
+            c.id,
+            c.first_name,
+            c.last_name,
+            hia.status as assignment_status,
+            hia.assigned_at
+          FROM homework_individual_assignments hia
+          JOIN children c ON c.id = hia.child_id
+          WHERE hia.homework_id = ?
+          ORDER BY c.first_name
+        `, [hw.id]);
+        
+        hw.assigned_students = individualAssignments;
+        hw.total_students = individualAssignments.length;
+      }
+    }
 
     res.json({
       success: true,
