@@ -162,7 +162,7 @@ router.get('/unread/count', verifyTokenMiddleware, async (req, res) => {
 });
 
 // Send notification (admin/teacher only)
-router.post('/send', authenticateToken, async (req, res) => {
+router.post('/send', verifyTokenMiddleware, async (req, res) => {
   try {
     const { title, message, type, priority, recipients } = req.body;
     

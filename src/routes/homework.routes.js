@@ -453,8 +453,8 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
       submission_type: isInteractive ? 'interactive' : 'file_upload'
     };
 
-    let insertFields = ['homework_id', 'child_id', 'status', 'submission_type'];
-    let insertValues = [homeworkId, child_id, 'submitted', isInteractive ? 'interactive' : 'file_upload'];
+    let insertFields = ['homework_id', 'child_id', 'studentId', 'studentName', 'className', 'teacherId', 'status', 'submission_type'];
+    let insertValues = [homeworkId, child_id, child_id, `${child.first_name} ${child.last_name}`, child.class_name, homework.teacher_id, 'submitted', isInteractive ? 'interactive' : 'file_upload'];
 
     if (isInteractive) {
       // Interactive homework submission
@@ -520,18 +520,21 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
     }
 
     // Build dynamic INSERT query
-    const placeholders = insertFields.map(() => '?').join(', ');
-    const fieldsString = insertFields.join(', ');
-    
     // Add submitted_at to all submissions
     insertFields.push('submitted_at');
     insertValues.push('NOW()');
     
+    // Create the VALUES clause with proper placeholder handling
+    const valuesClause = insertFields.map((field) => field === 'submitted_at' ? 'NOW()' : '?').join(', ');
+    
+    // Filter out 'NOW()' values for the parameters array
+    const queryValues = insertValues.filter((val, index) => insertFields[index] !== 'submitted_at');
+    
     const submissionResult = await query(`
       INSERT INTO homework_submissions (
         ${insertFields.join(', ')}
-      ) VALUES (${insertFields.map((field, index) => field === 'submitted_at' ? 'NOW()' : '?').join(', ')})
-    `, insertValues.filter((val, index) => insertFields[index] !== 'submitted_at'));
+      ) VALUES (${valuesClause})
+    `, queryValues);
 
     const submissionId = submissionResult.insertId;
     
@@ -618,8 +621,8 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
       await query(`
         INSERT INTO notifications (
           userId, userType, title, body, type, data, priority, 
-          isRead, createdAt, sentAt, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
+          isRead, createdAt, sentAt, updatedAt, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NOW(), ?)
       `, [
         child.parent_id, // userId
         'parent', // userType
