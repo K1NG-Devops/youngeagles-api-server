@@ -109,12 +109,17 @@ async function startServer() {
   // Start server
   server.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🌐 Local: http://localhost:${PORT}`);
-    console.log(`💓 Health check: http://localhost:${PORT}/health`);
     
     if (isProduction) {
+      const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+        : `https://youngeagles-api.railway.app`; // fallback
+      console.log(`🌐 Production: ${railwayUrl}`);
+      console.log(`💓 Health check: ${railwayUrl}/health`);
       console.log('🚀 Production server ready for requests');
     } else {
+      console.log(`🌐 Local: http://localhost:${PORT}`);
+      console.log(`💓 Health check: http://localhost:${PORT}/health`);
       console.log('🔧 Development server ready');
     }
   });
