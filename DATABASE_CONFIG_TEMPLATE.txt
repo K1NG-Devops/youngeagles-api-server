@@ -1,0 +1,33 @@
+# CREATE YOUR .env FILE WITH THESE SETTINGS:
+# Copy this content into a new file named ".env" in the YoungEagles_API directory
+
+# Database Configuration (Railway)
+# Replace these with your actual Railway database credentials
+DB_HOST=your-railway-db-host
+DB_USER=your-railway-db-username
+DB_PASSWORD=your-railway-db-password
+DB_NAME=your-railway-db-name
+DB_PORT=3306
+
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+
+# JWT Configuration
+JWT_SECRET=your-jwt-secret-key-here
+
+# PayFast Configuration (South Africa)
+PAYFAST_MERCHANT_ID=your-payfast-merchant-id
+PAYFAST_MERCHANT_KEY=your-payfast-merchant-key
+PAYFAST_PASSPHRASE=your-payfast-passphrase
+PAYFAST_SANDBOX=true
+
+# API Configuration
+API_URL=http://localhost:5000
+FRONTEND_URL=http://localhost:3000
+
+# INSTRUCTIONS:
+# 1. Create a new file named ".env" in the YoungEagles_API directory
+# 2. Copy the database configuration above into the .env file
+# 3. Replace the placeholder values with your actual Railway database credentials
+# 4. Save the file and restart the API server with: npm start 

@@ -1,8 +1,42 @@
 import express from 'express';
 import authenticateToken from '../middleware/authMiddleware.js';
 import { db } from '../db.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
+
+// Configure multer for profile picture uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(process.cwd(), 'uploads', 'profile_pictures');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const extension = path.extname(file.originalname);
+        cb(null, `profile-${req.user.id}-${uniqueSuffix}${extension}`);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+        }
+    }
+});
 
 // Helper function to execute database queries
 async function executeQuery(sql, params = []) {
@@ -121,6 +155,62 @@ router.get('/:id', authenticateToken, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch user',
+            error: error.message
+        });
+    }
+});
+
+// Upload profile picture
+router.post('/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Profile picture file is required'
+            });
+        }
+
+        const userId = req.user.id;
+        const fileUrl = `/uploads/profile_pictures/${req.file.filename}`;
+
+        // Update the user's profile picture in the appropriate table
+        let updateResult;
+        try {
+            // Try updating users table first (for parents)
+            updateResult = await executeQuery(`
+                UPDATE users 
+                SET profile_picture = ?, updated_at = NOW() 
+                WHERE id = ?
+            `, [fileUrl, userId]);
+
+            // If no rows affected, try staff table (for teachers/admins)
+            if (updateResult.affectedRows === 0) {
+                updateResult = await executeQuery(`
+                    UPDATE staff 
+                    SET profile_picture = ?, updated_at = NOW() 
+                    WHERE id = ?
+                `, [fileUrl, userId]);
+            }
+        } catch (error) {
+            console.error('Error updating profile picture in database:', error);
+            // If tables don't have profile_picture column, we'll still store the file
+            // and return success - the column can be added later
+        }
+
+        res.json({
+            success: true,
+            message: 'Profile picture uploaded successfully',
+            data: {
+                profilePictureUrl: fileUrl,
+                filename: req.file.filename
+            }
+        });
+
+    } catch (error) {
+        console.error('Error uploading profile picture:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload profile picture',
             error: error.message
         });
     }

@@ -1,5 +1,4 @@
-import mysql from 'mysql2/promise';
-import config from '../config/database.js';
+import { execute, query } from '../db.js';
 
 class Subscription {
     constructor({
@@ -45,10 +44,8 @@ class Subscription {
     }
 
     static async create(subscription) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [result] = await connection.execute(
-                `INSERT INTO subscriptions (
+        const [result] = await execute(
+            `INSERT INTO subscriptions (
                     user_id, plan_id, plan_name, price_monthly, price_annual,
                     billing_cycle, status, payment_method, payment_gateway_id,
                     subscription_start_date, subscription_end_date, next_billing_date,
@@ -66,185 +63,122 @@ class Subscription {
                 ]
             );
             return { ...subscription, id: result.insertId };
-        } finally {
-            await connection.end();
-        }
     }
 
     static async findById(id) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE id = ?',
-                [id]
-            );
-            return rows[0];
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE id = ?',
+            [id]
+        );
+        return rows[0];
     }
 
     static async findByUserId(userId) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC',
-                [userId]
-            );
-            return rows;
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC',
+            [userId]
+        );
+        return rows;
     }
 
     static async findActiveByUserId(userId) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
-                [userId, 'active']
-            );
-            return rows[0];
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+            [userId, 'active']
+        );
+        return rows[0];
     }
 
     static async findByPaymentGatewayId(paymentGatewayId) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE payment_gateway_id = ?',
-                [paymentGatewayId]
-            );
-            return rows[0];
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE payment_gateway_id = ?',
+            [paymentGatewayId]
+        );
+        return rows[0];
     }
 
     static async updateStatus(id, status, updatedBy = null) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const updateData = [status];
-            let query = 'UPDATE subscriptions SET status = ?, updated_at = NOW()';
-            
-            if (status === 'cancelled') {
-                query += ', cancelled_at = NOW(), cancelled_by = ?';
-                updateData.push(updatedBy);
-            }
-            
-            query += ' WHERE id = ?';
-            updateData.push(id);
-
-            const [result] = await connection.execute(query, updateData);
-            return result.affectedRows > 0;
-        } finally {
-            await connection.end();
+        const updateData = [status];
+        let queryString = 'UPDATE subscriptions SET status = ?, updated_at = NOW()';
+        
+        if (status === 'cancelled') {
+            queryString += ', cancelled_at = NOW(), cancelled_by = ?';
+            updateData.push(updatedBy);
         }
+        
+        queryString += ' WHERE id = ?';
+        updateData.push(id);
+
+        const [result] = await execute(queryString, updateData);
+        return result.affectedRows > 0;
     }
 
     static async updateNextBillingDate(id, nextBillingDate) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [result] = await connection.execute(
-                'UPDATE subscriptions SET next_billing_date = ?, updated_at = NOW() WHERE id = ?',
-                [nextBillingDate, id]
-            );
-            return result.affectedRows > 0;
-        } finally {
-            await connection.end();
-        }
+        const [result] = await execute(
+            'UPDATE subscriptions SET next_billing_date = ?, updated_at = NOW() WHERE id = ?',
+            [nextBillingDate, id]
+        );
+        return result.affectedRows > 0;
     }
 
     static async findExpiredSubscriptions() {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE status = ? AND subscription_end_date < NOW()',
-                ['active']
-            );
-            return rows;
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE status = ? AND subscription_end_date < NOW()',
+            ['active']
+        );
+        return rows;
     }
 
     static async findSubscriptionsDueForRenewal(daysAhead = 1) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT * FROM subscriptions WHERE status = ? AND auto_renew = ? AND next_billing_date <= DATE_ADD(NOW(), INTERVAL ? DAY)',
-                ['active', true, daysAhead]
-            );
-            return rows;
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT * FROM subscriptions WHERE status = ? AND auto_renew = ? AND next_billing_date <= DATE_ADD(NOW(), INTERVAL ? DAY)',
+            ['active', true, daysAhead]
+        );
+        return rows;
     }
 
     static async getSubscriptionStats() {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [stats] = await connection.execute(`
-                SELECT 
-                    COUNT(*) as total_subscriptions,
-                    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_subscriptions,
-                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_subscriptions,
-                    SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired_subscriptions,
-                    SUM(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as monthly_recurring_revenue,
-                    AVG(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as average_revenue_per_user
-                FROM subscriptions 
-                WHERE status = 'active'
-            `);
-            return stats[0];
-        } finally {
-            await connection.end();
-        }
+        const [stats] = await query(`
+            SELECT 
+                COUNT(*) as total_subscriptions,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_subscriptions,
+                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_subscriptions,
+                SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired_subscriptions,
+                SUM(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as monthly_recurring_revenue,
+                AVG(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as average_revenue_per_user
+            FROM subscriptions 
+            WHERE status = 'active'
+        `);
+        return stats[0];
     }
 
     static async cancel(id, reason = null, cancelledBy = null) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [result] = await connection.execute(
-                'UPDATE subscriptions SET status = ?, cancelled_at = NOW(), cancelled_by = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?',
-                ['cancelled', cancelledBy, reason, id]
-            );
-            return result.affectedRows > 0;
-        } finally {
-            await connection.end();
-        }
+        const [result] = await execute(
+            'UPDATE subscriptions SET status = ?, cancelled_at = NOW(), cancelled_by = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?',
+            ['cancelled', cancelledBy, reason, id]
+        );
+        return result.affectedRows > 0;
     }
 
     static async reactivate(id) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [result] = await connection.execute(
-                'UPDATE subscriptions SET status = ?, cancelled_at = NULL, cancelled_by = NULL, cancellation_reason = NULL, updated_at = NOW() WHERE id = ?',
-                ['active', id]
-            );
-            return result.affectedRows > 0;
-        } finally {
-            await connection.end();
-        }
+        const [result] = await execute(
+            'UPDATE subscriptions SET status = ?, cancelled_at = NULL, cancelled_by = NULL, cancellation_reason = NULL, updated_at = NOW() WHERE id = ?',
+            ['active', id]
+        );
+        return result.affectedRows > 0;
     }
 
     // Feature access control
     static async hasFeatureAccess(userId, feature) {
-        const connection = await mysql.createConnection(config);
-        try {
-            const [rows] = await connection.execute(
-                'SELECT plan_id FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
-                [userId, 'active']
-            );
-            
-            if (!rows[0]) return false;
-            
-            const planId = rows[0].plan_id;
-            return this.checkFeatureAccess(planId, feature);
-        } finally {
-            await connection.end();
-        }
+        const [rows] = await query(
+            'SELECT plan_id FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+            [userId, 'active']
+        );
+        
+        if (!rows[0]) return false;
+        
+        const planId = rows[0].plan_id;
+        return this.checkFeatureAccess(planId, feature);
     }
 
     static checkFeatureAccess(planId, feature) {

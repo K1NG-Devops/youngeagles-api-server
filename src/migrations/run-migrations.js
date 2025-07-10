@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
+import 'dotenv/config';
 import config from '../config/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
