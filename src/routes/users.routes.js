@@ -171,39 +171,89 @@ router.post('/profile-picture', authenticateToken, upload.single('profilePicture
         }
 
         const userId = req.user.id;
+        const userType = req.user.userType || req.user.role;
         const fileUrl = `/uploads/profile_pictures/${req.file.filename}`;
 
         // Update the user's profile picture in the appropriate table
         let updateResult;
+        let updatedUser = null;
+        
         try {
-            // Try updating users table first (for parents)
-            updateResult = await executeQuery(`
-                UPDATE users 
-                SET profile_picture = ?, updated_at = NOW() 
-                WHERE id = ?
-            `, [fileUrl, userId]);
+            if (userType === 'parent') {
+                // Update users table for parents
+                updateResult = await executeQuery(`
+                    UPDATE users 
+                    SET profile_picture = ?, updated_at = NOW() 
+                    WHERE id = ?
+                `, [fileUrl, userId]);
 
-            // If no rows affected, try staff table (for teachers/admins)
-            if (updateResult.affectedRows === 0) {
+                if (updateResult.affectedRows > 0) {
+                    // Get updated user data
+                    const userResult = await executeQuery(`
+                        SELECT id, name, email, profile_picture, 'parent' as role, 'parent' as userType
+                        FROM users 
+                        WHERE id = ?
+                    `, [userId]);
+                    updatedUser = userResult[0];
+                }
+            } else {
+                // Update staff table for teachers/admins
                 updateResult = await executeQuery(`
                     UPDATE staff 
                     SET profile_picture = ?, updated_at = NOW() 
                     WHERE id = ?
                 `, [fileUrl, userId]);
+
+                if (updateResult.affectedRows > 0) {
+                    // Get updated user data
+                    const userResult = await executeQuery(`
+                        SELECT id, name, email, profile_picture, role, role as userType
+                        FROM staff 
+                        WHERE id = ?
+                    `, [userId]);
+                    updatedUser = userResult[0];
+                }
             }
-        } catch (error) {
-            console.error('Error updating profile picture in database:', error);
-            // If tables don't have profile_picture column, we'll still store the file
-            // and return success - the column can be added later
+
+            console.log(`✅ Profile picture updated for user ${userId} (${userType}): ${fileUrl}`);
+
+        } catch (dbError) {
+            console.error('Database error updating profile picture:', dbError);
+            
+            // Check if it's a column missing error
+            if (dbError.message && dbError.message.includes("Unknown column 'profile_picture'")) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Profile picture feature not yet enabled. Please run the database migration.',
+                    error: 'MISSING_COLUMN',
+                    migrationNeeded: true
+                });
+            }
+            
+            // For other database errors, still return success since file was uploaded
+            console.warn('Profile picture uploaded but database update failed:', dbError.message);
+        }
+
+        // Prepare response data
+        const responseData = {
+            profilePictureUrl: fileUrl,
+            filename: req.file.filename
+        };
+
+        // If we have updated user data, include it
+        if (updatedUser) {
+            responseData.user = {
+                ...updatedUser,
+                profilePicture: fileUrl,
+                profile_picture: fileUrl, // For compatibility
+                avatar: fileUrl // For compatibility
+            };
         }
 
         res.json({
             success: true,
             message: 'Profile picture uploaded successfully',
-            data: {
-                profilePictureUrl: fileUrl,
-                filename: req.file.filename
-            }
+            data: responseData
         });
 
     } catch (error) {
@@ -211,6 +261,53 @@ router.post('/profile-picture', authenticateToken, upload.single('profilePicture
         res.status(500).json({
             success: false,
             message: 'Failed to upload profile picture',
+            error: error.message
+        });
+    }
+});
+
+// Check database schema for profile picture support
+router.get('/check-profile-picture-support', authenticateToken, async (req, res) => {
+    try {
+        // Check if profile_picture column exists in users table
+        const usersColumnCheck = await executeQuery(`
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'users' 
+            AND COLUMN_NAME = 'profile_picture'
+        `);
+
+        // Check if profile_picture column exists in staff table
+        const staffColumnCheck = await executeQuery(`
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'staff' 
+            AND COLUMN_NAME = 'profile_picture'
+        `);
+
+        const hasUsersColumn = usersColumnCheck.length > 0;
+        const hasStaffColumn = staffColumnCheck.length > 0;
+
+        res.json({
+            success: true,
+            profilePictureSupport: {
+                usersTable: hasUsersColumn,
+                staffTable: hasStaffColumn,
+                fullySupported: hasUsersColumn && hasStaffColumn,
+                migrationNeeded: !hasUsersColumn || !hasStaffColumn
+            },
+            message: hasUsersColumn && hasStaffColumn 
+                ? 'Profile picture feature is fully supported' 
+                : 'Database migration needed for profile picture support'
+        });
+
+    } catch (error) {
+        console.error('Error checking profile picture support:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to check profile picture support',
             error: error.message
         });
     }

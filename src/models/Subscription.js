@@ -66,119 +66,206 @@ class Subscription {
     }
 
     static async findById(id) {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE id = ?',
-            [id]
-        );
-        return rows[0];
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE id = ?',
+                [id]
+            );
+            // Handle both [rows] and rows formats
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (error) {
+            console.error('Error finding subscription by ID:', error);
+            return null;
+        }
     }
 
     static async findByUserId(userId) {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC',
-            [userId]
-        );
-        return rows;
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC',
+                [userId]
+            );
+            // Handle both [rows] and rows formats
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows || [];
+        } catch (error) {
+            console.error('Error finding subscriptions by user ID:', error);
+            return [];
+        }
     }
 
     static async findActiveByUserId(userId) {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
-            [userId, 'active']
-        );
-        return rows[0];
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+                [userId, 'active']
+            );
+            // Handle both [rows] and rows formats
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (error) {
+            console.error('Error finding active subscription by user ID:', error);
+            // If subscriptions table doesn't exist, return null (user will get free plan)
+            return null;
+        }
     }
 
     static async findByPaymentGatewayId(paymentGatewayId) {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE payment_gateway_id = ?',
-            [paymentGatewayId]
-        );
-        return rows[0];
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE payment_gateway_id = ?',
+                [paymentGatewayId]
+            );
+            // Handle both [rows] and rows formats
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (error) {
+            console.error('Error finding subscription by payment gateway ID:', error);
+            return null;
+        }
     }
 
     static async updateStatus(id, status, updatedBy = null) {
-        const updateData = [status];
-        let queryString = 'UPDATE subscriptions SET status = ?, updated_at = NOW()';
-        
-        if (status === 'cancelled') {
-            queryString += ', cancelled_at = NOW(), cancelled_by = ?';
-            updateData.push(updatedBy);
-        }
-        
-        queryString += ' WHERE id = ?';
-        updateData.push(id);
+        try {
+            const updateData = [status];
+            let queryString = 'UPDATE subscriptions SET status = ?, updated_at = NOW()';
+            
+            if (status === 'cancelled') {
+                queryString += ', cancelled_at = NOW(), cancelled_by = ?';
+                updateData.push(updatedBy);
+            }
+            
+            queryString += ' WHERE id = ?';
+            updateData.push(id);
 
-        const [result] = await execute(queryString, updateData);
-        return result.affectedRows > 0;
+            const [result] = await execute(queryString, updateData);
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error updating subscription status:', error);
+            return false;
+        }
     }
 
     static async updateNextBillingDate(id, nextBillingDate) {
-        const [result] = await execute(
-            'UPDATE subscriptions SET next_billing_date = ?, updated_at = NOW() WHERE id = ?',
-            [nextBillingDate, id]
-        );
-        return result.affectedRows > 0;
+        try {
+            const [result] = await execute(
+                'UPDATE subscriptions SET next_billing_date = ?, updated_at = NOW() WHERE id = ?',
+                [nextBillingDate, id]
+            );
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error updating next billing date:', error);
+            return false;
+        }
     }
 
     static async findExpiredSubscriptions() {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE status = ? AND subscription_end_date < NOW()',
-            ['active']
-        );
-        return rows;
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE status = ? AND subscription_end_date < NOW()',
+                ['active']
+            );
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows || [];
+        } catch (error) {
+            console.error('Error finding expired subscriptions:', error);
+            return [];
+        }
     }
 
     static async findSubscriptionsDueForRenewal(daysAhead = 1) {
-        const [rows] = await query(
-            'SELECT * FROM subscriptions WHERE status = ? AND auto_renew = ? AND next_billing_date <= DATE_ADD(NOW(), INTERVAL ? DAY)',
-            ['active', true, daysAhead]
-        );
-        return rows;
+        try {
+            const result = await query(
+                'SELECT * FROM subscriptions WHERE status = ? AND auto_renew = ? AND next_billing_date <= DATE_ADD(NOW(), INTERVAL ? DAY)',
+                ['active', true, daysAhead]
+            );
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows || [];
+        } catch (error) {
+            console.error('Error finding subscriptions due for renewal:', error);
+            return [];
+        }
     }
 
     static async getSubscriptionStats() {
-        const [stats] = await query(`
-            SELECT 
-                COUNT(*) as total_subscriptions,
-                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_subscriptions,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_subscriptions,
-                SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired_subscriptions,
-                SUM(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as monthly_recurring_revenue,
-                AVG(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as average_revenue_per_user
-            FROM subscriptions 
-            WHERE status = 'active'
-        `);
-        return stats[0];
+        try {
+            const result = await query(`
+                SELECT 
+                    COUNT(*) as total_subscriptions,
+                    SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_subscriptions,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_subscriptions,
+                    SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired_subscriptions,
+                    SUM(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as monthly_recurring_revenue,
+                    AVG(CASE WHEN billing_cycle = 'monthly' THEN price_monthly ELSE price_annual/12 END) as average_revenue_per_user
+                FROM subscriptions 
+                WHERE status = 'active'
+            `);
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            return rows && rows.length > 0 ? rows[0] : {
+                total_subscriptions: 0,
+                active_subscriptions: 0,
+                cancelled_subscriptions: 0,
+                expired_subscriptions: 0,
+                monthly_recurring_revenue: 0,
+                average_revenue_per_user: 0
+            };
+        } catch (error) {
+            console.error('Error getting subscription stats:', error);
+            return {
+                total_subscriptions: 0,
+                active_subscriptions: 0,
+                cancelled_subscriptions: 0,
+                expired_subscriptions: 0,
+                monthly_recurring_revenue: 0,
+                average_revenue_per_user: 0
+            };
+        }
     }
 
     static async cancel(id, reason = null, cancelledBy = null) {
-        const [result] = await execute(
-            'UPDATE subscriptions SET status = ?, cancelled_at = NOW(), cancelled_by = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?',
-            ['cancelled', cancelledBy, reason, id]
-        );
-        return result.affectedRows > 0;
+        try {
+            const [result] = await execute(
+                'UPDATE subscriptions SET status = ?, cancelled_at = NOW(), cancelled_by = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?',
+                ['cancelled', cancelledBy, reason, id]
+            );
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error cancelling subscription:', error);
+            return false;
+        }
     }
 
     static async reactivate(id) {
-        const [result] = await execute(
-            'UPDATE subscriptions SET status = ?, cancelled_at = NULL, cancelled_by = NULL, cancellation_reason = NULL, updated_at = NOW() WHERE id = ?',
-            ['active', id]
-        );
-        return result.affectedRows > 0;
+        try {
+            const [result] = await execute(
+                'UPDATE subscriptions SET status = ?, cancelled_at = NULL, cancelled_by = NULL, cancellation_reason = NULL, updated_at = NOW() WHERE id = ?',
+                ['active', id]
+            );
+            return result.affectedRows > 0;
+        } catch (error) {
+            console.error('Error reactivating subscription:', error);
+            return false;
+        }
     }
 
     // Feature access control
     static async hasFeatureAccess(userId, feature) {
-        const [rows] = await query(
-            'SELECT plan_id FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
-            [userId, 'active']
-        );
-        
-        if (!rows[0]) return false;
-        
-        const planId = rows[0].plan_id;
-        return this.checkFeatureAccess(planId, feature);
+        try {
+            const result = await query(
+                'SELECT plan_id FROM subscriptions WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+                [userId, 'active']
+            );
+            
+            const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+            if (!rows || rows.length === 0) return false;
+            
+            const planId = rows[0].plan_id;
+            return this.checkFeatureAccess(planId, feature);
+        } catch (error) {
+            console.error('Error checking feature access:', error);
+            return false;
+        }
     }
 
     static checkFeatureAccess(planId, feature) {
