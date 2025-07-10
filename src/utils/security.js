@@ -89,9 +89,9 @@ export const verifyTokenMiddleware = (req, res, next) => {
     }
 
     try {
-      const decoded = TokenManager.verifyToken(token);
-      req.user = decoded;
-      next();
+    const decoded = TokenManager.verifyToken(token);
+    req.user = decoded;
+    next();
     } catch (tokenError) {
       console.error('Token verification failed:', tokenError);
       

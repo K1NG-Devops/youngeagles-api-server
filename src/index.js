@@ -3,6 +3,7 @@ dotenv.config();
 
 import { app, server } from './config/server.js';
 import { initDatabase } from './db.js';
+import billingService from './services/billingService.js';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
@@ -19,6 +20,8 @@ import pushRoutes from './routes/push.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import adsRoutes from './routes/ads.routes.js';
+import subscriptionsRoutes from './routes/subscriptions.routes.js';
+import webhooksRoutes from './routes/webhooks.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -59,7 +62,9 @@ app.get('/', (req, res) => {
       attendance: '/api/attendance',
       notifications: '/api/notifications',
       users: '/api/users',
-      ads: '/api/ads'
+      ads: '/api/ads',
+      subscriptions: '/api/subscriptions',
+      webhooks: '/webhooks'
     }
   });
 });
@@ -79,6 +84,8 @@ app.use('/api/push', pushRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/ads', adsRoutes);
+app.use('/api/subscriptions', subscriptionsRoutes);
+app.use('/webhooks', webhooksRoutes);
 
 // Error handling middleware
 app.use((error, req, res, _next) => {
@@ -112,6 +119,27 @@ async function startServer() {
     console.log('⚠️ Only health check endpoints will work');
   } else {
     console.log('✅ Database connected successfully');
+    
+    // Initialize billing automation if in production or explicitly enabled
+    if (isProduction || process.env.ENABLE_BILLING_AUTOMATION === 'true') {
+      try {
+        console.log('⚙️ Initializing billing automation...');
+        const { default: billingService } = await import('./services/billingService.js');
+        
+        // Test billing system
+        const testResult = await billingService.testBillingSystem();
+        if (testResult.success) {
+          billingService.init();
+          console.log('✅ Billing automation initialized successfully');
+        } else {
+          console.log('⚠️ Billing system test failed, skipping automation:', testResult.error);
+        }
+      } catch (error) {
+        console.log('⚠️ Failed to initialize billing automation:', error.message);
+      }
+    } else {
+      console.log('ℹ️ Billing automation disabled (set ENABLE_BILLING_AUTOMATION=true to enable)');
+    }
   }
   
   // Start server
@@ -135,6 +163,12 @@ async function startServer() {
   // Graceful shutdown
   process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully');
+    
+    // Stop billing automation
+    if (global.billingService) {
+      global.billingService.stop();
+    }
+    
     server.close(() => {
       console.log('Process terminated');
     });
