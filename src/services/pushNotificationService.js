@@ -9,12 +9,26 @@ class PushNotificationService {
 
   async init() {
     try {
+      // Check if web push is enabled
+      const webPushEnabled = process.env.WEB_PUSH_ENABLED === 'true';
+      
+      if (!webPushEnabled) {
+        console.log('📱 Web push notifications disabled');
+        return;
+      }
+
       const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
       const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
       const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@youngeagles.org.za';
 
       if (!vapidPublicKey || !vapidPrivateKey) {
         console.warn('⚠️ VAPID keys not configured - push notifications will not work');
+        return;
+      }
+
+      // Validate VAPID keys are not placeholder values
+      if (vapidPublicKey.includes('your-vapid') || vapidPrivateKey.includes('your-vapid')) {
+        console.warn('⚠️ VAPID keys are placeholder values - push notifications will not work');
         return;
       }
 

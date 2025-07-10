@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
 import Subscription from '../models/Subscription.js';
 import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 import payfastService from '../services/payfastService.js';
@@ -9,7 +9,7 @@ import nativeNotificationService from '../services/nativeNotificationService.js'
 const router = express.Router();
 
 // Get current user subscription
-router.get('/current', authMiddleware, async (req, res) => {
+router.get('/current', authenticateToken, async (req, res) => {
     try {
         const subscription = await Subscription.findActiveByUserId(req.user.id);
         
@@ -44,7 +44,7 @@ router.get('/current', authMiddleware, async (req, res) => {
 });
 
 // Get user subscription history
-router.get('/history', authMiddleware, async (req, res) => {
+router.get('/history', authenticateToken, async (req, res) => {
     try {
         const subscriptions = await Subscription.findByUserId(req.user.id);
         
@@ -166,7 +166,7 @@ router.get('/plans', async (req, res) => {
 });
 
 // Upgrade subscription
-router.post('/upgrade', authMiddleware, async (req, res) => {
+router.post('/upgrade', authenticateToken, async (req, res) => {
     try {
         const { planId, billingCycle = 'monthly', paymentMethod = 'payfast' } = req.body;
         
@@ -285,7 +285,7 @@ router.post('/upgrade', authMiddleware, async (req, res) => {
 });
 
 // Cancel subscription
-router.post('/cancel', authMiddleware, async (req, res) => {
+router.post('/cancel', authenticateToken, async (req, res) => {
     try {
         const { reason } = req.body;
         
@@ -322,7 +322,7 @@ router.post('/cancel', authMiddleware, async (req, res) => {
 });
 
 // Reactivate subscription
-router.post('/reactivate', authMiddleware, async (req, res) => {
+router.post('/reactivate', authenticateToken, async (req, res) => {
     try {
         const subscriptions = await Subscription.findByUserId(req.user.id);
         const cancelledSubscription = subscriptions.find(s => s.status === 'cancelled');
@@ -358,7 +358,7 @@ router.post('/reactivate', authMiddleware, async (req, res) => {
 });
 
 // Get user features
-router.get('/features', authMiddleware, async (req, res) => {
+router.get('/features', authenticateToken, async (req, res) => {
     try {
         const subscription = await Subscription.findActiveByUserId(req.user.id);
         
@@ -437,7 +437,7 @@ router.get('/features', authMiddleware, async (req, res) => {
 });
 
 // Get user usage
-router.get('/usage', authMiddleware, async (req, res) => {
+router.get('/usage', authenticateToken, async (req, res) => {
     try {
         // In a real implementation, you would fetch usage from a usage tracking table
         // For now, return mock data
@@ -463,7 +463,7 @@ router.get('/usage', authMiddleware, async (req, res) => {
 });
 
 // Increment usage
-router.post('/usage/increment', authMiddleware, async (req, res) => {
+router.post('/usage/increment', authenticateToken, async (req, res) => {
     try {
         const { feature } = req.body;
         
@@ -492,7 +492,7 @@ router.post('/usage/increment', authMiddleware, async (req, res) => {
 });
 
 // Get payment history
-router.get('/payments', authMiddleware, async (req, res) => {
+router.get('/payments', authenticateToken, async (req, res) => {
     try {
         const { limit = 10, offset = 0 } = req.query;
         
@@ -517,7 +517,7 @@ router.get('/payments', authMiddleware, async (req, res) => {
 });
 
 // Check feature access
-router.get('/features/:feature', authMiddleware, async (req, res) => {
+router.get('/features/:feature', authenticateToken, async (req, res) => {
     try {
         const { feature } = req.params;
         
@@ -538,7 +538,7 @@ router.get('/features/:feature', authMiddleware, async (req, res) => {
 });
 
 // Admin routes (require admin auth)
-router.get('/admin/stats', authMiddleware, async (req, res) => {
+router.get('/admin/stats', authenticateToken, async (req, res) => {
     try {
         // Check if user is admin
         if (req.user.role !== 'admin') {
@@ -566,7 +566,7 @@ router.get('/admin/stats', authMiddleware, async (req, res) => {
 });
 
 // Admin manual subscription management
-router.post('/admin/manual-subscription', authMiddleware, async (req, res) => {
+router.post('/admin/manual-subscription', authenticateToken, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
             return res.status(403).json({
