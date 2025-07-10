@@ -1,6 +1,6 @@
 import express from 'express';
+// import stripeService from '../services/stripeService.js'; // TODO: Commented out for now
 import payfastService from '../services/payfastService.js';
-import stripeService from '../services/stripeService.js';
 import Subscription from '../models/Subscription.js';
 import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 
@@ -110,52 +110,52 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
         console.log('Stripe webhook received');
 
         // Process webhook
-        const webhookResult = await stripeService.processWebhook(req.body, signature);
+        // const webhookResult = await stripeService.processWebhook(req.body, signature); // TODO: Commented out for now
         
-        if (!webhookResult.success) {
-            console.error('Stripe webhook processing failed:', webhookResult);
-            return res.status(400).json({ error: 'Webhook processing failed' });
-        }
+        // if (!webhookResult.success) { // TODO: Commented out for now
+        //     console.error('Stripe webhook processing failed:', webhookResult); // TODO: Commented out for now
+        //     return res.status(400).json({ error: 'Webhook processing failed' }); // TODO: Commented out for now
+        // } // TODO: Commented out for now
 
-        const { event } = webhookResult;
-        console.log('Stripe webhook event:', event.type);
+        // const { event } = webhookResult; // TODO: Commented out for now
+        // console.log('Stripe webhook event:', event.type); // TODO: Commented out for now
 
-        switch (event.type) {
-            case 'payment_intent.succeeded':
-                await handleStripePaymentSucceeded(event.data.object);
-                break;
+        // switch (event.type) { // TODO: Commented out for now
+        //     case 'payment_intent.succeeded': // TODO: Commented out for now
+        //         await handleStripePaymentSucceeded(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'payment_intent.payment_failed':
-                await handleStripePaymentFailed(event.data.object);
-                break;
+        //     case 'payment_intent.payment_failed': // TODO: Commented out for now
+        //         await handleStripePaymentFailed(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'invoice.payment_succeeded':
-                await handleStripeInvoicePaymentSucceeded(event.data.object);
-                break;
+        //     case 'invoice.payment_succeeded': // TODO: Commented out for now
+        //         await handleStripeInvoicePaymentSucceeded(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'invoice.payment_failed':
-                await handleStripeInvoicePaymentFailed(event.data.object);
-                break;
+        //     case 'invoice.payment_failed': // TODO: Commented out for now
+        //         await handleStripeInvoicePaymentFailed(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'customer.subscription.created':
-                await handleStripeSubscriptionCreated(event.data.object);
-                break;
+        //     case 'customer.subscription.created': // TODO: Commented out for now
+        //         await handleStripeSubscriptionCreated(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'customer.subscription.updated':
-                await handleStripeSubscriptionUpdated(event.data.object);
-                break;
+        //     case 'customer.subscription.updated': // TODO: Commented out for now
+        //         await handleStripeSubscriptionUpdated(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'customer.subscription.deleted':
-                await handleStripeSubscriptionDeleted(event.data.object);
-                break;
+        //     case 'customer.subscription.deleted': // TODO: Commented out for now
+        //         await handleStripeSubscriptionDeleted(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            case 'customer.subscription.trial_will_end':
-                await handleStripeTrialWillEnd(event.data.object);
-                break;
+        //     case 'customer.subscription.trial_will_end': // TODO: Commented out for now
+        //         await handleStripeTrialWillEnd(event.data.object); // TODO: Commented out for now
+        //         break; // TODO: Commented out for now
 
-            default:
-                console.log(`Unhandled Stripe webhook event: ${event.type}`);
-        }
+        //     default: // TODO: Commented out for now
+        //         console.log(`Unhandled Stripe webhook event: ${event.type}`); // TODO: Commented out for now
+        // } // TODO: Commented out for now
 
         res.status(200).json({ success: true });
 
@@ -165,7 +165,8 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     }
 });
 
-// Stripe webhook handlers
+// Stripe webhook handlers - TODO: Temporarily commented out
+/*
 async function handleStripePaymentSucceeded(paymentIntent) {
     try {
         console.log('Stripe payment succeeded:', paymentIntent.id);
@@ -420,5 +421,6 @@ async function handleStripeTrialWillEnd(subscription) {
         console.error('Error handling Stripe trial will end:', error);
     }
 }
+*/
 
 export default router; 

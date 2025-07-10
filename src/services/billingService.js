@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import Subscription from '../models/Subscription.js';
 import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 import payfastService from './payfastService.js';
-import stripeService from './stripeService.js';
+// import stripeService from './stripeService.js'; // TODO: Commented out for now
 import notificationService from './notificationService.js';
 
 class BillingService {
@@ -109,7 +109,10 @@ class BillingService {
             if (subscription.payment_method === 'payfast') {
                 renewalResult = await this.processPayFastRenewal(subscription, amount);
             } else if (subscription.payment_method === 'stripe') {
-                renewalResult = await this.processStripeRenewal(subscription, amount);
+                // TODO: Stripe temporarily commented out
+                console.log('Stripe payment method detected but currently disabled');
+                renewalResult = { success: false, message: 'Stripe temporarily disabled' };
+                // renewalResult = await this.processStripeRenewal(subscription, amount);
             } else {
                 // Manual renewals - just extend the subscription
                 renewalResult = await this.processManualRenewal(subscription);
@@ -177,51 +180,51 @@ class BillingService {
     }
 
     // Process Stripe renewal
+    // TODO: Stripe temporarily commented out
+    /*
     async processStripeRenewal(subscription, amount) {
         try {
             // For Stripe, attempt to charge the saved payment method
             const paymentResult = await stripeService.createPaymentIntent({
-                amount: amount * 100, // Convert to cents
-                currency: 'zar',
+                amount: amount * 100, // Stripe expects cents
+                currency: 'usd',
                 customer_id: subscription.stripe_customer_id,
-                description: `${subscription.plan_name} renewal`,
-                metadata: {
-                    subscription_id: subscription.id,
-                    user_id: subscription.user_id,
-                    renewal: true
-                },
+                payment_method: subscription.stripe_payment_method_id,
+                automatic_payment_methods: { enabled: true },
                 confirm: true
             });
 
-            // Create transaction record
-            const transactionData = {
-                subscription_id: subscription.id,
-                user_id: subscription.user_id,
-                transaction_id: paymentResult.id,
-                payment_gateway: 'stripe',
-                payment_method: 'stripe',
-                amount: amount,
-                currency: 'ZAR',
-                status: paymentResult.status === 'succeeded' ? 'completed' : 'pending',
-                gateway_response: paymentResult,
-                transaction_date: new Date()
-            };
+            if (paymentResult.success) {
+                // Record successful payment
+                await this.recordRenewalPayment(subscription, {
+                    amount,
+                    payment_id: paymentResult.payment_intent.id,
+                    payment_gateway: 'stripe',
+                    payment_method: 'stripe',
+                    payment_status: 'completed'
+                });
 
-            await SubscriptionTransaction.create(transactionData);
-
-            if (paymentResult.status === 'succeeded') {
-                // Update subscription dates
-                await this.updateSubscriptionAfterPayment(subscription);
-                return { success: true, transaction_id: paymentResult.id };
+                return { success: true, payment_id: paymentResult.payment_intent.id };
             } else {
-                return { success: false, error: 'Payment not completed' };
+                throw new Error(paymentResult.message || 'Payment failed');
             }
-
         } catch (error) {
             console.error('Stripe renewal error:', error);
-            return { success: false, error: error.message };
+            
+            // Record failed payment
+            await this.recordRenewalPayment(subscription, {
+                amount,
+                payment_id: null,
+                payment_gateway: 'stripe',
+                payment_method: 'stripe',
+                payment_status: 'failed',
+                failure_reason: error.message
+            });
+
+            return { success: false, message: error.message };
         }
     }
+    */
 
     // Process manual renewal
     async processManualRenewal(subscription) {
@@ -437,7 +440,7 @@ class BillingService {
 
             // Test payment gateways
             const payfastTest = await payfastService.testConnection();
-            const stripeTest = await stripeService.testConnection();
+            // const stripeTest = await stripeService.testConnection(); // Stripe test commented out
 
             console.log('✅ Payment gateway tests completed');
 
@@ -445,7 +448,7 @@ class BillingService {
                 success: true,
                 database: true,
                 payfast: payfastTest.success,
-                stripe: stripeTest.success,
+                // stripe: stripeTest.success, // Stripe test commented out
                 stats: testStats
             };
 

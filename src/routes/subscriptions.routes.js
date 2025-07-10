@@ -3,7 +3,7 @@ import { authenticateToken } from '../middleware/authMiddleware.js';
 import Subscription from '../models/Subscription.js';
 import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 import payfastService from '../services/payfastService.js';
-import stripeService from '../services/stripeService.js';
+// import stripeService from '../services/stripeService.js'; // TODO: Commented out for now
 import nativeNotificationService from '../services/nativeNotificationService.js';
 
 const router = express.Router();
@@ -233,6 +233,12 @@ router.post('/upgrade', authenticateToken, async (req, res) => {
                 notify_url: `${process.env.API_URL}/webhooks/payfast`
             });
         } else if (paymentMethod === 'stripe') {
+            // TODO: Stripe temporarily commented out
+            return res.status(400).json({
+                success: false,
+                message: 'Stripe payment method is temporarily disabled'
+            });
+            /*
             paymentResult = await stripeService.createPaymentIntent({
                 amount: amount * 100, // Stripe expects cents
                 currency: 'zar',
@@ -243,6 +249,7 @@ router.post('/upgrade', authenticateToken, async (req, res) => {
                     billing_cycle: billingCycle
                 }
             });
+            */
         }
         
         // Create transaction record
