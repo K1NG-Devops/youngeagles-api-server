@@ -1,6 +1,7 @@
 import express from 'express';
 import { verifyTokenMiddleware } from '../utils/security.js';
 import { query } from '../db.js';
+import pushNotificationService from '../services/pushNotificationService.js';
 
 const router = express.Router();
 
@@ -165,13 +166,52 @@ router.get('/unread/count', verifyTokenMiddleware, async (req, res) => {
 router.post('/send', verifyTokenMiddleware, async (req, res) => {
   try {
     const { title, message, type, priority, recipients } = req.body;
+    const senderId = req.user.id;
+    const senderType = req.user.userType;
     
-    // TODO: Add role check for admin/teacher
-    // TODO: Replace with actual database insert
-    res.json({
-      success: true,
-      message: 'Notification sent successfully'
-    });
+    // Verify user has permission to send notifications
+    if (!['admin', 'teacher'].includes(senderType)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied - admin or teacher required'
+      });
+    }
+
+    if (!title || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Title and message are required'
+      });
+    }
+
+    // Default to all parents if no specific recipients
+    let targetRecipients = recipients || 'all';
+
+    // Send push notification for announcements
+    try {
+      const pushResult = await pushNotificationService.sendAnnouncementNotification(
+        title,
+        message,
+        targetRecipients
+      );
+      
+      console.log(`📱 Push notification sent to ${pushResult.sent} parents, ${pushResult.failed} failed`);
+      
+      res.json({
+        success: true,
+        message: 'Notification sent successfully',
+        pushResults: {
+          sent: pushResult.sent,
+          failed: pushResult.failed
+        }
+      });
+    } catch (pushError) {
+      console.error('Error sending push notification:', pushError);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to send push notification'
+      });
+    }
   } catch (error) {
     console.error('Error sending notification:', error);
     res.status(500).json({

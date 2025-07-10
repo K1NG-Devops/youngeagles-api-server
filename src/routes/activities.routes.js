@@ -14,49 +14,11 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching activities:', error);
-    
-    // Return mock data as fallback
-    const mockActivities = [
-      {
-        id: 1,
-        title: 'Math Maze Adventure',
-        description: 'Navigate through a fun math maze solving addition problems',
-        type: 'maze',
-        difficulty: 'easy',
-        subject: 'mathematics',
-        age_group: '5-7',
-        estimated_duration: 15,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 2,
-        title: 'Letter Recognition Game',
-        description: 'Interactive game to help children recognize and learn letters',
-        type: 'matching',
-        difficulty: 'easy',
-        subject: 'language',
-        age_group: '4-6',
-        estimated_duration: 10,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 3,
-        title: 'Shape Sorting Challenge',
-        description: 'Sort different shapes into the correct categories',
-        type: 'sorting',
-        difficulty: 'medium',
-        subject: 'mathematics',
-        age_group: '5-8',
-        estimated_duration: 20,
-        created_at: new Date().toISOString()
-      }
-    ];
-    
-    res.json({
-      success: true,
-      activities: mockActivities,
-      note: 'Using mock data - database not available'
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch activities due to server error'
     });
+    
   }
 });
 

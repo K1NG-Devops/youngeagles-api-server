@@ -1,8 +1,7 @@
 import express from 'express';
 import authenticateToken from '../middleware/authMiddleware.js';
 import Payment from '../models/payment.model.js';
-import mysql from 'mysql2/promise';
-import config from '../config/database.js';
+import { db } from '../db.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -41,13 +40,8 @@ const upload = multer({
 
 // Helper function to execute database queries
 async function executeQuery(sql, params = []) {
-    const connection = await mysql.createConnection(config);
-    try {
-        const [rows] = await connection.execute(sql, params);
-        return rows;
-    } finally {
-        await connection.end();
-    }
+    const [rows] = await db.execute(sql, params);
+    return rows;
 }
 
 // Route for payment proof submission
@@ -192,7 +186,50 @@ router.get('/proofs/parent', authenticateToken, async (req, res) => {
     }
 });
 
-// Get all payment proofs (admin only)
+// Delete rejected payment proof (parents can delete their own, admins can delete any)
+router.delete('/proofs/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user_id = req.user.id;
+        const isAdmin = req.user.role === 'admin' || req.user.userType === 'admin';
+
+        let result;
+        
+        if (isAdmin) {
+            // Admins can delete any rejected proof
+            result = await executeQuery(`
+                DELETE FROM payment_proofs 
+                WHERE id = ? AND status = 'rejected'
+            `, [id]);
+        } else {
+            // Parents can only delete their own rejected proofs
+            result = await executeQuery(`
+                DELETE FROM payment_proofs 
+                WHERE id = ? AND parent_id = ? AND status = 'rejected'
+            `, [id, user_id]);
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Rejected payment proof not found or cannot be deleted'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Rejected payment proof deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting rejected payment proof:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete rejected payment proof',
+            error: error.message
+        });
+    }
+});
+
 router.get('/proofs/admin', authenticateToken, async (req, res) => {
     try {
         if (req.user.role !== 'admin' && req.user.userType !== 'admin') {
@@ -292,6 +329,375 @@ router.post('/proofs/:id/review', authenticateToken, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to review payment proof',
+            error: error.message
+        });
+    }
+});
+
+// Get payment summary for parent (total paid amount from approved payments only)
+router.get('/summary/parent', authenticateToken, async (req, res) => {
+    try {
+        const parent_id = req.user.id;
+        
+        // First try the payment_proofs table (newer schema)
+        try {
+            const result = await executeQuery(`
+                SELECT 
+                    COALESCE(SUM(amount), 0) as total_paid,
+                    COUNT(*) as total_approved_payments
+                FROM payment_proofs 
+                WHERE parent_id = ? AND status = 'approved'
+            `, [parent_id]);
+            
+            const [allPayments] = await executeQuery(`
+                SELECT 
+                    COUNT(*) as total_payments,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_payments,
+                    COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_payments
+                FROM payment_proofs 
+                WHERE parent_id = ?
+            `, [parent_id]);
+            
+            return res.json({
+                success: true,
+                summary: {
+                    total_paid: parseFloat(result[0].total_paid) || 0,
+                    total_approved_payments: result[0].total_approved_payments || 0,
+                    total_payments: allPayments.total_payments || 0,
+                    pending_payments: allPayments.pending_payments || 0,
+                    rejected_payments: allPayments.rejected_payments || 0
+                }
+            });
+        } catch (error) {
+            console.log('payment_proofs table not found, trying payments table');
+        }
+        
+        // Fallback to payments table (older schema)
+        const result = await executeQuery(`
+            SELECT 
+                COALESCE(SUM(amount), 0) as total_paid,
+                COUNT(*) as total_payments
+            FROM payments 
+            WHERE submitted_by = ? AND (status = 'verified' OR status = 'approved')
+        `, [parent_id]);
+        
+        res.json({
+            success: true,
+            summary: {
+                total_paid: parseFloat(result[0].total_paid) || 0,
+                total_approved_payments: result[0].total_payments || 0,
+                total_payments: result[0].total_payments || 0,
+                pending_payments: 0,
+                rejected_payments: 0
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error fetching payment summary:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payment summary',
+            error: error.message
+        });
+    }
+});
+
+// Get comprehensive admin dashboard data (parents, children, and payment status)
+router.get('/admin/dashboard', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.userType !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only admins can access dashboard data'
+            });
+        }
+
+        // Get comprehensive parent-child-payment data
+        const parentsWithChildren = await executeQuery(`
+            SELECT 
+                u.id as parent_id,
+                u.name as parent_name,
+                u.email as parent_email,
+                u.phone as parent_phone,
+                u.created_at as parent_registered_date,
+                COUNT(DISTINCT c.id) as total_children,
+                GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') as children_names,
+                GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') as children_ids,
+                COALESCE(SUM(CASE WHEN pp.status = 'pending' THEN pp.amount ELSE 0 END), 0) as pending_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'approved' THEN pp.amount ELSE 0 END), 0) as approved_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'rejected' THEN pp.amount ELSE 0 END), 0) as rejected_amount,
+                COUNT(CASE WHEN pp.status = 'pending' THEN 1 END) as pending_payments_count,
+                COUNT(CASE WHEN pp.status = 'approved' THEN 1 END) as approved_payments_count,
+                COUNT(CASE WHEN pp.status = 'rejected' THEN 1 END) as rejected_payments_count,
+                MAX(pp.created_at) as last_payment_date
+            FROM users u
+            LEFT JOIN children c ON u.id = c.parent_id
+            LEFT JOIN payment_proofs pp ON u.id = pp.parent_id
+            WHERE u.role = 'parent' AND u.is_active = 1
+            GROUP BY u.id, u.name, u.email, u.phone, u.created_at
+            ORDER BY pending_amount DESC, u.name ASC
+        `);
+
+        // Get recent payment activity (last 30 days)
+        const recentActivity = await executeQuery(`
+            SELECT 
+                pp.id,
+                pp.amount,
+                pp.payment_date,
+                pp.status,
+                pp.created_at,
+                pp.reviewed_at,
+                u.name as parent_name,
+                c.name as child_name,
+                s.name as reviewed_by_name
+            FROM payment_proofs pp
+            LEFT JOIN users u ON pp.parent_id = u.id
+            LEFT JOIN children c ON pp.child_id = c.id
+            LEFT JOIN staff s ON pp.reviewed_by = s.id
+            WHERE pp.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            ORDER BY pp.created_at DESC
+            LIMIT 50
+        `);
+
+        // Get overall statistics
+        const [stats] = await executeQuery(`
+            SELECT 
+                COUNT(DISTINCT u.id) as total_active_parents,
+                COUNT(DISTINCT c.id) as total_active_children,
+                COUNT(CASE WHEN pp.status = 'pending' THEN 1 END) as total_pending_payments,
+                COUNT(CASE WHEN pp.status = 'approved' THEN 1 END) as total_approved_payments,
+                COUNT(CASE WHEN pp.status = 'rejected' THEN 1 END) as total_rejected_payments,
+                COALESCE(SUM(CASE WHEN pp.status = 'pending' THEN pp.amount ELSE 0 END), 0) as total_pending_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'approved' THEN pp.amount ELSE 0 END), 0) as total_approved_amount,
+                COALESCE(SUM(CASE WHEN pp.status = 'rejected' THEN pp.amount ELSE 0 END), 0) as total_rejected_amount
+            FROM users u
+            LEFT JOIN children c ON u.id = c.parent_id AND c.is_active = 1
+            LEFT JOIN payment_proofs pp ON u.id = pp.parent_id
+            WHERE u.role = 'parent' AND u.is_active = 1
+        `);
+
+        // Get parents with only pending payments (priority for follow-up)
+        const priorityParents = parentsWithChildren.filter(parent => 
+            parent.pending_amount > 0 && parent.approved_amount === 0
+        );
+
+        // Get parents with no payment submissions
+        const parentsWithoutPayments = parentsWithChildren.filter(parent => 
+            parent.pending_payments_count === 0 && 
+            parent.approved_payments_count === 0 && 
+            parent.rejected_payments_count === 0
+        );
+
+        return res.json({
+            success: true,
+            dashboard: {
+                overview: {
+                    total_active_parents: stats.total_active_parents,
+                    total_active_children: stats.total_active_children,
+                    total_pending_payments: stats.total_pending_payments,
+                    total_approved_payments: stats.total_approved_payments,
+                    total_rejected_payments: stats.total_rejected_payments,
+                    total_pending_amount: parseFloat(stats.total_pending_amount),
+                    total_approved_amount: parseFloat(stats.total_approved_amount),
+                    total_rejected_amount: parseFloat(stats.total_rejected_amount)
+                },
+                parents_with_children: parentsWithChildren.map(parent => ({
+                    ...parent,
+                    pending_amount: parseFloat(parent.pending_amount),
+                    approved_amount: parseFloat(parent.approved_amount),
+                    rejected_amount: parseFloat(parent.rejected_amount),
+                    children_ids: parent.children_ids ? parent.children_ids.split(',').map(id => parseInt(id)) : []
+                })),
+                priority_parents: priorityParents.length,
+                parents_without_payments: parentsWithoutPayments.length,
+                recent_activity: recentActivity
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching admin dashboard data:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch admin dashboard data',
+            error: error.message
+        });
+    }
+});
+
+// Get detailed parent payment information
+router.get('/admin/parent/:parentId/details', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.userType !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Only admins can access parent details'
+            });
+        }
+
+        const { parentId } = req.params;
+
+        // Get parent details with children
+        const [parentInfo] = await executeQuery(`
+            SELECT 
+                u.id,
+                u.name,
+                u.email,
+                u.phone,
+                u.address,
+                u.created_at as registered_date,
+                u.last_login,
+                COUNT(DISTINCT c.id) as total_children
+            FROM users u
+            LEFT JOIN children c ON u.id = c.parent_id AND c.is_active = 1
+            WHERE u.id = ? AND u.role = 'parent' AND u.is_active = 1
+            GROUP BY u.id
+        `, [parentId]);
+
+        if (!parentInfo) {
+            return res.status(404).json({
+                success: false,
+                message: 'Parent not found'
+            });
+        }
+
+        // Get children details
+        const children = await executeQuery(`
+            SELECT 
+                id,
+                name,
+                age,
+                grade,
+                className,
+                enrollment_date,
+                is_active
+            FROM children
+            WHERE parent_id = ? AND is_active = 1
+            ORDER BY name ASC
+        `, [parentId]);
+
+        // Get all payment proofs for this parent
+        const paymentHistory = await executeQuery(`
+            SELECT 
+                pp.id,
+                pp.amount,
+                pp.payment_date,
+                pp.payment_method,
+                pp.reference_number,
+                pp.status,
+                pp.admin_notes,
+                pp.created_at,
+                pp.reviewed_at,
+                c.name as child_name,
+                s.name as reviewed_by_name
+            FROM payment_proofs pp
+            LEFT JOIN children c ON pp.child_id = c.id
+            LEFT JOIN staff s ON pp.reviewed_by = s.id
+            WHERE pp.parent_id = ?
+            ORDER BY pp.created_at DESC
+        `, [parentId]);
+
+        // Calculate payment summary
+        const paymentSummary = {
+            total_payments: paymentHistory.length,
+            pending_payments: paymentHistory.filter(p => p.status === 'pending').length,
+            approved_payments: paymentHistory.filter(p => p.status === 'approved').length,
+            rejected_payments: paymentHistory.filter(p => p.status === 'rejected').length,
+            total_pending_amount: paymentHistory
+                .filter(p => p.status === 'pending')
+                .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+            total_approved_amount: paymentHistory
+                .filter(p => p.status === 'approved')
+                .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+            total_rejected_amount: paymentHistory
+                .filter(p => p.status === 'rejected')
+                .reduce((sum, p) => sum + parseFloat(p.amount), 0)
+        };
+
+        res.json({
+            success: true,
+            parent: parentInfo,
+            children,
+            payment_summary: paymentSummary,
+            payment_history: paymentHistory
+        });
+
+    } catch (error) {
+        console.error('Error fetching parent details:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch parent details',
+            error: error.message
+        });
+    }
+});
+
+// Get payment summary for admin (total from all approved payments)
+router.get('/summary/admin', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.userType !== 'admin') {
+res.status(403).json({
+                success: false,
+                message: 'Only admins can access payment summaries'
+            });
+        }
+        
+        // First try the payment_proofs table (newer schema)
+        try {
+            const result = await executeQuery(`
+                SELECT 
+                    COALESCE(SUM(amount), 0) as total_paid,
+                    COUNT(*) as total_approved_payments
+                FROM payment_proofs 
+                WHERE status = 'approved'
+            `);
+            
+            const [allPayments] = await executeQuery(`
+                SELECT 
+                    COUNT(*) as total_payments,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_payments,
+                    COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_payments
+                FROM payment_proofs
+            `);
+            
+            return res.json({
+                success: true,
+                summary: {
+                    total_paid: parseFloat(result[0].total_paid) || 0,
+                    total_approved_payments: result[0].total_approved_payments || 0,
+                    total_payments: allPayments.total_payments || 0,
+                    pending_payments: allPayments.pending_payments || 0,
+                    rejected_payments: allPayments.rejected_payments || 0
+                }
+            });
+        } catch (error) {
+            console.log('payment_proofs table not found, trying payments table');
+        }
+        
+        // Fallback to payments table (older schema)
+        const result = await executeQuery(`
+            SELECT 
+                COALESCE(SUM(amount), 0) as total_paid,
+                COUNT(*) as total_payments
+            FROM payments 
+            WHERE status = 'verified' OR status = 'approved'
+        `);
+        
+        res.json({
+            success: true,
+            summary: {
+                total_paid: parseFloat(result[0].total_paid) || 0,
+                total_approved_payments: result[0].total_payments || 0,
+                total_payments: result[0].total_payments || 0,
+                pending_payments: 0,
+                rejected_payments: 0
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error fetching admin payment summary:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payment summary',
             error: error.message
         });
     }

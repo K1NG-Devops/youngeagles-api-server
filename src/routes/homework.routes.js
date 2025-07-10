@@ -1,6 +1,7 @@
 import express from 'express';
 import { verifyTokenMiddleware } from '../utils/security.js';
 import { query } from '../db.js';
+import pushNotificationService from '../services/pushNotificationService.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -876,6 +877,15 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       console.log(`👥 Assigned to: ${assignedChildren.length} students`);
     }
 
+    // Send push notification to parents when homework is posted
+    try {
+      const pushResult = await pushNotificationService.sendHomeworkNotification(homeworkId, teacher.name);
+      console.log(`📱 Push notification sent to ${pushResult.sent} parents, ${pushResult.failed} failed`);
+    } catch (pushError) {
+      console.error('Error sending push notification:', pushError);
+      // Don't fail the homework creation if push notification fails
+    }
+
     res.status(201).json({
       success: true,
       homework: {
@@ -1011,6 +1021,21 @@ router.post('/:homeworkId/submissions/:submissionId/grade', verifyTokenMiddlewar
     } catch (notificationError) {
       console.error('Error creating grading notification:', notificationError);
       // Don't fail the grading if notification fails
+    }
+
+    // Send push notification to parent about grading
+    try {
+      const pushResult = await pushNotificationService.sendGradingNotification(
+        submissionId,
+        submission.parent_id,
+        grade,
+        feedback,
+        submission.teacher_name
+      );
+      console.log(`📱 Push notification sent to parent ${submission.parent_id}: ${pushResult.sent} sent, ${pushResult.failed} failed`);
+    } catch (pushError) {
+      console.error('Error sending push notification for grading:', pushError);
+      // Don't fail the grading if push notification fails
     }
 
     res.json({
