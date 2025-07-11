@@ -1,10 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware.js';
-import Subscription from '../models/Subscription.js';
-import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 import payfastService from '../services/payfastService.js';
-// import stripeService from '../services/stripeService.js'; // TODO: Commented out for now
-import nativeNotificationService from '../services/nativeNotificationService.js';
 
 const router = express.Router();
 

@@ -3,7 +3,6 @@ dotenv.config();
 
 import { app, server } from './config/server.js';
 import { initDatabase } from './db.js';
-import billingService from './services/billingService.js';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';

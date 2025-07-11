@@ -3,23 +3,23 @@ import authenticateToken from '../middleware/authMiddleware.js';
 import { db } from '../db.js';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
 // Configure multer for profile picture uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const uploadDir = path.join(process.cwd(), 'uploads', 'profile_pictures');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
+        const uploadPath = path.join(__dirname, '../../uploads/profile_pictures');
+        cb(null, uploadPath);
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const extension = path.extname(file.originalname);
-        cb(null, `profile-${req.user.id}-${uniqueSuffix}${extension}`);
+        const ext = path.extname(file.originalname);
+        cb(null, `profile-${req.user.id}-${uniqueSuffix}${ext}`);
     }
 });
 
@@ -29,11 +29,11 @@ const upload = multer({
         fileSize: 5 * 1024 * 1024 // 5MB limit
     },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
+        const allowedTypes = ['image/jpeg', 'image/png'];
+        if (!allowedTypes.includes(file.mimetype)) {
+            cb(new Error('Invalid file type. Only JPEG and PNG allowed.'), false);
         } else {
-            cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+            cb(null, true);
         }
     }
 });
@@ -164,105 +164,27 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.post('/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).json({
-                success: false,
-                message: 'Profile picture file is required'
-            });
+            return res.status(400).json({ error: 'No file uploaded' });
         }
 
         const userId = req.user.id;
-        const userType = req.user.userType || req.user.role;
-        const fileUrl = `/uploads/profile_pictures/${req.file.filename}`;
+        const filePath = `/uploads/profile_pictures/${req.file.filename}`;
 
-        // Update the user's profile picture in the appropriate table
-        let updateResult;
-        let updatedUser = null;
-        
-        try {
-            if (userType === 'parent') {
-                // Update users table for parents
-                updateResult = await executeQuery(`
-                    UPDATE users 
-                    SET profile_picture = ?, updated_at = NOW() 
-                    WHERE id = ?
-                `, [fileUrl, userId]);
-
-                if (updateResult.affectedRows > 0) {
-                    // Get updated user data
-                    const userResult = await executeQuery(`
-                        SELECT id, name, email, profile_picture, 'parent' as role, 'parent' as userType
-                        FROM users 
-                        WHERE id = ?
-                    `, [userId]);
-                    updatedUser = userResult[0];
-                }
-            } else {
-                // Update staff table for teachers/admins
-                updateResult = await executeQuery(`
-                    UPDATE staff 
-                    SET profile_picture = ?, updated_at = NOW() 
-                    WHERE id = ?
-                `, [fileUrl, userId]);
-
-                if (updateResult.affectedRows > 0) {
-                    // Get updated user data
-                    const userResult = await executeQuery(`
-                        SELECT id, name, email, profile_picture, role, role as userType
-                        FROM staff 
-                        WHERE id = ?
-                    `, [userId]);
-                    updatedUser = userResult[0];
-                }
-            }
-
-            console.log(`✅ Profile picture updated for user ${userId} (${userType}): ${fileUrl}`);
-
-        } catch (dbError) {
-            console.error('Database error updating profile picture:', dbError);
-            
-            // Check if it's a column missing error
-            if (dbError.message && dbError.message.includes("Unknown column 'profile_picture'")) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Profile picture feature not yet enabled. Please run the database migration.',
-                    error: 'MISSING_COLUMN',
-                    migrationNeeded: true
-                });
-            }
-            
-            // For other database errors, still return success since file was uploaded
-            console.warn('Profile picture uploaded but database update failed:', dbError.message);
-        }
-
-        // Prepare response data
-        const responseData = {
-            profilePictureUrl: fileUrl,
-            filename: req.file.filename
-        };
-
-        // If we have updated user data, include it
-        if (updatedUser) {
-            responseData.user = {
-                ...updatedUser,
-                profilePicture: fileUrl,
-                profile_picture: fileUrl, // For compatibility
-                avatar: fileUrl // For compatibility
-            };
-        }
+        // Update user's profile picture in database
+        await executeQuery(
+            'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+            [filePath, userId]
+        );
 
         res.json({
             success: true,
-            message: 'Profile picture uploaded successfully',
-            data: responseData
+            message: 'Profile picture updated successfully',
+            filePath: filePath
         });
 
     } catch (error) {
         console.error('Error uploading profile picture:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to upload profile picture',
-            error: error.message
-        });
+        res.status(500).json({ error: 'Failed to upload profile picture' });
     }
 });
 

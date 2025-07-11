@@ -121,12 +121,12 @@ router.post('/proof', authenticateToken, upload.single('proof_file'), async (req
             }
         });
 
-    } catch (error) {
-        console.error('Error submitting payment proof:', error);
+    } catch (_error) {
+        console.error('Error submitting payment proof:', _error);
         res.status(500).json({
             success: false,
             message: 'Error submitting payment proof',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -176,12 +176,12 @@ router.get('/proofs/parent', authenticateToken, async (req, res) => {
             proofs
         });
 
-    } catch (error) {
-        console.error('Error fetching payment proofs:', error);
+    } catch (_error) {
+        console.error('Error fetching payment proofs:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch payment proofs',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -280,12 +280,12 @@ router.get('/proofs/admin', authenticateToken, async (req, res) => {
             proofs
         });
 
-    } catch (error) {
-        console.error('Error fetching payment proofs:', error);
+    } catch (_error) {
+        console.error('Error fetching payment proofs:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch payment proofs',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -324,12 +324,12 @@ router.post('/proofs/:id/review', authenticateToken, async (req, res) => {
             message: `Payment proof ${status} successfully`
         });
 
-    } catch (error) {
-        console.error('Error reviewing payment proof:', error);
+    } catch (_error) {
+        console.error('Error reviewing payment proof:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to review payment proof',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -392,12 +392,12 @@ router.get('/summary/parent', authenticateToken, async (req, res) => {
             }
         });
         
-    } catch (error) {
-        console.error('Error fetching payment summary:', error);
+    } catch (_error) {
+        console.error('Error fetching payment summary:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch payment summary',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -514,12 +514,12 @@ router.get('/admin/dashboard', authenticateToken, async (req, res) => {
             }
         });
 
-    } catch (error) {
-        console.error('Error fetching admin dashboard data:', error);
+    } catch (_error) {
+        console.error('Error fetching admin dashboard data:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch admin dashboard data',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -621,12 +621,12 @@ router.get('/admin/parent/:parentId/details', authenticateToken, async (req, res
             payment_history: paymentHistory
         });
 
-    } catch (error) {
-        console.error('Error fetching parent details:', error);
+    } catch (_error) {
+        console.error('Error fetching parent details:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch parent details',
-            error: error.message
+            error: _error.message
         });
     }
 });
@@ -693,12 +693,12 @@ res.status(403).json({
             }
         });
         
-    } catch (error) {
-        console.error('Error fetching admin payment summary:', error);
+    } catch (_error) {
+        console.error('Error fetching admin payment summary:', _error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch payment summary',
-            error: error.message
+            error: _error.message
         });
     }
 });

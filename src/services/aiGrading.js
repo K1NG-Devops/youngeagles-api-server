@@ -125,7 +125,7 @@ class AIGradingService {
    */
   async getGradingResults(submissionId) {
     // Find results across all queues
-    for (const [queueId, queueItem] of this.gradingQueue) {
+    for (const [_queueId, queueItem] of this.gradingQueue) {
       const result = queueItem.results.find(r => r.submissionId === submissionId);
       if (result) {
         return {
@@ -167,33 +167,33 @@ class AIGradingService {
   // Mock feedback generators
   generateMockFeedback(submission) {
     const feedbacks = [
-      "Excellent work! Your understanding of the concepts is clear and well-demonstrated.",
-      "Good effort! The work shows solid understanding with room for improvement in detail.",
-      "Well done! Creative approach to the problem with accurate execution.",
-      "Strong performance! The work demonstrates mastery of key concepts.",
-      "Good work! Clear thinking process with minor areas for enhancement."
+      'Excellent work! Your understanding of the concepts is clear and well-demonstrated.',
+      'Good effort! The work shows solid understanding with room for improvement in detail.',
+      'Well done! Creative approach to the problem with accurate execution.',
+      'Strong performance! The work demonstrates mastery of key concepts.',
+      'Good work! Clear thinking process with minor areas for enhancement.'
     ];
     return feedbacks[Math.floor(Math.random() * feedbacks.length)];
   }
 
   generateStrengths() {
     const strengths = [
-      "Clear problem-solving approach",
-      "Excellent attention to detail",
-      "Creative thinking",
-      "Strong conceptual understanding",
-      "Well-organized presentation"
+      'Clear problem-solving approach',
+      'Excellent attention to detail',
+      'Creative thinking',
+      'Strong conceptual understanding',
+      'Well-organized presentation'
     ];
     return strengths.slice(0, Math.floor(Math.random() * 3) + 1);
   }
 
   generateImprovements() {
     const improvements = [
-      "Consider adding more detailed explanations",
-      "Double-check calculations for accuracy",
-      "Include more examples to support your points",
-      "Organize work in a more structured manner",
-      "Provide clearer labeling of diagrams"
+      'Consider adding more detailed explanations',
+      'Double-check calculations for accuracy',
+      'Include more examples to support your points',
+      'Organize work in a more structured manner',
+      'Provide clearer labeling of diagrams'
     ];
     return improvements.slice(0, Math.floor(Math.random() * 2) + 1);
   }

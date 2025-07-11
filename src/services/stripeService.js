@@ -126,7 +126,6 @@ class StripeService {
             const {
                 customer_id,
                 price_id,
-                payment_method,
                 trial_period_days = 0,
                 metadata = {},
                 collection_method = 'charge_automatically'

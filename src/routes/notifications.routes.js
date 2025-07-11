@@ -165,8 +165,14 @@ router.get('/unread/count', verifyTokenMiddleware, async (req, res) => {
 // Send notification (admin/teacher only)
 router.post('/send', verifyTokenMiddleware, async (req, res) => {
   try {
-    const { title, message, type, priority, recipients } = req.body;
-    const senderId = req.user.id;
+    const { 
+      recipients,
+      message,
+      _type = 'info',
+      _priority = 'normal',
+      title
+    } = req.body;
+    const _senderId = req.user.id;
     const senderType = req.user.userType;
     
     // Verify user has permission to send notifications

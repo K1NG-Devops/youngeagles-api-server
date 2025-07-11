@@ -107,8 +107,7 @@ class PayFastService {
                 amount_net,
                 custom_int1,
                 custom_str1,
-                signature,
-                ...otherData
+                signature
             } = postData;
 
             // Remove signature from data for verification

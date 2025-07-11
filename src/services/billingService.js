@@ -3,7 +3,6 @@ import Subscription from '../models/Subscription.js';
 import SubscriptionTransaction from '../models/SubscriptionTransaction.js';
 import payfastService from './payfastService.js';
 // import stripeService from './stripeService.js'; // TODO: Commented out for now
-import notificationService from './notificationService.js';
 
 class BillingService {
     constructor() {
@@ -31,7 +30,7 @@ class BillingService {
             this.processScheduledBilling();
         }, {
             scheduled: true,
-            timezone: "Africa/Johannesburg"
+            timezone: 'Africa/Johannesburg'
         });
 
         // Run expiry checks every 6 hours
@@ -39,7 +38,7 @@ class BillingService {
             this.processExpiredSubscriptions();
         }, {
             scheduled: true,
-            timezone: "Africa/Johannesburg"
+            timezone: 'Africa/Johannesburg'
         });
 
         // Run failed payment retry every 3 days
@@ -47,7 +46,7 @@ class BillingService {
             this.retryFailedPayments();
         }, {
             scheduled: true,
-            timezone: "Africa/Johannesburg"
+            timezone: 'Africa/Johannesburg'
         });
 
         // Monthly billing summary (1st of every month at 8 AM)
@@ -55,7 +54,7 @@ class BillingService {
             this.generateMonthlyReport();
         }, {
             scheduled: true,
-            timezone: "Africa/Johannesburg"
+            timezone: 'Africa/Johannesburg'
         });
 
         this.isRunning = true;

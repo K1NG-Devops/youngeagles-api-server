@@ -9,7 +9,7 @@ const router = express.Router();
 router.post('/grading/start', verifyTokenMiddleware, async (req, res) => {
   try {
     const { submissions } = req.body;
-    const teacherId = req.user.id;
+    const _teacherId = req.user.id;
 
     // Verify user is a teacher
     if (req.user.userType !== 'teacher') {
@@ -26,9 +26,9 @@ router.post('/grading/start', verifyTokenMiddleware, async (req, res) => {
       });
     }
 
-    console.log(`🤖 Starting AI grading for ${submissions.length} submissions by teacher ${teacherId}`);
+    console.log(`🤖 Starting AI grading for ${submissions.length} submissions by teacher ${_teacherId}`);
 
-    const result = await aiGradingService.startGrading(submissions, teacherId, query);
+    const result = await aiGradingService.startGrading(submissions, _teacherId, query);
 
     res.json({
       success: true,
@@ -49,7 +49,7 @@ router.post('/grading/start', verifyTokenMiddleware, async (req, res) => {
 // Get grading queue status for teacher
 router.get('/grading/queue', verifyTokenMiddleware, async (req, res) => {
   try {
-    const teacherId = req.user.id;
+    const _teacherId = req.user.id;
 
     // Verify user is a teacher
     if (req.user.userType !== 'teacher') {
@@ -59,7 +59,7 @@ router.get('/grading/queue', verifyTokenMiddleware, async (req, res) => {
       });
     }
 
-    const queueStatus = aiGradingService.getQueueStatus(teacherId);
+    const queueStatus = aiGradingService.getQueueStatus(_teacherId);
 
     res.json({
       success: true,
@@ -81,7 +81,7 @@ router.get('/grading/queue', verifyTokenMiddleware, async (req, res) => {
 router.get('/grading/results/:submissionId', verifyTokenMiddleware, async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const teacherId = req.user.id;
+    const _teacherId = req.user.id;
 
     // Verify user is a teacher
     if (req.user.userType !== 'teacher') {
@@ -128,7 +128,7 @@ router.get('/grading/results/:submissionId', verifyTokenMiddleware, async (req, 
 router.post('/lessons/generate', verifyTokenMiddleware, async (req, res) => {
   try {
     const { topic, grade, duration, objectives } = req.body;
-    const teacherId = req.user.id;
+    const _teacherId = req.user.id;
 
     // Verify user is a teacher
     if (req.user.userType !== 'teacher') {
@@ -152,7 +152,7 @@ router.post('/lessons/generate', verifyTokenMiddleware, async (req, res) => {
       materials: ['Whiteboard', 'Worksheets', 'Visual aids'],
       assessment: 'Oral questions and worksheet completion',
       generatedAt: new Date(),
-      teacherId
+      teacherId: _teacherId
     };
 
     res.json({
