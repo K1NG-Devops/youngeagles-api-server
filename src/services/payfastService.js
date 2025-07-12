@@ -12,6 +12,14 @@ class PayFastService {
         this.apiUrl = process.env.NODE_ENV === 'production'
             ? 'https://api.payfast.co.za'
             : 'https://api.sandbox.payfast.co.za';
+        
+        // Debug logging (only in development or when debugging)
+        console.log('🔧 PayFast Service initialized:');
+        console.log(`  - Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`  - API URL: ${this.apiUrl}`);
+        console.log(`  - Merchant ID: ${this.merchantId ? this.merchantId.substring(0, 4) + '****' : 'NOT SET'}`);
+        console.log(`  - Merchant Key: ${this.merchantKey ? '****' + this.merchantKey.substring(this.merchantKey.length - 4) : 'NOT SET'}`);
+        console.log(`  - Passphrase: ${this.passphrase ? 'SET' : 'NOT SET'}`);
     }
 
     // Generate PayFast signature
@@ -434,6 +442,12 @@ class PayFastService {
             };
 
             const signature = this.generateSignature(data, this.passphrase);
+            
+            // Debug logging
+            console.log('🔍 PayFast test connection attempt:');
+            console.log(`  - URL: ${this.apiUrl}/ping`);
+            console.log(`  - Timestamp: ${timestamp}`);
+            console.log(`  - Signature: ${signature}`);
 
             const response = await axios.get(`${this.apiUrl}/ping`, {
                 headers: {
