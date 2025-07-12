@@ -102,6 +102,59 @@ router.post('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
+// Get current user profile
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userType = req.user.userType;
+
+    let user;
+    if (userType === 'parent') {
+      const [parentUser] = await query(
+        'SELECT id, name, email, phone, address, profile_picture, created_at, updated_at FROM users WHERE id = ?',
+        [userId]
+      );
+      user = parentUser;
+    } else if (userType === 'teacher' || userType === 'admin') {
+      const [staffUser] = await query(
+        'SELECT id, name, email, role, profile_picture, created_at, updated_at FROM staff WHERE id = ?',
+        [userId]
+      );
+      user = staffUser;
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Normalize profile picture fields
+    const normalizedUser = {
+      ...user,
+      profilePicture: user.profile_picture,
+      profile_picture: user.profile_picture,
+      avatar: user.profile_picture,
+      image: user.profile_picture,
+      userType: userType
+    };
+
+    res.json({
+      success: true,
+      user: normalizedUser
+    });
+
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user profile',
+      message: error.message
+    });
+  }
+});
+
 // Parent Login
 router.post('/parent-login', async (req, res) => {
   try {

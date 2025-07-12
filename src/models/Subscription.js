@@ -44,7 +44,7 @@ class Subscription {
     }
 
     static async create(subscription) {
-        const [result] = await execute(
+        const result = await execute(
             `INSERT INTO subscriptions (
                     user_id, plan_id, plan_name, price_monthly, price_annual,
                     billing_cycle, status, payment_method, payment_gateway_id,
@@ -53,13 +53,25 @@ class Subscription {
                     cancelled_by, cancellation_reason, metadata, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
                 [
-                    subscription.user_id, subscription.plan_id, subscription.plan_name,
-                    subscription.price_monthly, subscription.price_annual, subscription.billing_cycle,
-                    subscription.status, subscription.payment_method, subscription.payment_gateway_id,
-                    subscription.subscription_start_date, subscription.subscription_end_date,
-                    subscription.next_billing_date, subscription.auto_renew, subscription.trial_end_date,
-                    subscription.created_by, subscription.cancelled_at, subscription.cancelled_by,
-                    subscription.cancellation_reason, subscription.metadata
+                    subscription.user_id, 
+                    subscription.plan_id, 
+                    subscription.plan_name,
+                    subscription.price_monthly, 
+                    subscription.price_annual, 
+                    subscription.billing_cycle || 'monthly',
+                    subscription.status || 'active', 
+                    subscription.payment_method || 'payfast', 
+                    subscription.payment_gateway_id || null,
+                    subscription.subscription_start_date, 
+                    subscription.subscription_end_date,
+                    subscription.next_billing_date, 
+                    subscription.auto_renew !== undefined ? subscription.auto_renew : true, 
+                    subscription.trial_end_date || null,
+                    subscription.created_by || null, 
+                    subscription.cancelled_at || null, 
+                    subscription.cancelled_by || null,
+                    subscription.cancellation_reason || null, 
+                    subscription.metadata ? (typeof subscription.metadata === 'string' ? subscription.metadata : JSON.stringify(subscription.metadata)) : null
                 ]
             );
             return { ...subscription, id: result.insertId };
@@ -139,7 +151,7 @@ class Subscription {
         queryString += ' WHERE id = ?';
         updateData.push(id);
 
-        const [result] = await execute(queryString, updateData);
+        const result = await execute(queryString, updateData);
         return result.affectedRows > 0;
         } catch (error) {
             console.error('Error updating subscription status:', error);
@@ -149,7 +161,7 @@ class Subscription {
 
     static async updateNextBillingDate(id, nextBillingDate) {
         try {
-        const [result] = await execute(
+        const result = await execute(
             'UPDATE subscriptions SET next_billing_date = ?, updated_at = NOW() WHERE id = ?',
             [nextBillingDate, id]
         );
@@ -225,7 +237,7 @@ class Subscription {
 
     static async cancel(id, reason = null, cancelledBy = null) {
         try {
-        const [result] = await execute(
+        const result = await execute(
             'UPDATE subscriptions SET status = ?, cancelled_at = NOW(), cancelled_by = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?',
             ['cancelled', cancelledBy, reason, id]
         );
@@ -238,7 +250,7 @@ class Subscription {
 
     static async reactivate(id) {
         try {
-        const [result] = await execute(
+        const result = await execute(
             'UPDATE subscriptions SET status = ?, cancelled_at = NULL, cancelled_by = NULL, cancellation_reason = NULL, updated_at = NOW() WHERE id = ?',
             ['active', id]
         );

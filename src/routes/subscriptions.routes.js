@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import payfastService from '../services/payfastService.js';
+import Subscription from '../models/Subscription.js';
 
 const router = express.Router();
 
