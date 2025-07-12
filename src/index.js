@@ -22,6 +22,7 @@ import adsRoutes from './routes/ads.routes.js';
 import subscriptionsRoutes from './routes/subscriptions.routes.js';
 import webhooksRoutes from './routes/webhooks.routes.js';
 import migrationRoutes from './routes/migration.routes.js';
+import payfastCallbackRoutes from './routes/payfast-callbacks.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -88,6 +89,9 @@ app.use('/api/ads', adsRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
 app.use('/api/migration', migrationRoutes);
 app.use('/webhooks', webhooksRoutes);
+
+// PayFast callback routes (must be before error handling)
+app.use('/', payfastCallbackRoutes);
 
 // Error handling middleware
 app.use((error, req, res, _next) => {
@@ -172,6 +176,19 @@ async function startServer() {
           INDEX idx_feature_name (feature_name),
           
           UNIQUE KEY unique_plan_feature (plan_id, feature_name)
+        )
+      `);
+      
+      // Create payment_logs table for tracking PayFast events
+      await execute(`
+        CREATE TABLE IF NOT EXISTS payment_logs (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          event_type VARCHAR(50) NOT NULL,
+          data JSON,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          
+          INDEX idx_event_type (event_type),
+          INDEX idx_created_at (created_at)
         )
       `);
       

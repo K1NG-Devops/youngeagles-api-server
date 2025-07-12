@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import dotenv from 'dotenv';
+dotenv.config();
 import axios from 'axios';
 
 class PayFastService {
@@ -471,7 +473,9 @@ class PayFastService {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json'
                 },
-                timeout: 5000
+                timeout: 5000,
+                // Enable DNS address family setting (ensure IPv4 is used)
+                family: 4
             });
 
             return {

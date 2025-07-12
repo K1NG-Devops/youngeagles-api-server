@@ -122,3 +122,4 @@ ehthumbs.db
 Thumbs.db 
 # Documentation and test files
 docs/
+.env.backup.*
