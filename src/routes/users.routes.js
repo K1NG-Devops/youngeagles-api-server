@@ -164,27 +164,120 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.post('/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
     try {
         if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
+            return res.status(400).json({ 
+                success: false,
+                error: 'No file uploaded' 
+            });
         }
 
         const userId = req.user.id;
+        const userType = req.user.userType;
         const filePath = `/uploads/profile_pictures/${req.file.filename}`;
 
-        // Update user's profile picture in database
-        await executeQuery(
-            'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
-            [filePath, userId]
-        );
+        // Update user's profile picture in appropriate table
+        if (userType === 'parent') {
+            await executeQuery(
+                'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        } else if (userType === 'teacher' || userType === 'admin') {
+            await executeQuery(
+                'UPDATE staff SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        }
+
+        // Get updated user data
+        let updatedUser;
+        if (userType === 'parent') {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, updated_at FROM users WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        } else {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, role, updated_at FROM staff WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        }
 
         res.json({
             success: true,
             message: 'Profile picture updated successfully',
-            filePath: filePath
+            data: {
+                profilePictureUrl: filePath,
+                user: {
+                    ...updatedUser,
+                    profilePicture: filePath,
+                    profile_picture: filePath,
+                    avatar: filePath,
+                    image: filePath
+                }
+            }
         });
 
     } catch (error) {
         console.error('Error uploading profile picture:', error);
-        res.status(500).json({ error: 'Failed to upload profile picture' });
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to upload profile picture',
+            message: error.message
+        });
+    }
+});
+
+// Get current user profile (for profile refresh)
+router.get('/profile', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userType = req.user.userType;
+
+        let user;
+        if (userType === 'parent') {
+            const [parentUser] = await executeQuery(
+                'SELECT id, name, email, phone, address, profile_picture, created_at, updated_at FROM users WHERE id = ?',
+                [userId]
+            );
+            user = parentUser;
+        } else if (userType === 'teacher' || userType === 'admin') {
+            const [staffUser] = await executeQuery(
+                'SELECT id, name, email, role, profile_picture, created_at, updated_at FROM staff WHERE id = ?',
+                [userId]
+            );
+            user = staffUser;
+        }
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // Normalize profile picture fields
+        const normalizedUser = {
+            ...user,
+            profilePicture: user.profile_picture,
+            profile_picture: user.profile_picture,
+            avatar: user.profile_picture,
+            image: user.profile_picture,
+            userType: userType
+        };
+
+        res.json({
+            success: true,
+            user: normalizedUser
+        });
+
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch user profile',
+            message: error.message
+        });
     }
 });
 
