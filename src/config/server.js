@@ -22,7 +22,12 @@ const app = express();
 // Enable trust proxy for Railway/production environments
 // This is required when running behind a proxy (like Railway)
 if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
-  app.set('trust proxy', true);
+  // Railway uses a specific number of proxies, typically 1
+  // This is more secure than 'true' which trusts all proxies
+  app.set('trust proxy', 1);
+  
+  // Alternative: Trust only specific IP ranges (Railway's proxy IPs)
+  // app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 }
 
 // Create HTTP server
@@ -39,7 +44,20 @@ const io = new SocketServer(server, {
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for health checks
+  skip: (req) => req.path === '/health',
+  // Use default key generator which respects trust proxy setting
+  keyGenerator: (req) => req.ip,
+  // Custom handler for rate limit exceeded
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Too many requests, please try again later.',
+      retryAfter: req.rateLimit.resetTime
+    });
+  }
 });
 
 // Apply security middleware
