@@ -17,25 +17,18 @@ export function profilePictureMiddleware(req, res, next) {
 
     const filePath = path.join(__dirname, '../..', req.path);
     
+    // Skip if not an image
+    if (!filePath.endsWith('.png') && !filePath.endsWith('.jpg') && !filePath.endsWith('.jpeg')) {
+        return next();
+    }
+
     // Check if file exists
     fs.access(filePath, fs.constants.F_OK, (err) => {
         if (err) {
-            // File doesn't exist, redirect to default avatar
+            // File doesn't exist, serve default avatar
             console.log(`Profile picture not found: ${req.path}`);
-            
-            // You can either:
-            // 1. Redirect to a default avatar
-            res.redirect('/assets/default-avatar.png');
-            
-            // 2. Or serve a default avatar directly
-            // const defaultAvatar = path.join(__dirname, '../../assets/default-avatar.png');
-            // res.sendFile(defaultAvatar);
-            
-            // 3. Or return a 404 with a helpful message
-            // res.status(404).json({
-            //     error: 'Profile picture not found',
-            //     defaultAvatar: '/assets/default-avatar.png'
-            // });
+            const defaultAvatar = path.join(__dirname, '../../assets/default-avatar.png');
+            res.sendFile(defaultAvatar);
         } else {
             // File exists, continue to next middleware (static file serving)
             next();
