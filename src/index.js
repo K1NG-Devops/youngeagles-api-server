@@ -3,6 +3,7 @@ dotenv.config();
 
 import { app, server } from './config/server.js';
 import { initDatabase } from './db.js';
+import { ensureUploadDirectories } from './utils/ensureDirectories.js';
 
 // Import routes
 import authRoutes from './routes/auth.routes.js';
@@ -115,6 +116,10 @@ async function startServer() {
   
   const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT;
   console.log('📍 Environment:', isProduction ? 'PRODUCTION' : 'DEVELOPMENT');
+  
+  // Ensure upload directories exist
+  console.log('📁 Ensuring upload directories exist...');
+  await ensureUploadDirectories();
   
   // Try to connect to database
   console.log('🔌 Attempting database connection...');

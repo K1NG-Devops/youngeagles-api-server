@@ -109,8 +109,15 @@ dist/
 *.db
 *.sqlite
 
-# Uploads
-uploads/
+# Uploads - Ignore files but keep directory structure
+uploads/*
+!uploads/.gitkeep
+uploads/profile_pictures/*
+!uploads/profile_pictures/.gitkeep
+uploads/homework/*
+!uploads/homework/.gitkeep
+uploads/payment_proofs/*
+!uploads/payment_proofs/.gitkeep
 
 # OS generated files
 .DS_Store
