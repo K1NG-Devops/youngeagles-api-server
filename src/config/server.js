@@ -12,6 +12,7 @@ import { Server } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { profilePictureMiddleware } from '../middleware/profilePictureMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,6 +85,17 @@ app.use(express.json());
 
 // Parse URL-encoded bodies
 app.use(express.urlencoded({ extended: true }));
+
+// Profile picture middleware (before static serving)
+app.use(profilePictureMiddleware);
+
+// Serve static files from assets directory
+const assetsPath = path.join(__dirname, '../../assets');
+app.use('/assets', express.static(assetsPath, {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true
+}));
 
 // Serve static files from uploads directory
 const uploadsPath = path.join(__dirname, '../../uploads');

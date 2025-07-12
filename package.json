@@ -10,7 +10,8 @@
     "local": "NODE_ENV=development node src/index.js",
     "migrate": "node src/migrations/run-migrations.js",
     "test": "node test-api-endpoints.js",
-    "lint": "eslint . --ext .js"
+    "lint": "eslint . --ext .js",
+    "cleanup:profiles": "node src/scripts/cleanOrphanedProfilePictures.js"
   },
   "keywords": [
     "young-eagles",
