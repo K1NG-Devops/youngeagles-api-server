@@ -65,21 +65,22 @@ router.get('/plans', async (req, res) => {
             free: {
                 id: 'free',
                 name: 'Free Plan',
-                description: 'Basic features with limited access',
+                description: 'Perfect for trying out Young Eagles',
                 price: 0,
                 priceAnnual: 0,
                 features: {
                     children_limit: 1,
                     homework_limit: 5,
                     activities_limit: 3,
-                    storage_limit: 100, // MB
+                    storage_limit: 50, // Changed to 50MB
                     ads_enabled: true,
                     no_ads: false,
                     progress_tracking: false,
                     priority_support: false,
                     bulk_management: false,
                     analytics: false,
-                    api_access: false
+                    api_access: false,
+                    communication: false // No communication for free plan
                 },
                 trial_days: 0
             },
@@ -93,17 +94,17 @@ router.get('/plans', async (req, res) => {
                     children_limit: 1,
                     homework_limit: null,
                     activities_limit: null,
-                    storage_limit: null,
+                    storage_limit: 100, // Changed to 100MB
                     ads_enabled: false,
                     no_ads: true,
                     progress_tracking: true,
                     priority_support: true,
                     bulk_management: false,
                     analytics: false,
-                    api_access: false
+                    api_access: false,
+                    communication: true // Communication enabled for student plan
                 },
-                trial_days: 7,
-                popular: true
+                trial_days: 7
             },
             family: {
                 id: 'family',
@@ -129,11 +130,12 @@ router.get('/plans', async (req, res) => {
             institution: {
                 id: 'institution',
                 name: 'Institution Plan',
-                description: 'Comprehensive solution for schools',
+                description: 'Comprehensive solution for schools and educational institutions',
                 price: 399,
                 priceAnnual: 3990,
                 features: {
-                    children_limit: null,
+                    children_limit: 20, // 20 children per teacher
+                    teacher_accounts: 1, // 1 teacher account included
                     homework_limit: null,
                     activities_limit: null,
                     storage_limit: null,
@@ -143,9 +145,21 @@ router.get('/plans', async (req, res) => {
                     priority_support: true,
                     bulk_management: true,
                     analytics: true,
-                    api_access: true
+                    api_access: true,
+                    teacher_tokens: true, // Enable teacher token system
+                    parent_linking: true, // Parents can link to teacher accounts
+                    class_management: true,
+                    student_progress_reports: true
                 },
-                trial_days: 30
+                trial_days: 30,
+                billing_model: 'per_teacher', // Billing is per teacher
+                max_teachers: 1, // Can be upgraded for multiple teachers
+                teacher_token_system: {
+                    enabled: true,
+                    children_per_teacher: 20,
+                    parent_can_link: true,
+                    dashboard_access: true
+                }
             }
         };
         
@@ -370,14 +384,15 @@ router.get('/features', authenticateToken, async (req, res) => {
             children_limit: 1,
             homework_limit: 5,
             activities_limit: 3,
-            storage_limit: 100,
+            storage_limit: 50, // Changed to 50MB
             ads_enabled: true,
             no_ads: false,
             progress_tracking: false,
             priority_support: false,
             bulk_management: false,
             analytics: false,
-            api_access: false
+            api_access: false,
+            communication: false // No communication for free plan
         };
         
         if (subscription) {
@@ -386,14 +401,15 @@ router.get('/features', authenticateToken, async (req, res) => {
                     children_limit: 1,
                     homework_limit: null,
                     activities_limit: null,
-                    storage_limit: null,
+                    storage_limit: 100, // Changed to 100MB
                     ads_enabled: false,
                     no_ads: true,
                     progress_tracking: true,
                     priority_support: true,
                     bulk_management: false,
                     analytics: false,
-                    api_access: false
+                    api_access: false,
+                    communication: true // Communication enabled for student plan
                 },
                 family: {
                     children_limit: 5,
@@ -409,7 +425,8 @@ router.get('/features', authenticateToken, async (req, res) => {
                     api_access: false
                 },
                 institution: {
-                    children_limit: null,
+                    children_limit: 20, // 20 children per teacher
+                    teacher_accounts: 1, // 1 teacher account included
                     homework_limit: null,
                     activities_limit: null,
                     storage_limit: null,
@@ -419,7 +436,11 @@ router.get('/features', authenticateToken, async (req, res) => {
                     priority_support: true,
                     bulk_management: true,
                     analytics: true,
-                    api_access: true
+                    api_access: true,
+                    teacher_tokens: true, // Enable teacher token system
+                    parent_linking: true, // Parents can link to teacher accounts
+                    class_management: true,
+                    student_progress_reports: true
                 }
             };
             

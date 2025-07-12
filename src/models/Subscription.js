@@ -282,10 +282,10 @@ class Subscription {
 
     static checkFeatureAccess(planId, feature) {
         const planFeatures = {
-            'free': ['basic_homework', 'basic_activities', 'limited_storage'],
-            'student': ['basic_homework', 'basic_activities', 'unlimited_storage', 'progress_tracking'],
-            'family': ['basic_homework', 'basic_activities', 'unlimited_storage', 'progress_tracking', 'multiple_children', 'priority_support'],
-            'institution': ['basic_homework', 'basic_activities', 'unlimited_storage', 'progress_tracking', 'multiple_children', 'priority_support', 'bulk_management', 'analytics', 'api_access']
+            'free': ['basic_homework', 'basic_activities', 'limited_storage', 'ads_enabled'],
+            'student': ['basic_homework', 'basic_activities', 'limited_storage', 'progress_tracking', 'communication'],
+            'family': ['basic_homework', 'basic_activities', 'unlimited_storage', 'progress_tracking', 'multiple_children', 'priority_support', 'communication'],
+            'institution': ['basic_homework', 'basic_activities', 'unlimited_storage', 'progress_tracking', 'multiple_children', 'priority_support', 'bulk_management', 'analytics', 'api_access', 'communication']
         };
         
         return planFeatures[planId]?.includes(feature) || false;

@@ -307,4 +307,171 @@ router.get('/assignments', verifyTokenMiddleware, async (req, res) => {
   }
 });
 
+// Generate teacher token for institution plan subscribers
+router.post('/generate-token', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const { tokenName, maxChildren = 20 } = req.body;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({ error: 'Access denied - teachers only' });
+    }
+
+    // Check if teacher has an active institution subscription
+    const [subscription] = await query(`
+      SELECT s.*, st.id as staff_id 
+      FROM subscriptions s
+      JOIN staff st ON s.user_id = st.id
+      WHERE st.id = ? AND s.status = 'active' AND s.plan_id = 'institution'
+      ORDER BY s.created_at DESC LIMIT 1
+    `, [teacherId]);
+
+    if (!subscription) {
+      return res.status(403).json({ 
+        error: 'Institution plan subscription required to generate teacher tokens' 
+      });
+    }
+
+    // Generate unique token
+    const token = require('crypto').randomBytes(32).toString('hex');
+    
+    // Create teacher token record
+    await query(`
+      INSERT INTO teacher_tokens (
+        teacher_id, token, token_name, subscription_id, max_children
+      ) VALUES (?, ?, ?, ?, ?)
+    `, [teacherId, token, tokenName, subscription.id, maxChildren]);
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        tokenName,
+        maxChildren,
+        teacherName: req.user.name,
+        instructions: 'Share this token with parents to allow them to link their children to your class'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error generating teacher token:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get teacher's tokens
+router.get('/tokens', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({ error: 'Access denied - teachers only' });
+    }
+
+    // Get teacher's tokens with linked children count
+    const tokens = await query(`
+      SELECT 
+        tt.*,
+        COUNT(tpl.id) as linked_children_count,
+        s.plan_name,
+        s.status as subscription_status
+      FROM teacher_tokens tt
+      LEFT JOIN teacher_parent_links tpl ON tt.id = tpl.teacher_token_id AND tpl.is_active = 1
+      LEFT JOIN subscriptions s ON tt.subscription_id = s.id
+      WHERE tt.teacher_id = ? AND tt.is_active = 1
+      GROUP BY tt.id
+      ORDER BY tt.created_at DESC
+    `, [teacherId]);
+
+    res.json({
+      success: true,
+      tokens
+    });
+
+  } catch (error) {
+    console.error('Error fetching teacher tokens:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get children linked to teacher's tokens
+router.get('/linked-children', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({ error: 'Access denied - teachers only' });
+    }
+
+    // Get children linked through teacher tokens
+    const linkedChildren = await query(`
+      SELECT 
+        c.*,
+        u.name as parent_name,
+        u.email as parent_email,
+        tt.token_name,
+        tt.token,
+        tpl.linked_at
+      FROM teacher_parent_links tpl
+      JOIN teacher_tokens tt ON tpl.teacher_token_id = tt.id
+      JOIN children c ON tpl.child_id = c.id
+      JOIN users u ON tpl.parent_id = u.id
+      WHERE tt.teacher_id = ? AND tpl.is_active = 1 AND tt.is_active = 1
+      ORDER BY tpl.linked_at DESC
+    `, [teacherId]);
+
+    res.json({
+      success: true,
+      linkedChildren,
+      totalCount: linkedChildren.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching linked children:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Deactivate teacher token
+router.post('/deactivate-token/:tokenId', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const { tokenId } = req.params;
+
+    // Verify user is a teacher
+    if (req.user.userType !== 'teacher') {
+      return res.status(403).json({ error: 'Access denied - teachers only' });
+    }
+
+    // Verify token belongs to teacher
+    const [token] = await query(`
+      SELECT id FROM teacher_tokens 
+      WHERE id = ? AND teacher_id = ?
+    `, [tokenId, teacherId]);
+
+    if (!token) {
+      return res.status(404).json({ error: 'Token not found or access denied' });
+    }
+
+    // Deactivate token
+    await query(`
+      UPDATE teacher_tokens 
+      SET is_active = 0, updated_at = NOW() 
+      WHERE id = ?
+    `, [tokenId]);
+
+    res.json({
+      success: true,
+      message: 'Teacher token deactivated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deactivating teacher token:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router; 

@@ -119,8 +119,14 @@ router.post('/create-tables', async (req, res) => {
             INSERT INTO subscription_features (plan_id, feature_name, feature_limit, is_enabled) VALUES
             ('free', 'basic_homework', 5, TRUE),
             ('free', 'basic_activities', 3, TRUE),
-            ('free', 'limited_storage', 100, TRUE),
-            ('free', 'ads_enabled', NULL, TRUE)
+            ('free', 'limited_storage', 50, TRUE), -- Changed to 50MB
+            ('free', 'ads_enabled', NULL, TRUE),
+            ('free', 'communication', 0, FALSE), -- No communication for free plan
+            ('student', 'basic_homework', NULL, TRUE),
+            ('student', 'basic_activities', NULL, TRUE),
+            ('student', 'limited_storage', 100, TRUE), -- Changed to 100MB
+            ('student', 'ads_enabled', NULL, FALSE),
+            ('student', 'communication', NULL, TRUE) -- Communication enabled for student plan
             ON DUPLICATE KEY UPDATE 
                 feature_limit = VALUES(feature_limit),
                 is_enabled = VALUES(is_enabled)
@@ -132,7 +138,23 @@ router.post('/create-tables', async (req, res) => {
         await execute(`
             INSERT INTO subscription_plan_configs (plan_id, plan_name, description, price_monthly, price_annual, trial_days, is_active, sort_order, features) VALUES
             ('free', 'Free Plan', 'Basic features with limited access', 0.00, 0.00, 0, TRUE, 1, 
-             JSON_OBJECT('children_limit', 1, 'homework_limit', 5, 'activities_limit', 3, 'storage_limit', 100, 'ads_enabled', TRUE))
+             JSON_OBJECT(
+                'children_limit', 1, 
+                'homework_limit', 5, 
+                'activities_limit', 3, 
+                'storage_limit', 50, 
+                'ads_enabled', TRUE,
+                'communication', FALSE
+             )),
+            ('student', 'Student Plan', 'Perfect for individual students', 99.00, 990.00, 7, TRUE, 2, 
+             JSON_OBJECT(
+                'children_limit', 1, 
+                'homework_limit', NULL, 
+                'activities_limit', NULL, 
+                'storage_limit', 100, 
+                'ads_enabled', FALSE,
+                'communication', TRUE
+             ))
             ON DUPLICATE KEY UPDATE 
                 plan_name = VALUES(plan_name),
                 description = VALUES(description),

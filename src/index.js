@@ -180,11 +180,65 @@ async function startServer() {
         INSERT INTO subscription_features (plan_id, feature_name, feature_limit, is_enabled) VALUES
         ('free', 'basic_homework', 5, TRUE),
         ('free', 'basic_activities', 3, TRUE),
-        ('free', 'limited_storage', 100, TRUE),
-        ('free', 'ads_enabled', NULL, TRUE)
+        ('free', 'limited_storage', 50, TRUE), -- Changed to 50MB
+        ('free', 'ads_enabled', NULL, TRUE),
+        ('free', 'communication', 0, FALSE), -- No communication for free plan
+        ('student', 'basic_homework', NULL, TRUE),
+        ('student', 'basic_activities', NULL, TRUE),
+        ('student', 'limited_storage', 100, TRUE), -- Changed to 100MB
+        ('student', 'ads_enabled', NULL, FALSE),
+        ('student', 'communication', NULL, TRUE) -- Communication enabled for student plan
         ON DUPLICATE KEY UPDATE 
           feature_limit = VALUES(feature_limit),
           is_enabled = VALUES(is_enabled)
+      `);
+      
+      // Create teacher_tokens table for institution plan
+      await execute(`
+        CREATE TABLE IF NOT EXISTS teacher_tokens (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          teacher_id INT NOT NULL,
+          token VARCHAR(255) NOT NULL UNIQUE,
+          token_name VARCHAR(100) NOT NULL,
+          subscription_id INT NOT NULL,
+          max_children INT NOT NULL DEFAULT 20,
+          current_children INT NOT NULL DEFAULT 0,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          expires_at DATETIME DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          
+          INDEX idx_teacher_id (teacher_id),
+          INDEX idx_token (token),
+          INDEX idx_subscription_id (subscription_id),
+          INDEX idx_is_active (is_active),
+          
+          FOREIGN KEY (teacher_id) REFERENCES staff(id) ON DELETE CASCADE,
+          FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
+        )
+      `);
+      
+      // Create teacher_parent_links table for parent-teacher relationships
+      await execute(`
+        CREATE TABLE IF NOT EXISTS teacher_parent_links (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          teacher_token_id INT NOT NULL,
+          parent_id INT NOT NULL,
+          child_id INT NOT NULL,
+          linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          
+          INDEX idx_teacher_token_id (teacher_token_id),
+          INDEX idx_parent_id (parent_id),
+          INDEX idx_child_id (child_id),
+          INDEX idx_is_active (is_active),
+          
+          FOREIGN KEY (teacher_token_id) REFERENCES teacher_tokens(id) ON DELETE CASCADE,
+          FOREIGN KEY (parent_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (child_id) REFERENCES children(id) ON DELETE CASCADE,
+          
+          UNIQUE KEY unique_parent_child_teacher (teacher_token_id, parent_id, child_id)
+        )
       `);
       
       console.log('✅ Database tables created/verified successfully');
