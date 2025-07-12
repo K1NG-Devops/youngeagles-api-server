@@ -19,6 +19,12 @@ const __dirname = path.dirname(__filename);
 // Create Express app
 const app = express();
 
+// Enable trust proxy for Railway/production environments
+// This is required when running behind a proxy (like Railway)
+if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
+  app.set('trust proxy', true);
+}
+
 // Create HTTP server
 const server = new Server(app);
 
