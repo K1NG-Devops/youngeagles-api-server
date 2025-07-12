@@ -24,15 +24,25 @@ class PayFastService {
 
     // Generate PayFast signature
     generateSignature(data, passphrase = null) {
-        const orderedData = {};
+        // Create an array of key-value pairs, sorted alphabetically by key
+        const orderedData = [];
         Object.keys(data).sort().forEach(key => {
-            orderedData[key] = data[key];
+            if (data[key] !== undefined && data[key] !== null && data[key] !== '') {
+                // URL encode the values
+                orderedData.push(`${key}=${encodeURIComponent(data[key].toString().trim())}`);
+            }
         });
 
-        let queryString = new URLSearchParams(orderedData).toString();
-        if (passphrase) {
-            queryString += `&passphrase=${encodeURIComponent(passphrase)}`;
+        // Join with & to create the query string
+        let queryString = orderedData.join('&');
+        
+        // Add passphrase if provided
+        if (passphrase && passphrase.trim() !== '') {
+            queryString += `&passphrase=${encodeURIComponent(passphrase.trim())}`;
         }
+        
+        // Debug logging for signature generation
+        console.log('🔐 Generating signature for:', queryString.substring(0, 100) + '...');
 
         return crypto.createHash('md5').update(queryString).digest('hex');
     }
@@ -435,17 +445,20 @@ class PayFastService {
     async testConnection() {
         try {
             const timestamp = new Date().toISOString();
-            const data = {
-                merchant_id: this.merchantId,
-                version: 'v1',
-                timestamp: timestamp
+            
+            // For PayFast API v1, the signature should be based on all headers
+            const signatureData = {
+                'merchant-id': this.merchantId,
+                'timestamp': timestamp,
+                'version': 'v1'
             };
 
-            const signature = this.generateSignature(data, this.passphrase);
+            const signature = this.generateSignature(signatureData, this.passphrase);
             
             // Debug logging
             console.log('🔍 PayFast test connection attempt:');
             console.log(`  - URL: ${this.apiUrl}/ping`);
+            console.log(`  - Merchant ID: ${this.merchantId}`);
             console.log(`  - Timestamp: ${timestamp}`);
             console.log(`  - Signature: ${signature}`);
 
@@ -454,7 +467,9 @@ class PayFastService {
                     'merchant-id': this.merchantId,
                     'version': 'v1',
                     'timestamp': timestamp,
-                    'signature': signature
+                    'signature': signature,
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
                 },
                 timeout: 5000
             });
@@ -467,9 +482,28 @@ class PayFastService {
 
         } catch (error) {
             console.error('PayFast connection test error:', error);
+            
+            // Provide more detailed error information
+            if (error.response?.status === 401) {
+                console.warn('⚠️  PayFast API Authentication Failed');
+                console.warn('   Possible causes:');
+                console.warn('   1. API access not enabled in PayFast merchant account');
+                console.warn('   2. Using payment form credentials instead of API credentials');
+                console.warn('   3. Production/Sandbox environment mismatch');
+                console.warn('   4. Incorrect merchant ID, key, or passphrase');
+                console.warn('');
+                console.warn('   To fix:');
+                console.warn('   - Log into PayFast merchant account');
+                console.warn('   - Go to Settings → Integration → API');
+                console.warn('   - Enable API access and get API-specific credentials');
+                console.warn('   - Update environment variables with correct credentials');
+            }
+            
+            // Return graceful failure (don't block the app from starting)
             return {
                 success: false,
-                message: `PayFast connection failed: ${error.message}`
+                message: `PayFast connection failed: ${error.response?.data?.data?.response || error.message}`,
+                error: error.response?.data
             };
         }
     }
