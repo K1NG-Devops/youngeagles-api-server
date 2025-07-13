@@ -19,7 +19,9 @@ const storage = multer.diskStorage({
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         const ext = path.extname(file.originalname);
-        cb(null, `profile-${req.user.id}-${uniqueSuffix}${ext}`);
+        // Use user id from the authenticated user
+        const userId = req.user?.id || 'unknown';
+        cb(null, `profile-${userId}-${uniqueSuffix}${ext}`);
     }
 });
 
@@ -161,9 +163,16 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // Upload profile picture
-router.post('/profile-picture', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+router.post('/profile-picture', authenticateToken, upload.fields([
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'avatar', maxCount: 1 },
+    { name: 'image', maxCount: 1 }
+]), async (req, res) => {
     try {
-        if (!req.file) {
+        // Get the uploaded file from any of the possible field names
+        const file = req.files?.profilePicture?.[0] || req.files?.avatar?.[0] || req.files?.image?.[0];
+        
+        if (!file) {
             return res.status(400).json({ 
                 success: false,
                 error: 'No file uploaded' 
@@ -172,7 +181,7 @@ router.post('/profile-picture', authenticateToken, upload.single('profilePicture
 
         const userId = req.user.id;
         const userType = req.user.userType;
-        const filePath = `/uploads/profile_pictures/${req.file.filename}`;
+        const filePath = `/uploads/profile_pictures/${file.filename}`;
 
         // Update user's profile picture in appropriate table
         if (userType === 'parent') {
@@ -379,6 +388,167 @@ router.get('/stats/overview', authenticateToken, async (req, res) => {
             success: false,
             message: 'Failed to fetch user statistics',
             error: error.message
+        });
+    }
+});
+
+// Additional profile picture upload endpoints for compatibility
+// Handle /api/users/avatar endpoint
+router.post('/avatar', authenticateToken, upload.fields([
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'avatar', maxCount: 1 },
+    { name: 'image', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        // Get the uploaded file from any of the possible field names
+        const file = req.files?.profilePicture?.[0] || req.files?.avatar?.[0] || req.files?.image?.[0];
+        
+        if (!file) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'No file uploaded' 
+            });
+        }
+
+        const userId = req.user.id;
+        const userType = req.user.userType;
+        const filePath = `/uploads/profile_pictures/${file.filename}`;
+
+        // Update user's profile picture in appropriate table
+        if (userType === 'parent') {
+            await executeQuery(
+                'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        } else if (userType === 'teacher' || userType === 'admin') {
+            await executeQuery(
+                'UPDATE staff SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        }
+
+        // Get updated user data
+        let updatedUser;
+        if (userType === 'parent') {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, updated_at FROM users WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        } else {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, role, updated_at FROM staff WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        }
+
+        res.json({
+            success: true,
+            message: 'Profile picture updated successfully',
+            data: {
+                profilePictureUrl: filePath,
+                user: {
+                    ...updatedUser,
+                    profilePicture: filePath,
+                    profile_picture: filePath,
+                    avatar: filePath,
+                    image: filePath
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error uploading avatar:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to upload avatar',
+            message: error.message
+        });
+    }
+});
+
+// Handle dynamic user ID endpoint /api/users/:id/profile-picture
+router.post('/:id/profile-picture', authenticateToken, upload.fields([
+    { name: 'profilePicture', maxCount: 1 },
+    { name: 'avatar', maxCount: 1 },
+    { name: 'image', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Ensure user can only update their own profile picture
+        if (parseInt(id) !== req.user.id && req.user.userType !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                error: 'You can only update your own profile picture'
+            });
+        }
+        
+        // Get the uploaded file from any of the possible field names
+        const file = req.files?.profilePicture?.[0] || req.files?.avatar?.[0] || req.files?.image?.[0];
+        
+        if (!file) {
+            return res.status(400).json({ 
+                success: false,
+                error: 'No file uploaded' 
+            });
+        }
+
+        const userId = parseInt(id);
+        const userType = req.user.userType;
+        const filePath = `/uploads/profile_pictures/${file.filename}`;
+
+        // Update user's profile picture in appropriate table
+        if (userType === 'parent') {
+            await executeQuery(
+                'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        } else if (userType === 'teacher' || userType === 'admin') {
+            await executeQuery(
+                'UPDATE staff SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
+                [filePath, userId]
+            );
+        }
+
+        // Get updated user data
+        let updatedUser;
+        if (userType === 'parent') {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, updated_at FROM users WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        } else {
+            const [user] = await executeQuery(
+                'SELECT id, name, email, profile_picture, role, updated_at FROM staff WHERE id = ?',
+                [userId]
+            );
+            updatedUser = user;
+        }
+
+        res.json({
+            success: true,
+            message: 'Profile picture updated successfully',
+            data: {
+                profilePictureUrl: filePath,
+                user: {
+                    ...updatedUser,
+                    profilePicture: filePath,
+                    profile_picture: filePath,
+                    avatar: filePath,
+                    image: filePath
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error uploading profile picture:', error);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to upload profile picture',
+            message: error.message
         });
     }
 });

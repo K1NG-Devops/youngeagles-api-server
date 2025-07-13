@@ -1,8 +1,42 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { query } from '../db.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configure multer for profile picture uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadPath = path.join(__dirname, '../../uploads/profile_pictures');
+        cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, `profile-auth-${uniqueSuffix}${ext}`);
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['image/jpeg', 'image/png'];
+        if (!allowedTypes.includes(file.mimetype)) {
+            cb(new Error('Invalid file type. Only JPEG and PNG allowed.'), false);
+        } else {
+            cb(null, true);
+        }
+    }
+});
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -432,4 +466,17 @@ router.post('/admin-login', async (req, res) => {
   }
 });
 
-export default router; 
+// Profile picture upload endpoint
+router.post('/profile-picture', upload.single('avatar'), async (req, res) => {
+  try {
+    const { file } = req;
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    res.json({ success: true, message: 'Profile picture uploaded successfully', fileUrl: file.path });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+export default router;
