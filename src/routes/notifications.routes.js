@@ -41,6 +41,30 @@ router.get('/', verifyTokenMiddleware, async (req, res) => {
   }
 });
 
+// Get unread notifications count (must come before /:id route)
+router.get('/unread-count', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const [result] = await query(`
+      SELECT COUNT(*) as count 
+      FROM notifications 
+      WHERE userId = ? AND isRead = 0
+    `, [userId]);
+
+    res.json({
+      success: true,
+      count: result.count
+    });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    res.status(500).json({
+      success: false,
+      count: 0
+    });
+  }
+});
+
 // Get notification by ID
 router.get('/:id', verifyTokenMiddleware, async (req, res) => {
   try {
@@ -138,7 +162,7 @@ router.post('/mark-all-read', verifyTokenMiddleware, async (req, res) => {
   }
 });
 
-// Get unread notifications count
+// Get unread notifications count (alternative endpoint)
 router.get('/unread/count', verifyTokenMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;

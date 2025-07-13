@@ -24,6 +24,7 @@ import subscriptionsRoutes from './routes/subscriptions.routes.js';
 import webhooksRoutes from './routes/webhooks.routes.js';
 import migrationRoutes from './routes/migration.routes.js';
 import payfastCallbackRoutes from './routes/payfast-callbacks.routes.js';
+import eventsRoutes from './routes/events.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -63,6 +64,7 @@ app.get('/', (req, res) => {
       activities: '/api/activities',
       attendance: '/api/attendance',
       notifications: '/api/notifications',
+      events: '/api/events',
       users: '/api/users',
       ads: '/api/ads',
       subscriptions: '/api/subscriptions',
@@ -83,6 +85,7 @@ app.use('/api/activities', activitiesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/events', eventsRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', usersRoutes);
