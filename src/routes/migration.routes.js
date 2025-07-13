@@ -195,4 +195,32 @@ router.get('/status', (req, res) => {
     });
 });
 
-export default router; 
+// Add profile picture support migration
+router.post('/add-profile-picture-support', async (req, res) => {
+  try {
+    const { addProfilePictureSupport } = await import('../migrations/add-profile-picture-support.js');
+    const result = await addProfilePictureSupport();
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Profile picture support migration completed successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Migration failed',
+        details: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Migration failed',
+      details: error.message
+    });
+  }
+});
+
+export default router;

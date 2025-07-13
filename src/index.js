@@ -267,6 +267,15 @@ async function startServer() {
       `);
       
       console.log('✅ Database tables created/verified successfully');
+      
+      // Run profile picture migration
+      try {
+        const { addProfilePictureSupport } = await import('./migrations/add-profile-picture-support.js');
+        await addProfilePictureSupport();
+      } catch (error) {
+        console.log('⚠️ Profile picture migration error:', error.message);
+      }
+      
     } catch (error) {
       console.log('⚠️ Failed to create tables (might already exist):', error.message);
     }
