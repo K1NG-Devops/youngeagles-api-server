@@ -81,7 +81,7 @@ router.get('/grading/queue', verifyTokenMiddleware, async (req, res) => {
 router.get('/grading/results/:submissionId', verifyTokenMiddleware, async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const _teacherId = req.user.id;
+    // const _teacherId = req.user.id; // Removed unused variable
 
     // Verify user is a teacher
     if (req.user.userType !== 'teacher') {

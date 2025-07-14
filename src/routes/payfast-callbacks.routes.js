@@ -1,5 +1,5 @@
 import express from 'express';
-import crypto from 'crypto';
+// import crypto from 'crypto'; // Removed unused import
 import payfastService from '../services/payfastService.js';
 import { query } from '../db.js';
 
@@ -233,8 +233,8 @@ router.post('/api/payments/notify', async (req, res) => {
             status,
             amount,
             subscription_id,
-            user_id,
-            item_name
+            user_id
+            // item_name // Removed unused variable
         } = verificationResult;
         
         // Update payment status in database based on PayFast status

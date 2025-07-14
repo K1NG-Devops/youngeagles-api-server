@@ -575,7 +575,7 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
       if (submission.answers_data) {
         try {
           responseData.answers = JSON.parse(submission.answers_data);
-        } catch (e) {
+        } catch (_e) {
           responseData.answers = submission.answers_data;
         }
       }
@@ -585,7 +585,7 @@ router.post('/:homeworkId/submit', verifyTokenMiddleware, upload.array('files', 
       if (submission.additional_files) {
         try {
           responseData.additional_files = JSON.parse(submission.additional_files);
-        } catch (e) {
+        } catch (_e) {
           responseData.additional_files = [];
         }
       }
@@ -680,9 +680,9 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       grade,
       difficulty,
       estimated_duration,
-      learning_objectives,
-      required_materials,
-      assessment_criteria
+      // learning_objectives, // Removed unused variable
+      // required_materials, // Removed unused variable
+      // assessment_criteria // Removed unused variable
     } = req.body;
 
     // Verify user is a teacher
@@ -832,7 +832,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
             UNIQUE KEY unique_assignment (homework_id, child_id)
           )
         `);
-      } catch (tableError) {
+      } catch (_tableError) {
         console.log('Individual assignments table already exists');
       }
 

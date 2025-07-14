@@ -51,59 +51,59 @@ const ActivityContent = db.define('ActivityContent', {
   }
 });
 
-// Example content structures for different activity types
-const contentStructures = {
-  pattern: {
-    patterns: [
-      {
-        sequence: [], // Array of elements in the pattern
-        missing_index: 0, // Position of missing element
-        options: [], // Available options for answer
-        difficulty: 'beginner'
-      }
-    ]
-  },
-  story: {
-    scenarios: [
-      {
-        story_text: '',
-        question: '',
-        options: [], // Array of possible solutions
-        consequences: {} // Mapping of choices to outcomes
-      }
-    ]
-  },
-  sorting: {
-    categories: [
-      {
-        name: '',
-        items: [], // Items that belong in this category
-        attributes: [] // Key attributes for this category
-      }
-    ],
-    items: [] // All items available for sorting
-  },
-  adventure: {
-    scenes: [
-      {
-        condition: '',
-        choices: [], // Available choices
-        outcomes: {}, // Mapping of choices to next scenes
-        feedback: {} // Feedback for each choice
-      }
-    ]
-  },
-  mystery: {
-    boxes: [
-      {
-        item: '',
-        clues: [], // Available clues
-        valid_questions: [], // Acceptable yes/no questions
-        hints: [] // Progressive hints
-      }
-    ]
-  }
-};
+// Example content structures for different activity types (commented out - unused)
+// const contentStructures = {
+//   pattern: {
+//     patterns: [
+//       {
+//         sequence: [], // Array of elements in the pattern
+//         missing_index: 0, // Position of missing element
+//         options: [], // Available options for answer
+//         difficulty: 'beginner'
+//       }
+//     ]
+//   },
+//   story: {
+//     scenarios: [
+//       {
+//         story_text: '',
+//         question: '',
+//         options: [], // Array of possible solutions
+//         consequences: {} // Mapping of choices to outcomes
+//       }
+//     ]
+//   },
+//   sorting: {
+//     categories: [
+//       {
+//         name: '',
+//         items: [], // Items that belong in this category
+//         attributes: [] // Key attributes for this category
+//       }
+//     ],
+//     items: [] // All items available for sorting
+//   },
+//   adventure: {
+//     scenes: [
+//       {
+//         condition: '',
+//         choices: [], // Available choices
+//         outcomes: {}, // Mapping of choices to next scenes
+//         feedback: {} // Feedback for each choice
+//       }
+//     ]
+//   },
+//   mystery: {
+//     boxes: [
+//       {
+//         item: '',
+//         clues: [], // Available clues
+//         valid_questions: [], // Acceptable yes/no questions
+//         hints: [] // Progressive hints
+//       }
+//     ]
+//   }
+// };
 
 ActivityContent.associate = (models) => {
   ActivityContent.belongsTo(models.Activity);

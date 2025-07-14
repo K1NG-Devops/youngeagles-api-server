@@ -31,7 +31,7 @@ const authenticateSocket = async (socket, next) => {
     socket.userId = user.id;
     socket.user = user;
     next();
-  } catch (error) {
+  } catch (_error) {
     next(new Error('Authentication failed'));
   }
 };

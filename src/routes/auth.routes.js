@@ -474,7 +474,7 @@ router.post('/profile-picture', upload.single('avatar'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
     res.json({ success: true, message: 'Profile picture uploaded successfully', fileUrl: file.path });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });

@@ -192,11 +192,11 @@ router.post('/send', verifyTokenMiddleware, async (req, res) => {
     const { 
       recipients,
       message,
-      _type = 'info',
-      _priority = 'normal',
+      // _type = 'info', // Removed unused variable
+      // _priority = 'normal', // Removed unused variable
       title
     } = req.body;
-    const _senderId = req.user.id;
+    // const _senderId = req.user.id; // Removed unused variable
     const senderType = req.user.userType;
     
     // Verify user has permission to send notifications

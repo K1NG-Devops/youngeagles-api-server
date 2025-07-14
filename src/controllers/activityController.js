@@ -1,7 +1,7 @@
 const Activity = require('../models/Activity');
 const ActivityContent = require('../models/ActivityContent');
 const ActivitySubmission = require('../models/ActivitySubmission');
-const { Op } = require('sequelize');
+// const { Op } = require('sequelize'); // Removed unused import
 
 const activityController = {
   // Create a new activity

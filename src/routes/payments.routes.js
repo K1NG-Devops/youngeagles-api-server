@@ -96,7 +96,7 @@ router.post('/proof', authenticateToken, upload.single('proof_file'), async (req
                     status: 'pending'
                 }
             });
-        } catch (error) {
+        } catch (_error) {
             console.log('payment_proofs table not found, trying payments table');
         }
 
@@ -154,7 +154,7 @@ router.get('/proofs/parent', authenticateToken, async (req, res) => {
                 success: true,
                 proofs
             });
-        } catch (error) {
+        } catch (_error) {
             // If payment_proofs table doesn't exist, try payments table
             console.log('payment_proofs table not found, trying payments table');
         }
@@ -220,7 +220,7 @@ router.delete('/proofs/:id', authenticateToken, async (req, res) => {
             success: true,
             message: 'Rejected payment proof deleted successfully'
         });
-    } catch (error) {
+    } catch (_error) {
         console.error('Error deleting rejected payment proof:', error);
         res.status(500).json({
             success: false,
@@ -258,7 +258,7 @@ router.get('/proofs/admin', authenticateToken, async (req, res) => {
                 success: true,
                 proofs
             });
-        } catch (error) {
+        } catch (_error) {
             console.log('payment_proofs table not found, trying payments table');
         }
 
@@ -310,7 +310,7 @@ router.post('/proofs/:id/review', authenticateToken, async (req, res) => {
                 SET status = ?, admin_notes = ?, reviewed_by = ?, reviewed_at = NOW()
                 WHERE id = ?
             `, [status, admin_notes, req.user.id, id]);
-        } catch (error) {
+        } catch (_error) {
             // Fallback to payments table
             await executeQuery(`
                 UPDATE payments 
@@ -368,7 +368,7 @@ router.get('/summary/parent', authenticateToken, async (req, res) => {
                     rejected_payments: allPayments.rejected_payments || 0
                 }
             });
-        } catch (error) {
+        } catch (_error) {
             console.log('payment_proofs table not found, trying payments table');
         }
         
@@ -669,7 +669,7 @@ res.status(403).json({
                     rejected_payments: allPayments.rejected_payments || 0
                 }
             });
-        } catch (error) {
+        } catch (_error) {
             console.log('payment_proofs table not found, trying payments table');
         }
         

@@ -165,7 +165,7 @@ class AIGradingService {
   }
 
   // Mock feedback generators
-  generateMockFeedback(submission) {
+  generateMockFeedback(_submission) {
     const feedbacks = [
       'Excellent work! Your understanding of the concepts is clear and well-demonstrated.',
       'Good effort! The work shows solid understanding with room for improvement in detail.',

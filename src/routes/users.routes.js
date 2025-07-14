@@ -90,7 +90,7 @@ router.get('/', authenticateToken, async (req, res) => {
             users: allUsers
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error fetching users:', error);
         res.status(500).json({
             success: false,
@@ -152,7 +152,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
             user: user[0]
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error fetching user:', error);
         res.status(500).json({
             success: false,
@@ -227,7 +227,7 @@ router.post('/profile-picture', authenticateToken, upload.fields([
             }
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error uploading profile picture:', error);
         res.status(500).json({ 
             success: false,
@@ -280,7 +280,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
             user: normalizedUser
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error fetching user profile:', error);
         res.status(500).json({
             success: false,
@@ -327,7 +327,7 @@ router.get('/check-profile-picture-support', authenticateToken, async (req, res)
                 : 'Database migration needed for profile picture support'
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error checking profile picture support:', error);
         res.status(500).json({
             success: false,
@@ -358,12 +358,12 @@ router.get('/stats/overview', authenticateToken, async (req, res) => {
         try {
             const [pendingPayments] = await executeQuery('SELECT COUNT(*) as count FROM payment_proofs WHERE status = "pending"');
             pendingApprovals = pendingPayments.count;
-        } catch (error) {
+        } catch (_error) {
             console.log('payment_proofs table not found, checking payments table');
             try {
                 const [pendingPayments] = await executeQuery('SELECT COUNT(*) as count FROM payments WHERE status = "pending"');
                 pendingApprovals = pendingPayments.count;
-            } catch (error) {
+            } catch (_error) {
                 console.log('No pending payments found');
             }
         }
@@ -382,7 +382,7 @@ router.get('/stats/overview', authenticateToken, async (req, res) => {
             stats
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error fetching user statistics:', error);
         res.status(500).json({
             success: false,
@@ -458,7 +458,7 @@ router.post('/avatar', authenticateToken, upload.fields([
             }
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error uploading avatar:', error);
         res.status(500).json({ 
             success: false,
@@ -543,7 +543,7 @@ router.post('/:id/profile-picture', authenticateToken, upload.fields([
             }
         });
 
-    } catch (error) {
+    } catch (_error) {
         console.error('Error uploading profile picture:', error);
         res.status(500).json({ 
             success: false,
