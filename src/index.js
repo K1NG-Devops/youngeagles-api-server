@@ -26,6 +26,7 @@ import migrationRoutes from './routes/migration.routes.js';
 import payfastCallbackRoutes from './routes/payfast-callbacks.routes.js';
 import eventsRoutes from './routes/events.routes.js';
 import profileRoutes from './routes/profile.routes.js';
+import messagesRoutes from './routes/messages.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -65,6 +66,7 @@ app.get('/', (req, res) => {
       activities: '/api/activities',
       attendance: '/api/attendance',
       notifications: '/api/notifications',
+      messages: '/api/messages',
       events: '/api/events',
       profile: '/api/profile',
       users: '/api/users',
@@ -87,6 +89,7 @@ app.use('/api/activities', activitiesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/messages', messagesRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/push', pushRoutes);

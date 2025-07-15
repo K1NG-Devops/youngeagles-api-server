@@ -9,6 +9,23 @@ const router = express.Router();
 router.get('/', verifyTokenMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const unreadOnly = req.query.unread_only === 'true';
+    const offset = (page - 1) * limit;
+    
+    // Build WHERE clause based on filters
+    let whereClause = 'WHERE userId = ?';
+    const queryParams = [userId];
+    
+    if (unreadOnly) {
+      whereClause += ' AND isRead = 0';
+    }
+    
+    // Get total count for pagination
+    const countQuery = `SELECT COUNT(*) as total FROM notifications ${whereClause}`;
+    const [countResult] = await query(countQuery, queryParams);
+    const total = countResult.total;
     
     // Get notifications for the user
     const notifications = await query(`
@@ -23,14 +40,20 @@ router.get('/', verifyTokenMiddleware, async (req, res) => {
         data,
         createdAt as timestamp
       FROM notifications 
-      WHERE userId = ? 
+      ${whereClause}
       ORDER BY createdAt DESC 
-      LIMIT 50
-    `, [userId]);
+      LIMIT ? OFFSET ?
+    `, [...queryParams, limit, offset]);
 
     res.json({
       success: true,
-      notifications: notifications
+      notifications: notifications,
+      pagination: {
+        page: page,
+        limit: limit,
+        total: total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
     console.error('Error fetching notifications:', error);
