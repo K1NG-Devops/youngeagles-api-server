@@ -27,6 +27,7 @@ import payfastCallbackRoutes from './routes/payfast-callbacks.routes.js';
 import eventsRoutes from './routes/events.routes.js';
 import profileRoutes from './routes/profile.routes.js';
 import messagesRoutes from './routes/messages.routes.js';
+import adminCleanupRoutes from './routes/admin-cleanup.routes.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -73,6 +74,7 @@ app.get('/', (req, res) => {
       ads: '/api/ads',
       subscriptions: '/api/subscriptions',
       migration: '/api/migration',
+      admin: '/api/admin',
       webhooks: '/webhooks'
     }
   });
@@ -98,6 +100,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/ads', adsRoutes);
 app.use('/api/subscriptions', subscriptionsRoutes);
 app.use('/api/migration', migrationRoutes);
+app.use('/api/admin', adminCleanupRoutes);
 app.use('/webhooks', webhooksRoutes);
 
 // PayFast callback routes (must be before error handling)

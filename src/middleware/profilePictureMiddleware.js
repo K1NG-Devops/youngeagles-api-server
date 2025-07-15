@@ -28,7 +28,18 @@ export function profilePictureMiddleware(req, res, next) {
             // File doesn't exist, serve default avatar
             console.log(`Profile picture not found: ${req.path}`);
             const defaultAvatar = path.join(__dirname, '../../assets/default-avatar.png');
-            res.sendFile(defaultAvatar);
+            
+            // Check if default avatar exists
+            fs.access(defaultAvatar, fs.constants.F_OK, (defaultErr) => {
+                if (defaultErr) {
+                    // Default avatar doesn't exist, return 404
+                    console.error(`Default avatar not found: ${defaultAvatar}`);
+                    res.status(404).json({ error: 'Profile picture not found' });
+                } else {
+                    // Send default avatar
+                    res.sendFile(defaultAvatar);
+                }
+            });
         } else {
             // File exists, continue to next middleware (static file serving)
             next();
