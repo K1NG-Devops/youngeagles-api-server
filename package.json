@@ -9,6 +9,8 @@
     "dev": "nodemon src/index.js",
     "local": "NODE_ENV=development node src/index.js",
     "migrate": "node src/migrations/run-migrations.js",
+    "migrate:production": "node src/scripts/production-migrations.js",
+    "migrate:push-subscriptions": "node src/scripts/fix-push-subscriptions.js",
     "test": "node test-api-endpoints.js",
     "lint": "eslint . --ext .js",
     "cleanup:profiles": "node src/scripts/cleanOrphanedProfilePictures.js"
