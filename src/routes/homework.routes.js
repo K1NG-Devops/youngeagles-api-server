@@ -766,7 +766,17 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
     }
 
     // Set default due date if not provided (7 days from now)
-    const finalDueDate = due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    let finalDueDate = due_date;
+    if (!finalDueDate) {
+      finalDueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else if (typeof finalDueDate === 'string') {
+      finalDueDate = new Date(finalDueDate);
+    }
+    
+    // Format date for MySQL (YYYY-MM-DD HH:mm:ss)
+    const mysqlDateTime = finalDueDate.toISOString().slice(0, 19).replace('T', ' ');
+    
+    console.log(`📅 Due date converted: ${due_date} → ${mysqlDateTime}`);
 
     // For individual assignments, always use teacher's class
     let finalClassId = actualClassId;
@@ -804,7 +814,7 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       finalClassId,
       actualAssignmentType,
       actualContentType,
-      finalDueDate,
+      mysqlDateTime, // Use properly formatted MySQL datetime
       subject || '',
       grade || '',
       difficulty || 'medium',
