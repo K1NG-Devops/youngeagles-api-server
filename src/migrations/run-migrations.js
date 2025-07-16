@@ -35,7 +35,28 @@ async function runMigrations() {
                 console.log(`Running migration: ${file}`);
                 const sql = fs.readFileSync(path.join(__dirname, file), 'utf8');
                 
-                await connection.execute(sql);
+                // Split SQL into individual statements and execute them
+                const statements = sql.split(';')
+                    .map(stmt => stmt.trim())
+                    .filter(stmt => stmt && !stmt.startsWith('--'));
+                
+                for (const statement of statements) {
+                    if (statement.trim()) {
+                        try {
+                            await connection.execute(statement);
+                        } catch (error) {
+                            // Log error but continue for non-critical errors
+                            if (error.code === 'ER_DUP_FIELDNAME') {
+                                console.log(`Column already exists, skipping: ${statement.substring(0, 50)}...`);
+                            } else if (error.code === 'ER_DUP_KEYNAME') {
+                                console.log(`Index already exists, skipping: ${statement.substring(0, 50)}...`);
+                            } else {
+                                throw error;
+                            }
+                        }
+                    }
+                }
+                
                 await connection.execute('INSERT INTO migrations (migration_name) VALUES (?)', [file]);
                 
                 console.log(`Migration completed: ${file}`);
