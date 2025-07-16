@@ -55,6 +55,14 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
     let sql = `
       SELECT DISTINCT
         h.*,
+        h.objectives,
+        h.activities,
+        h.materials,
+        h.parent_guidance,
+        h.caps_alignment,
+        h.duration,
+        h.difficulty,
+        h.term,
         c.first_name as child_name,
         c.last_name as child_last_name,
         cl.name as class_name,
@@ -115,6 +123,32 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
     const homework = await query(sql, params);
     console.log(`📚 Found ${homework.length} homework assignments for parent ${parentId}`);
 
+    // Parse JSON fields safely
+    const enhancedHomework = homework.map(hw => {
+      const parsed = { ...hw };
+      
+      // Parse JSON fields safely
+      try {
+        parsed.objectives = hw.objectives ? JSON.parse(hw.objectives) : null;
+      } catch (e) {
+        parsed.objectives = null;
+      }
+      
+      try {
+        parsed.activities = hw.activities ? JSON.parse(hw.activities) : null;
+      } catch (e) {
+        parsed.activities = null;
+      }
+      
+      try {
+        parsed.materials = hw.materials ? JSON.parse(hw.materials) : null;
+      } catch (e) {
+        parsed.materials = null;
+      }
+      
+      return parsed;
+    });
+
     // Get children list for the parent (for the selector)
     const children = await query(`
       SELECT 
@@ -130,7 +164,7 @@ router.get('/parent/:parentId', verifyTokenMiddleware, async (req, res) => {
 
     res.json({
       success: true,
-      homework,
+      homework: enhancedHomework,
       children
     });
 
@@ -680,9 +714,14 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       grade,
       difficulty,
       estimated_duration,
-      // learning_objectives, // Removed unused variable
-      // required_materials, // Removed unused variable
-      // assessment_criteria // Removed unused variable
+      // NEW ENHANCED FIELDS
+      objectives,
+      activities,
+      materials,
+      parent_guidance,
+      caps_alignment,
+      duration,
+      term
     } = req.body;
 
     // Verify user is a teacher
@@ -803,9 +842,16 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         grade,
         difficulty,
         estimated_duration,
+        objectives,
+        activities,
+        materials,
+        parent_guidance,
+        caps_alignment,
+        duration,
+        term,
         status,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
     `, [
       title,
       description || '',
@@ -817,8 +863,16 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
       mysqlDateTime, // Use properly formatted MySQL datetime
       subject || '',
       grade || '',
-      difficulty || 'medium',
-      estimated_duration || 30
+      difficulty || 'intermediate',
+      estimated_duration || duration || 30,
+      // NEW ENHANCED FIELDS
+      objectives ? JSON.stringify(objectives) : null,
+      activities ? JSON.stringify(activities) : null,
+      materials ? JSON.stringify(materials) : null,
+      parent_guidance || null,
+      caps_alignment || null,
+      duration || estimated_duration || 30,
+      term || '2'
     ]);
 
     const homeworkId = result.insertId;
@@ -916,7 +970,15 @@ router.post('/', verifyTokenMiddleware, async (req, res) => {
         content_type: actualContentType,
         status: 'active',
         assigned_children: assignedChildren,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        // ENHANCED FIELDS
+        objectives: objectives || null,
+        activities: activities || null,
+        materials: materials || null,
+        parent_guidance: parent_guidance || null,
+        caps_alignment: caps_alignment || null,
+        duration: duration || estimated_duration || 30,
+        term: term || '2'
       },
       message: `Homework "${title}" created successfully${actualAssignmentType === 'individual' ? ` for ${assignedChildren.length} students` : ` for ${teacher.className} class`}`
     });
