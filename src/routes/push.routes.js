@@ -5,6 +5,40 @@ import pushNotificationService from '../services/pushNotificationService.js';
 
 const router = express.Router();
 
+// Test push notification endpoint
+router.post('/test', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userType = req.user.userType;
+    
+    const testNotification = {
+      title: 'Test Notification',
+      body: 'This is a test notification from Young Eagles! 🎉',
+      data: {
+        type: 'test',
+        timestamp: new Date().toISOString(),
+        url: '/notifications'
+      }
+    };
+
+    const result = await pushNotificationService.sendToUsers([userId], testNotification);
+    
+    console.log(`📱 Test notification sent to ${userType} ${userId}`);
+    
+    res.json({
+      success: true,
+      message: 'Test notification sent successfully',
+      result: result
+    });
+  } catch (error) {
+    console.error('Error sending test notification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send test notification'
+    });
+  }
+});
+
 // Get VAPID public key for frontend subscription
 router.get('/vapid-public-key', async (req, res) => {
   try {

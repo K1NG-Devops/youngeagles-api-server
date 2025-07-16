@@ -5,6 +5,37 @@ import pushNotificationService from '../services/pushNotificationService.js';
 
 const router = express.Router();
 
+// Test push notification endpoint
+router.post('/test', verifyTokenMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const testNotification = {
+      title: 'Test Notification',
+      body: 'This is a test notification from Young Eagles!',
+      data: {
+        type: 'test',
+        timestamp: new Date().toISOString(),
+        url: '/notifications'
+      }
+    };
+
+    const result = await pushNotificationService.sendToUsers([userId], testNotification);
+    
+    res.json({
+      success: true,
+      message: 'Test notification sent successfully',
+      result: result
+    });
+  } catch (error) {
+    console.error('Error sending test notification:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send test notification'
+    });
+  }
+});
+
 // Get all notifications for the current user
 router.get('/', verifyTokenMiddleware, async (req, res) => {
   try {
